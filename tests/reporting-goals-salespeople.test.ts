@@ -13,12 +13,17 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { DailyRevenueChart } from "@/components/mc/goals/charts";
+import { ForecastSection } from "@/components/mc/goals/forecast";
 import { GoalCards } from "@/components/mc/goals/goal-cards";
 import { isReady } from "@/components/mc/goals/helpers";
 import { SalespeopleNote, SalespeoplePicker } from "@/components/mc/goals/salespeople";
 import { routeToUrl, urlToRoute } from "@/components/mc/route";
+import { monthEnd, monthStart } from "@/lib/reporting/goals/calendar";
 import { buildGoalsWorkbook } from "@/lib/reporting/goals/excel/export";
+import { planImport, readEntriesSheet } from "@/lib/reporting/goals/excel/import";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
+import { formatDollars } from "@/lib/reporting/goals/money";
 import { CUSTOMER_SALESPEOPLE_SQL, SALESPERSON_COLUMNS } from "@/lib/reporting/goals/queries/salespeople";
 import {
   NO_SALESPERSON,
@@ -33,7 +38,7 @@ import {
   type SalespersonLookup,
 } from "@/lib/reporting/goals/salesperson-filter";
 import type { CreditNotesDataset, Datasets, PendingShipmentsDataset } from "@/lib/reporting/goals/types";
-import { buildGoalsViewAndRun, type GoalsView } from "@/lib/reporting/goals/view";
+import { buildGoalsViewAndRun, type GoalsView, type GoalsViewInput } from "@/lib/reporting/goals/view";
 
 import creditNotesJson from "./fixtures/reporting-goals/2026-10-14/credit-notes.json";
 import pendingJson from "./fixtures/reporting-goals/2026-10-14/pending-shipments.json";
@@ -63,6 +68,45 @@ const ROSTER = fixtureSalespeople(INPUT);
 const page = (selected: string[], lookup: SalespersonLookup = ROSTER) => salesGoalsPage(selected, INPUT, lookup);
 const WHOLE = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "boc", SNAPSHOT);
 const ALL_PICKED = ["AA", "BB", "CC", NO_SALESPERSON];
+
+/** The workbook GET …/export?sales= would send for `selected` (the route's inputs, from buildGoalsViewAndRun). */
+async function narrowedWorkbook(selected: string[], input: GoalsViewInput = INPUT): Promise<{ view: GoalsView; wb: ExcelJS.Workbook; buffer: Buffer }> {
+  const { view, run, entries } = buildGoalsViewAndRun({ ...input, salespeople: { lookup: fixtureSalespeople(input), selected } });
+  const buffer = await buildGoalsWorkbook({
+    run: view.run!,
+    model: view.model!,
+    settings: SETTINGS,
+    shipments: run.snapshot!.shipments,
+    truckloads: run.snapshot!.truckloads,
+    rates: [{ date: TODAY, rate: RATE }],
+    exportedAt: new Date("2026-10-14T16:00:00Z"),
+    forecast: view.forecast,
+    shipmentLines: { access: "read", missing: [], lines: SHIPMENT_LINES },
+    revenueByClass: view.revenueByClass,
+    creditNotes: run.snapshot!.creditNotes,
+    pendingShipments: run.snapshot!.pendingShipments,
+    customerRevenue: view.customerRevenue,
+    salespeople: view.salespeople!.label,
+    allEntries: entries,
+  });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer as never);
+  return { view, wb, buffer };
+}
+
+/** A counted hand shipment that names no Sage customer and whose reference is a Sage shipment not yet invoiced. */
+const typedFor = (shipment: string) =>
+  manualEntry({
+    entryId: "M91",
+    type: "Shipment",
+    date: TODAY,
+    reference: shipment,
+    customer: "Typed by hand, no Sage customer",
+    customerCode: null,
+    productValue: "10.00",
+    freight: "0.00",
+    currency: "CAD",
+  } as never);
 
 /** Who a customer code belongs to on the fixture roster. */
 const ownersOf = (code: string | null | undefined) => ROSTER.state === "ready" ? (ROSTER.customers[(code ?? "").trim().toUpperCase()] ?? []) : [];
@@ -428,10 +472,85 @@ describe("the workbook", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer as never);
     expect(String(wb.getWorksheet("Read me")!.getCell("A3").value)).toContain("Only the customers of Bravo Rep (BB)");
-    expect(String(wb.getWorksheet("Goals")!.getCell("A2").value)).toContain("The targets are the whole month’s.");
+    expect(String(wb.getWorksheet("Goals")!.getCell("A2").value)).toContain("The targets are the whole month’s, so revenue has no status or pace.");
     const daily = wb.getWorksheet("Daily")!;
     expect(daily.getCell("K1").value).toBe("Last month to date, CAD");
     expect(daily.getCell("K2").value).toBeNull();
     expect(daily.getCell("F2").value).not.toBeNull();
+  });
+
+  it("lists every entry on Manual entries, so importing a narrowed workbook removes nothing", async () => {
+    const { view, buffer } = await narrowedWorkbook(["BB"]);
+    expect(view.model!.entries.length).toBeLessThan(ENTRIES.length);
+    const rows = await readEntriesSheet(new Uint8Array(buffer));
+    expect(rows).toHaveLength(ENTRIES.length);
+    const ctx = { monthStart: monthStart(TODAY), monthEnd: monthEnd(TODAY), filemakerRefs: INPUT.filemakerRefs, sageRefs: INPUT.sageRefs };
+    const plan = planImport(rows, ENTRIES, ctx);
+    if (!plan.ok) throw new Error("the sheet should read back");
+    expect(plan.plan.remove).toEqual([]);
+    expect(plan.plan.add).toEqual([]);
+  });
+
+  it("leaves out of the estimate the Sage shipments the whole page's hand entries stand for, as the page does", async () => {
+    const pending = PENDING.shipments.find((s) => ownersOf(s.customerCode).includes("AA"))!;
+    const input = goalsViewInput([...ENTRIES, typedFor(pending.shipment)], FORECAST, SHIPMENT_LINES_SUMMARY, "boc", SNAPSHOT);
+    const { view, wb } = await narrowedWorkbook(["AA"], input);
+    const classes = wb.getWorksheet("Revenue by class")!;
+    let shipments = 0;
+    for (let r = 5; r < 5 + view.revenueByClass!.rows.length; r += 1) {
+      const n = classes.getCell(r, 14).value;
+      if (typeof n === "number") shipments += n;
+    }
+    expect(shipments).toBe(view.revenueGoal!.pendingShipments);
+    const listed: string[] = [];
+    const sheet = wb.getWorksheet("Pending shipments")!;
+    sheet.eachRow((row) => listed.push(String(row.getCell(1).value ?? "")));
+    expect(listed).not.toContain(pending.shipment);
+  });
+
+  it("sets no status or pace on a narrowed revenue row: the goal is every customer's", async () => {
+    const { wb } = await narrowedWorkbook(["BB"]);
+    const goals = wb.getWorksheet("Goals")!;
+    expect(goals.getCell("A8").value).toMatch(/^Revenue/);
+    expect(goals.getCell("H8").value).toBe("—");
+    expect(goals.getCell("I8").value).toBe("—");
+    // Line 1 is every customer's, so it keeps its status.
+    expect(goals.getCell("H5").value).toMatchObject({ formula: expect.stringContaining("On track") });
+  });
+});
+
+describe("no comparison with the month's goal on a narrowed page", () => {
+  const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;/g, "'").replace(/\s+/g, " ");
+
+  it("the daily revenue chart drops the target line and due so far", () => {
+    const narrowed = page(["BB"]);
+    if (!isReady(narrowed) || !isReady(WHOLE)) throw new Error("ready");
+    // The summary is the chart's aria-label; the key's labels are text.
+    const html = renderToStaticMarkup(createElement(DailyRevenueChart, { page: narrowed }));
+    expect(text(html)).not.toContain("Target to date");
+    expect(html).not.toContain("due so far");
+    expect(html).toContain("for the customers of Bravo Rep (BB)");
+    expect(text(renderToStaticMarkup(createElement(DailyRevenueChart, { page: WHOLE })))).toContain("Target to date");
+  });
+
+  it("the forecast's numbers say the target and the hit rate are every customer's", () => {
+    const narrowed = page(["BB"]);
+    if (!isReady(narrowed)) throw new Error("ready");
+    const out = text(renderToStaticMarkup(createElement(ForecastSection, { page: narrowed })));
+    expect(out).toContain("(all customers)");
+    expect(out).toContain("For the customers of Bravo Rep (BB) only. The target and the hit rate are for all customers.");
+  });
+
+  it("the takeaway's share is the Revenue card's: the headline against every customer's", () => {
+    const narrowed = page(["BB"]);
+    const mine = narrowed.revenueGoal!.goalCadCents;
+    const every = WHOLE.revenueGoal!.goalCadCents;
+    expect(narrowed.model!.takeaway).toContain(`${formatDollars(mine)} of revenue toward the goal, ${Math.round((mine / every) * 100)}% of every customer’s ${formatDollars(every)}`);
+  });
+
+  it("says so when Sage changed during the refresh, so the narrowed figures can be off from the unfiltered card", () => {
+    const view = { ...page(["BB"]).salespeople!, everyCustomer: { ...page(["BB"]).salespeople!.everyCustomer!, matchesCard: false } };
+    expect(renderToStaticMarkup(createElement(SalespeopleNote, { view }))).toContain("Sage changed during this refresh");
+    expect(renderToStaticMarkup(createElement(SalespeopleNote, { view: page(["BB"]).salespeople! }))).not.toContain("Sage changed during this refresh");
   });
 });

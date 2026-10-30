@@ -9,7 +9,7 @@ import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
 import { previousMonthStart } from "./calendar";
 import { lookupFinishedGoodCodes } from "./finished-goods";
 import { loadForecast } from "./forecast-store";
-import { normalizeRef } from "./rules";
+import { normalizeRef, type EvaluatedEntry } from "./rules";
 import { runCustomerCodes } from "./salesperson-filter";
 import { lookupSalespeople } from "./salespeople";
 import {
@@ -55,10 +55,12 @@ export interface GoalsExportData {
   creditNotes?: CreditNotesDataset | null;
   /** INTERIM (TASK-3992): the run's shipments not yet invoiced; null for a run stored before them. */
   pendingShipments?: PendingShipmentsDataset | null;
+  /** Every live entry, evaluated, whatever the salesperson filter (TASK-4277): the import template lists them all. */
+  allEntries?: EvaluatedEntry[];
 }
 
 export async function loadGoalsExport(basis: RevenueRateBasis = "boc", sales: readonly string[] = []): Promise<GoalsExportData> {
-  const { view, snapshot, rates } = await loadGoals(basis, sales);
+  const { view, snapshot, rates, allEntries } = await loadGoals(basis, sales);
   // Only the workbook reads them here; the page fetches them on demand (GET …/runs/[id]/shipment-lines).
   const stored = view.run ? await loadShipmentLines(view.run.id) : null;
   // Narrowed to some salespeople's customers, the workbook lists only their invoices' lines.
@@ -72,13 +74,14 @@ export async function loadGoalsExport(basis: RevenueRateBasis = "boc", sales: re
     rates,
     creditNotes: snapshot?.creditNotes ?? null,
     pendingShipments: snapshot?.pendingShipments ?? null,
+    allEntries,
   };
 }
 
 async function loadGoals(
   basis: RevenueRateBasis,
   sales: readonly string[]
-): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {
+): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[]; allEntries: EvaluatedEntry[] }> {
   const configured = reportingDatabaseConfigured();
   const empty = {
     configured,
@@ -90,7 +93,7 @@ async function loadGoals(
     holidays: new Set<string>(),
     rates: [],
   };
-  const none = { snapshot: null, rates: [] };
+  const none = { snapshot: null, rates: [], allEntries: [] };
   // Without Mission Control's own database there is nothing stored to show.
   if (!databaseConfigured()) return { ...none, view: buildGoalsView({ ...empty, run: null, latestRun: null, snapshot: null }) };
   const { succeeded, latest } = await latestRuns();
@@ -126,7 +129,7 @@ async function loadGoals(
     itemCodes ? lookupFinishedGoodCodes(itemCodes) : null,
     lookupSalespeople(runCustomerCodes({ snapshot, entries, ftlCustomers: config.ftlCustomers, forecast })),
   ]);
-  const { view, run } = buildGoalsViewAndRun({
+  const { view, run, entries: allEntries } = buildGoalsViewAndRun({
     configured,
     run: succeeded,
     latestRun: latest,
@@ -145,5 +148,5 @@ async function loadGoals(
     revenueBasis: basis,
     salespeople: { lookup: salespersonLookup, selected: sales },
   });
-  return { view, snapshot: run.snapshot, rates };
+  return { view, snapshot: run.snapshot, rates, allEntries };
 }

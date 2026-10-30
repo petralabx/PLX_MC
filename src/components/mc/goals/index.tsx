@@ -642,7 +642,11 @@ function Body({
                 <DailyLine1Chart page={p} />
               </figure>
               <figure className="gp-chart">
-                <figcaption>Revenue against the {dollars(p.settings.revenueTargetCadCents)} target (CAD)</figcaption>
+                <figcaption>
+                  {p.salespeople?.applied
+                    ? `Revenue for the customers of ${p.salespeople.label} (CAD)`
+                    : `Revenue against the ${dollars(p.settings.revenueTargetCadCents)} target (CAD)`}
+                </figcaption>
                 <DailyRevenueChart page={p} />
               </figure>
             </div>

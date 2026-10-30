@@ -29,7 +29,7 @@ export const GET = route(async (req) => {
   if (!basis) throw new ApiError("invalid_request", "fx must be boc or sage.");
   const sales = salesParam(params.get("sales"));
   if (!sales) throw new ApiError("invalid_request", "sales must be Sage salesperson codes or none, separated by commas.");
-  const { view, shipments, shipmentLines, truckloads, rates, creditNotes, pendingShipments } = await loadGoalsExport(basis, sales);
+  const { view, shipments, shipmentLines, truckloads, rates, creditNotes, pendingShipments, allEntries } = await loadGoalsExport(basis, sales);
   const { run, model, settings } = view;
   if (view.state !== "ready" || !run || !model || !settings) {
     throw new ApiError(
@@ -60,6 +60,7 @@ export const GET = route(async (req) => {
     pendingShipments,
     customerRevenue: view.customerRevenue,
     salespeople: narrowed?.label,
+    allEntries,
   });
   await appendEvent({
     kind: "reporting.goals.export",

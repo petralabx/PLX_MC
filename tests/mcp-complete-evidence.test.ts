@@ -17,6 +17,8 @@ const db = vi.hoisted(() => ({
   taskEvidence: undefined as unknown,
   taskStage: undefined as string | undefined,
   taskPrs: undefined as unknown[] | undefined,
+  openTx: 0,
+  events: [] as { kind: string; inTx: boolean; actor?: string; repo?: string | null; taskId?: string; payload?: Record<string, unknown> }[],
 }));
 
 vi.mock("@/lib/compliance/service", () => ({
@@ -24,11 +26,23 @@ vi.mock("@/lib/compliance/service", () => ({
   checkout: vi.fn(async () => ({ checkoutId: "dsp_test" })),
 }));
 
-vi.mock("@/lib/db", () => ({ withTransaction: vi.fn(async (fn: (q: unknown) => unknown) => fn({})) }));
+// Counts open transactions, so an event shows whether it was written inside one.
+vi.mock("@/lib/db", () => ({
+  withTransaction: vi.fn(async (fn: (q: unknown) => unknown) => {
+    db.openTx += 1;
+    try {
+      return await fn({});
+    } finally {
+      db.openTx -= 1;
+    }
+  }),
+}));
 
 vi.mock("@/lib/compliance/repo", () => ({
   getDispatch: vi.fn(async (id: string) => db.dispatches.get(id) ?? null),
-  appendEvent: vi.fn(),
+  appendEvent: vi.fn(async (event: (typeof db.events)[number]) => {
+    db.events.push({ ...event, inTx: db.openTx > 0 });
+  }),
 }));
 
 vi.mock("@/lib/sync", () => ({
@@ -60,7 +74,9 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
   aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_cursor"] }),
 }));
 
+import { CreatorApprovalRefusal } from "@/lib/compliance/creator-approval";
 import { actionComplete, shouldPromotePrlessCompletion } from "@/lib/mcp/actions";
+import { patchTask } from "@/lib/sync";
 import type { McpIdentity } from "@/lib/mcp/auth";
 
 const identity: McpIdentity = {
@@ -75,6 +91,7 @@ const identity: McpIdentity = {
 beforeEach(() => {
   db.dispatches.clear();
   db.patched.length = 0;
+  db.events.length = 0;
   db.taskLabels = [];
   db.taskBucket = "BKT-OPEN";
   db.taskEvidence = undefined;
@@ -294,6 +311,45 @@ describe("PR-less completion moves the task to the done stage", () => {
     const patch = db.patched.at(-1)?.patch;
     expect(patch?.stage).toBe("merged");
     expect(patch?.stage).not.toBe("verified");
+  });
+
+  describe("when the creator gate refuses that move (TASK-4293)", () => {
+    const refuse = () =>
+      vi.mocked(patchTask).mockImplementationOnce(async () => {
+        throw new CreatorApprovalRefusal(
+          { id: "TASK-900", creatorApproval: { principal: "sp_mcp_workbench_intake", status: "pending", requestedAt: "2026-10-31T00:00:00.000Z" } },
+          "merged",
+          { actor: "vince@example.com", actorId: "sp_mcp_cursor" },
+          "TASK-900 waits for creator approval."
+        );
+      });
+    const blocked = () => db.events.filter((event) => event.kind === "creator_approval.blocked");
+    beforeEach(() => {
+      db.taskStage = "backlog";
+      db.taskPrs = [];
+    });
+
+    it("records it once, after its transaction has closed", async () => {
+      refuse();
+      await expect(handIn()).rejects.toMatchObject({ code: "creator_approval_pending", status: 409 });
+      expect(blocked()).toEqual([
+        expect.objectContaining({
+          inTx: false,
+          taskId: "TASK-900",
+          actor: "cursor:vince@example.com",
+          repo: "petralabx/PLX_MC",
+          payload: expect.objectContaining({ action: "stage", requestedStage: "merged", door: "mcp", actorId: "sp_mcp_cursor" }),
+        }),
+      ]);
+    });
+
+    // A Hub connector checks out work on another repo; the hand-in's other events name the checkout's repo.
+    it("names the checkout's repo, not the connector's", async () => {
+      db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince", repo: "petralabx/plx-customer-portal" });
+      refuse();
+      await expect(handIn()).rejects.toMatchObject({ code: "creator_approval_pending" });
+      expect(blocked().map((event) => event.repo)).toEqual(["petralabx/plx-customer-portal"]);
+    });
   });
 
   it("task with a PR row keeps its existing path (no stage change)", async () => {

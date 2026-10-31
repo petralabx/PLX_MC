@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import { evidenceStandardReport, requiresHumanVerification, type EvidenceStandardReport } from "@/lib/compliance";
+import { recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { appendEventTx } from "@/lib/compliance/repo";
 import type { Task } from "@/lib/mc-data/types";
 import { HUMANS, assignmentViolation } from "@/lib/mc-data";
@@ -204,7 +205,8 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
     await assertMayCloseOrReopen(identity, current.data as unknown as Task, patch.cancel ? "cancel" : patch.reopen ? "reopen" : "verify");
   }
-  return withTransaction(async (q) => {
+  // A reopen the creator gate refuses is recorded after the rollback (TASK-4293).
+  return recordingCreatorRefusal(() => withTransaction(async (q) => {
     const row = await getEntity("task", taskId, q, true);
     if (!row) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
     await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity), q);
@@ -366,7 +368,7 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
       link: taskLink(taskId),
       ...(evidenceStandard ? { evidenceStandard } : {}),
     };
-  });
+  }), { actor: mcpAuditActor(identity), repo: identity.repo, door: "mcp" });
 }
 
 // Batch items return receipts, not the full fields/diff: 100 items carrying

@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
 import { resolveCompletionAutonomy } from "@/lib/routing";
 import { classifyRiskTier, evidenceStandardReport, requiresHumanVerification } from "@/lib/compliance";
+import { recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
 import {
@@ -700,7 +701,7 @@ export async function actionProgress(
   // lands meanwhile (a person's, an answer) is kept (TASK-3632).
   const task = Object.keys(patch).length === 0 && !note && cancelResult
     ? cancelResult.task
-    : await withTransaction(async (q) => {
+    : await recordingCreatorRefusal(() => withTransaction(async (q) => {
         const locked = await getEntity("task", input.taskId, q, true);
         if (!locked) return null;
         if (note) patch.comments = [...((locked.data as unknown as Task).comments ?? []), note];
@@ -710,7 +711,7 @@ export async function actionProgress(
           identity.operatorEmail,
           { query: q, attribution: { source: "service", actorId: authorized.actorId } }
         );
-      });
+      }), { actor: mcpAuditActor(identity), repo: identity.repo, door: "mcp" });
   if (!task) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   await complianceRepo.appendEvent({
     kind: "task.progress",
@@ -874,7 +875,7 @@ export async function actionComplete(
   if (taskId) {
     // Files from mc_upload_evidence (TASK-3166) outlive a new hand-in. They are
     // read under the task row lock, so an upload that lands meanwhile is kept.
-    await withTransaction(async (q) => {
+    await recordingCreatorRefusal(() => withTransaction(async (q) => {
       const locked = (await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined;
       const artifacts = locked?.evidence?.artifacts;
       // TASK-4017: a completed hand-in on a task with no PR has no merge to
@@ -899,7 +900,7 @@ export async function actionComplete(
         dispatch?.accountableHuman ?? identity.operatorEmail,
         { query: q, attribution: { source: "service", actorId: identity.actor.id } }
       );
-    });
+    }), { actor: mcpAuditActor(identity), repo: dispatch?.repo ?? identity.repo, door: "mcp" });
   }
 
   return {

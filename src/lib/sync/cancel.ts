@@ -4,6 +4,7 @@
 // task.cancelled / task.reopened event. Callers (MCP tools, REST routes) own
 // authorization; this owns the data rules.
 import { ApiError } from "@/lib/api/route";
+import { recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { appendEventTx } from "@/lib/compliance/repo";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import {
@@ -139,11 +140,11 @@ export async function reopenTask(taskId: string, input: ReopenInput, ctx: Cancel
     await ensureSeeded();
     if (rest.patch.repos) await ensureReposSeeded();
   }
-  return withTransaction(async (q) => {
+  return recordingCreatorRefusal(() => withTransaction(async (q) => {
     const reopened = await reopenTaskTx(q, taskId, input, ctx);
     if (!rest) return reopened;
     const task = await patchTask(taskId, rest.patch, rest.actor, { ...rest.opts, query: q });
     if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
     return { ...reopened, task };
-  });
+  }));
 }

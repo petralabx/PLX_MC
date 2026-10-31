@@ -65,6 +65,7 @@ vi.mock("@/lib/sync/repo", () => ({
     if (data) db.tasks.set(id, { ...data, ...(opts.patch ?? {}) });
   },
   async appendAudit() {},
+  async taskIdsWithPr() { return []; },
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
@@ -290,6 +291,30 @@ describe("while creator approval is pending", () => {
     );
     expect(task().stage).toBe("planned");
     expect(db.events.find((e) => e.kind === "task.promotion_skipped")?.payload).toMatchObject({ reason: "creator_approval_pending" });
+    // The skip is the projection's record; it writes no refusal as well.
+    expect(blocked()).toEqual([]);
+  });
+
+  // The merge path (mc_link_merged_pr) skips the task before patchLocked's
+  // transaction, which records no refusal of its own (TASK-4293).
+  it("a merged PR does not promote it either", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
+    try {
+      await projectPullRequest(
+        {
+          action: "closed", merged: true, repo: "PLX_MC", repoFullName: "petralabx/PLX_MC", prNumber: 7,
+          headSha: "abc", mergeSha: "abc", baseBranch: "main", branch: "b", title: "t", author: "", labels: [],
+          checkoutId: null, checkoutIds: [],
+        } as never,
+        { actorKind: "agent", actorIdentity: "claude", taskIds: ["TASK-1"], sparse: false }
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(task().stage).toBe("planned");
+    expect(db.events.filter((e) => e.kind === "task.promotion_skipped").map((e) => e.payload))
+      .toEqual([expect.objectContaining({ reason: "creator_approval_pending" })]);
+    expect(blocked()).toEqual([]);
   });
 });
 

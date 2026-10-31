@@ -79,6 +79,12 @@ export interface Route {
    * customers without one; absent = every customer. The page checks the codes.
    */
   sales?: string;
+  /**
+   * Goals & Production narrowed to some days of the month (TASK-4391):
+   * `/?screen=goals&dates=week`, mtd, week, 7d or YYYY-MM-DD..YYYY-MM-DD;
+   * absent = the whole month. A malformed value is dropped.
+   */
+  dates?: string;
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -105,6 +111,9 @@ const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram", "nod
 // Goals salesperson codes as a link carries them (TASK-4277): letters, digits, `._-` and commas.
 const SALES_RE = /^[A-Za-z0-9._,-]{1,800}$/;
 
+// Goals dates as a link carries them (TASK-4391): a preset or a range of days. The page checks the days themselves.
+const DATES_RE = /^(?:mtd|week|7d|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})$/;
+
 // Stable link names that read as another screen (TASK-3559): `?screen=my-tasks`
 // is the shareable name for My tasks, whose screen key is "mine".
 const SCREEN_ALIASES: ReadonlyMap<string, Screen> = new Map([["my-tasks", "mine"]]);
@@ -122,6 +131,7 @@ export function routeToUrl(route: Route): string {
   if (route.scope === "mfg") params.set("scope", "mfg");
   if (route.tab && route.tab !== DEFAULT_GOALS_TAB) params.set("tab", route.tab);
   if (route.sales) params.set("sales", route.sales);
+  if (route.dates) params.set("dates", route.dates);
   if (route.edit === "1") params.set("edit", "1");
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
@@ -152,6 +162,9 @@ export function urlToRoute(url: string): Route {
   if (isGoalsTab(tab) && tab !== DEFAULT_GOALS_TAB) route.tab = tab;
   const sales = params.get("sales");
   if (sales && SALES_RE.test(sales)) route.sales = sales;
+  // Goals dates (TASK-4391): the whole month (`month`, or a malformed value) is no `dates` at all.
+  const dates = params.get("dates");
+  if (dates && DATES_RE.test(dates)) route.dates = dates;
   if (params.get("edit") === "1") route.edit = "1";
   return route;
 }

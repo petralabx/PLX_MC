@@ -8,7 +8,9 @@
 // customer's instead of the month's goal, and Line 1 stays every customer's.
 // How the Revenue headline adds up (charges, returns, the shipped-not-invoiced
 // estimate, product lines, currencies) is the "How it adds up" tab
-// (./revenue-breakdown.tsx, TASK-4373); the card links to it.
+// (./revenue-breakdown.tsx, TASK-4373); the card links to it. For some days of
+// the month (TASK-4391) the cards show what those days did, with no target,
+// status, due so far, pace or last month: the goals are the whole month's.
 
 import type { ReactNode } from "react";
 
@@ -99,6 +101,8 @@ export function GoalCards({
       ? narrowed.everyCustomer.revenueScopeGoalCadCents
       : narrowed.everyCustomer.revenueGoalCadCents
     : null;
+  // Some days of the month (TASK-4391): no comparison with the month's goals.
+  const range = page.range && !page.range.whole ? page.range : null;
   const l1 = model.line1;
   const tl = model.truckloads;
   const rev = model.revenue;
@@ -123,10 +127,10 @@ export function GoalCards({
       <Card
         id="line1"
         title="Line 1 bulk"
-        status={l1.status}
+        status={range ? null : l1.status}
         definition={`Bulk kg of batches of ${count(settings.line1MinKg)} kg or more (assumed to run on Line 1), ${count(settings.line1KgPerWorkingDay)} kg per working day (${wholeKg(l1.targetKg)} kg this month).`}
         big={wholeKg(l1.totalKg)}
-        of={`of ${wholeKg(l1.targetKg)} kg`}
+        of={range ? `in ${range.label}` : `of ${wholeKg(l1.targetKg)} kg`}
         source={l1Source}
       >
         <Split
@@ -141,16 +145,24 @@ export function GoalCards({
           </p>
         ) : null}
         <Bar
-          parts={barParts({ inSystem: l1.inSystemKg, byHand: l1.byHandKg, schedule: scheduled, scale: l1.targetKg, tickAt: l1.dueSoFarKg })}
+          parts={
+            range
+              ? barParts({ inSystem: l1.inSystemKg, byHand: l1.byHandKg, schedule: scheduled, scale: l1.ifAllRunKg, tickAt: null })
+              : barParts({ inSystem: l1.inSystemKg, byHand: l1.byHandKg, schedule: scheduled, scale: l1.targetKg, tickAt: l1.dueSoFarKg })
+          }
           tickLabel={`Due so far: ${wholeKg(l1.dueSoFarKg)} kg`}
         />
         <ul className="gp-details" title={l1Source}>
-          <li>
-            Due so far: <b>{wholeKg(l1.dueSoFarKg)} kg</b> by {day(l1.dueBy)}
-          </li>
-          <li>
-            Needed per working day: <b>{wholeKg(l1.neededPerDayKg)} kg</b> over {count(model.calendar.remaining)} working days
-          </li>
+          {range ? null : (
+            <>
+              <li>
+                Due so far: <b>{wholeKg(l1.dueSoFarKg)} kg</b> by {day(l1.dueBy)}
+              </li>
+              <li>
+                Needed per working day: <b>{wholeKg(l1.neededPerDayKg)} kg</b> over {count(model.calendar.remaining)} working days
+              </li>
+            </>
+          )}
           <li>
             If every scheduled batch runs: <b>{wholeKg(l1.ifAllRunKg)} kg</b> ({wholeKg(l1.scheduledFromTodayKg)} kg from today,{" "}
             {wholeKg(l1.openPastDateKg)} kg open past their date)
@@ -164,7 +176,7 @@ export function GoalCards({
         status={null}
         definition={`Shipments with ${usd(settings.fullTruckloadMinUsdCents)} or more of product to the ${count(tl.customers.length)} truckload customers${narrowed ? ` of ${narrowed.label}` : ""}.`}
         big={count(tl.full.total)}
-        of={tl.target === null ? "· no monthly target set" : `of ${count(tl.target)}`}
+        of={range ? `in ${range.label}` : tl.target === null ? "· no monthly target set" : `of ${count(tl.target)}`}
         source={tlSource}
       >
         <Split
@@ -174,7 +186,7 @@ export function GoalCards({
           title={tlSource}
         />
         <Bar
-          parts={barParts({ inSystem: tl.full.inSystem, byHand: tl.full.byHand, scale: fullScale, tickAt: tl.lastMonth.full })}
+          parts={barParts({ inSystem: tl.full.inSystem, byHand: tl.full.byHand, scale: range ? Math.max(tl.full.total, 1) : fullScale, tickAt: range ? null : tl.lastMonth.full })}
           tickLabel={`Last month: ${count(tl.lastMonth.full)} full loads`}
         />
         <ul className="gp-details" title={tlSource}>
@@ -182,21 +194,33 @@ export function GoalCards({
             Partial loads: <b>{count(tl.partial.total)}</b>
             {tl.partial.byHand > 0 ? <span className="gp-amber"> ({count(tl.partial.byHand)} entered by hand)</span> : null}
           </li>
-          <li>
-            Last month: <b>{count(tl.lastMonth.full)}</b> full, {count(tl.lastMonth.partial)} partial,{" "}
-            {usd(tl.lastMonth.productUsdCents)} of product
-          </li>
-          <li>The bar compares this month’s full loads with last month’s (the tick).</li>
+          {range ? null : (
+            <>
+              <li>
+                Last month: <b>{count(tl.lastMonth.full)}</b> full, {count(tl.lastMonth.partial)} partial,{" "}
+                {usd(tl.lastMonth.productUsdCents)} of product
+              </li>
+              <li>The bar compares this month’s full loads with last month’s (the tick).</li>
+            </>
+          )}
         </ul>
       </Card>
 
       <Card
         id="revenue"
         title="Revenue"
-        status={narrowed ? null : revStatus}
+        status={narrowed || range ? null : revStatus}
         definition={`Invoiced in CAD, product before tax (freight, lab and other accessorial charges left out; 3PL service charges count${creditNotes?.access === "read" ? "; returns deducted" : ""}${pending?.access === "read" ? "; shipped but not yet invoiced added as an estimate" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}${narrowed ? `, for the customers of ${narrowed.label}, set against every customer’s.` : `, against ${dollars(rev.targetCents)} a month.`}`}
         big={dollars(revTotal)}
-        of={narrowed ? (every === null ? "" : `of ${dollars(every)} for every ${mfg ? "manufacturing " : ""}customer`) : `of ${dollars(rev.targetCents)}`}
+        of={
+          narrowed
+            ? every === null
+              ? ""
+              : `of ${dollars(every)} for every ${mfg ? "manufacturing " : ""}customer${range ? " in these dates" : ""}`
+            : range
+              ? `in ${range.label}`
+              : `of ${dollars(rev.targetCents)}`
+        }
         source={revSource}
       >
         {goal ? (
@@ -218,6 +242,10 @@ export function GoalCards({
           parts={
             narrowed
               ? barParts({ inSystem: revTotal, byHand: 0, scale: every ?? rev.targetCents, tickAt: null })
+              : range
+              ? goal
+                ? barParts({ inSystem: goal.goalCadCents - goal.byHandGoalCadCents, byHand: goal.byHandGoalCadCents, scale: revTotal, tickAt: null })
+                : barParts({ inSystem: rev.inSystemCents, byHand: rev.byHandCents, scale: revTotal, tickAt: null })
               : goal
               ? barParts({
                   inSystem: goal.goalCadCents - goal.byHandGoalCadCents,
@@ -235,6 +263,8 @@ export function GoalCards({
               Share of every customer’s: <b>{every !== null && every > 0 ? pct(revTotal / every) : "—"}</b>. The bar shows it; the{" "}
               {dollars(rev.targetCents)} monthly goal is every customer’s.
             </li>
+          ) : range ? (
+            <li>The {dollars(rev.targetCents)} goal is the whole month’s, so these dates have no status or pace against it.</li>
           ) : (
             <>
               <li>

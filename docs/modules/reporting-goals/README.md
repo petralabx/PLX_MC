@@ -672,6 +672,47 @@ calls them, salespeople.
   page does. It is refused rather than exported for every customer under their
   names when the salespeople can't be read.
 
+### Dates (TASK-4391)
+
+A "Dates" picker after the Salespeople picker: the page for some days of the
+run's month.
+
+- **The choice.** One parameter, `dates` (`date-filter.ts`): `mtd` (the 1st to
+  today), `week` (Monday to Sunday around today), `7d` (today and the 6 days
+  before) or `YYYY-MM-DD..YYYY-MM-DD`. Absent, or `month`, is the whole month,
+  and the page never writes `dates` for it. Presets resolve against the run's
+  today, on the server and in the picker alike. Days are cut to the run's
+  month; days wholly outside it show the whole month, and the page says so.
+  Anything else is 400 `invalid_request` on the page and export routes. The
+  choice lives in the URL with `fx`, `scope`, `tab` and `sales`.
+- **What follows.** The run is narrowed before the page model is built
+  (`filterRunByDates`), after the salesperson filter (the two commute):
+  invoices and the shipped-not-invoiced estimate by ship date, credit notes by
+  their date, this month's truckloads by ship date, batches by their date
+  (`batchDates` in `rules.ts`: a batch a hand entry completes takes the entry's
+  date) and hand entries by theirs. Undated and other-month entries stay listed;
+  they never count. Revenue by currency and by day are rebuilt from the kept
+  invoices. The cards, revenue by class, How it adds up, the day-by-day charts
+  and table (only those days), sizes, scheduled, the batch list, shipments,
+  truckloads by customer, entries by hand and realized revenue by customer all
+  follow. Days that cover the month add up to it, in native currency.
+- **What stays the month's.** The goals: a partial page has no target, status,
+  due so far, pace, needed per day or last month (the Revenue headlines are
+  built without pace, so their status is null). The forecast, potential revenue
+  and unpriced production on Revenue by customer, batch history and the
+  cutoffs stay the month's, for the same customers. The revenue covered-through
+  date and the hand-entry match for the estimate stay the whole page's.
+- **With salespeople.** The Revenue card sets their headline against every
+  customer's headline over the same days.
+- **The workbook.** `?dates=` narrows it the same way and names the days first
+  (`… 2026-10-14 (2026-10-12 to 2026-10-18) (Sage rate) (BB).xlsx`). The Read
+  me and Goals sheets say what it covers; the Goals sheet's target, due so far,
+  status and pace cells read "—"; the Daily sheet has a row per day of the
+  range and no target column; Truckloads leaves last month out.
+- **Left out.** Days across months, pro-rated goals, pace or size history for a
+  range, last month's same days, and a date filter on the forecast or
+  potential revenue.
+
 ### Revenue by customer
 
 A section above the forecast, and the workbook's Customers sheet
@@ -995,6 +1036,7 @@ Depended on by: nothing yet.
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, source-mcp, sql-literal, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - Revenue rate and revenue by class (TASK-3780, TASK-3781): `revenue-by-class.ts`, `money.ts` (`allocateConvertedCents`, `usableRate`), `excel/export.ts` (`usdToCadFormula`); `tests/reporting-goals-revenue-rate.test.ts` and the Sage-rate blocks of `tests/reporting-goals-export.test.ts`; `e2e/goals-rate.spec.ts`
 - Revenue by customer: `customer-revenue.ts`, `customer-search.ts`, `src/components/mc/goals/customers.tsx`, the Customers sheet in `excel/export.ts`; `tests/reporting-goals-customer-revenue.test.ts`; `e2e/goals-customers.spec.ts`
+- Dates filter (TASK-4391): `date-filter.ts` (pure), `batchDates` and `datesTakeaway` in `rules.ts`, `buildGoalsViewAndRun` in `view.ts`; `src/components/mc/goals/dates.tsx`; `tests/reporting-goals-dates.test.ts`; `e2e/goals-dates.spec.ts`
 - Salesperson filter (TASK-4277): `salesperson-filter.ts` (pure), `salespeople.ts` (the live lookup), `queries/salespeople.ts`, `buildGoalsViewAndRun` in `view.ts`; `src/components/mc/goals/salespeople.tsx`; `docs/modules/reporting-goals/readonly-grants-salespeople.sql`; `tests/reporting-goals-salespeople{,-lookup}.test.ts` and the salesperson block of `tests/reporting-goals-postgres.test.ts`; `e2e/goals-salespeople.spec.ts`
 - Reporting MCP path (TASK-3489): `source-mcp.ts`, `sql-literal.ts`; `tests/reporting-goals-source-mcp.test.ts` (a fake plx-reporting-mcp), `tests/reporting-goals-sql-literal.test.ts`, `tests/reporting-goals-source-select.test.ts`
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)

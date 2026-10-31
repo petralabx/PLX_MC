@@ -64,7 +64,13 @@ export function ForecastSection({ page }: { page: ReadyPage }) {
       </div>
     );
   }
-  return <ForecastReadyView f={forecast} salespeople={page.salespeople?.applied ? page.salespeople.label : null} />;
+  return (
+    <ForecastReadyView
+      f={forecast}
+      salespeople={page.salespeople?.applied ? page.salespeople.label : null}
+      partial={!!page.range && !page.range.whole}
+    />
+  );
 }
 
 /** How the chosen filters read in a sentence: "Exclusive Manufacturing customers", "PLABEL (Manufacturing) items". */
@@ -81,7 +87,7 @@ function filterWords(f: ForecastReady, filter: ForecastKpiFilter): { who: string
  * numbers and the list follow the same ones; with neither chosen the numbers
  * are the page model's whole-month numbers, exactly as before.
  */
-function ForecastReadyView({ f, salespeople }: { f: ForecastReady; salespeople: string | null }) {
+function ForecastReadyView({ f, salespeople, partial = false }: { f: ForecastReady; salespeople: string | null; partial?: boolean }) {
   const [customerClass, setCustomerClass] = useState<ForecastClassFilter>("all");
   const [chosenCategory, setCategory] = useState<ForecastCategoryFilter>("all");
   const categoriesRead = f.categoryMissing !== null && f.categoryMissing.length === 0;
@@ -101,6 +107,12 @@ function ForecastReadyView({ f, salespeople }: { f: ForecastReady; salespeople: 
       {salespeople ? (
         <p className="gp-line" data-testid="goals-forecast-salespeople">
           For the customers of {salespeople} only. The target and the hit rate are for all customers.
+        </p>
+      ) : null}
+      {/* Some days of the month (TASK-4391): the forecast stays the month's. */}
+      {partial ? (
+        <p className="gp-line" data-testid="goals-forecast-dates">
+          The forecast is the whole month’s, whatever the dates.
         </p>
       ) : null}
       {words ? (

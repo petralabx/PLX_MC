@@ -5,6 +5,8 @@
 // batches by size for the last three months against this month's pace. Each
 // chart has a one-sentence summary for assistive tech and its numbers in a
 // table under it (the text alternative), so nothing depends on hovering.
+// For some days of the month (TASK-4391) the day-by-day charts and table show
+// those days only, with no target and no last month.
 
 import { RunningLines, StackedColumns, type ChartKey, type ColumnAxis } from "../charts";
 
@@ -22,10 +24,16 @@ const C = {
 const BAND_COLORS = ["var(--p-accent)", "var(--p-info)", "var(--p-accent-soft)", "var(--p-hot)"];
 
 function dayAxis(page: ReadyPage): ColumnAxis[] {
-  return page.model.daily.map((d) => {
+  return page.model.daily.map((d, i) => {
     const dom = Number(d.day.slice(8));
-    return { key: d.day, label: String(dom), tick: dom === 1 || dom % 7 === 1, shaded: !d.isWorkingDay };
+    // The first day shown is labelled too: some days of the month (TASK-4391) can start mid-month.
+    return { key: d.day, label: String(dom), tick: i === 0 || dom % 7 === 1, shaded: !d.isWorkingDay };
   });
+}
+
+/** Some days of the month (TASK-4391), or null for the whole month. */
+function partialRange(page: ReadyPage) {
+  return page.range && !page.range.whole ? page.range : null;
 }
 
 function todayMarker(page: ReadyPage) {
@@ -37,17 +45,18 @@ export function DailyLine1Chart({ page }: { page: ReadyPage }) {
   const { model, settings } = page;
   const l1 = model.line1;
   const perDay = count(settings.line1KgPerWorkingDay);
+  const range = partialRange(page);
   const keys: ChartKey[] = [
     { label: "Completed (FileMaker)", colorVar: C.done, kind: "bar" },
     { label: "Entered by hand", colorVar: C.hand, kind: "bar" },
     { label: "Still scheduled", colorVar: C.scheduled, kind: "bar" },
-    { label: `Target: ${perDay} kg a working day`, colorVar: C.target, kind: "dashed" },
+    ...(range ? [] : [{ label: `Target: ${perDay} kg a working day`, colorVar: C.target, kind: "dashed" } as const]),
   ];
   // Every open Line 1 batch this month, from today or past its date (the batch list's own sum).
   const stillScheduled = l1.scheduledFromTodayKg + l1.openPastDateKg;
   return (
     <StackedColumns
-      summary={`Line 1 bulk kg per day, ${model.month.label}: ${wholeKg(l1.totalKg)} kg done so far (${wholeKg(l1.inSystemKg)} kg in FileMaker, ${wholeKg(l1.byHandKg)} kg entered by hand) and ${wholeKg(stillScheduled)} kg still scheduled, against ${perDay} kg a working day. Weekends and holidays are shaded.`}
+      summary={`Line 1 bulk kg per day, ${range ? range.label : model.month.label}: ${wholeKg(l1.totalKg)} kg done so far (${wholeKg(l1.inSystemKg)} kg in FileMaker, ${wholeKg(l1.byHandKg)} kg entered by hand) and ${wholeKg(stillScheduled)} kg still scheduled${range ? "" : `, against ${perDay} kg a working day`}. Weekends and holidays are shaded.`}
       axis={dayAxis(page)}
       stacks={model.daily.map((d) => [
         { key: "done", value: d.line1DoneKg, colorVar: C.done },
@@ -56,7 +65,7 @@ export function DailyLine1Chart({ page }: { page: ReadyPage }) {
       ])}
       keys={keys}
       formatY={compactKg}
-      target={{ value: settings.line1KgPerWorkingDay, colorVar: C.target }}
+      target={range ? undefined : { value: settings.line1KgPerWorkingDay, colorVar: C.target }}
       marker={todayMarker(page)}
       readout={(i) => {
         const d = model.daily[i];
@@ -82,19 +91,22 @@ export function DailyRevenueChart({ page }: { page: ReadyPage }) {
   // and the target is every customer's, so its line is too, as the Revenue card drops its status.
   const lastMonth = rev.lastMonthCadCents;
   const narrowed = page.salespeople?.applied ? page.salespeople : null;
+  // Some days of the month (TASK-4391): no target either, as the cards drop their status (last month is already null).
+  const range = partialRange(page);
+  const noTarget = !!narrowed || !!range;
   const keys: ChartKey[] = [
     { label: "Sage", colorVar: C.done, kind: "line" },
     { label: "Sage + entered by hand", colorVar: C.hand, kind: "line" },
     ...(lastMonth === null ? [] : [{ label: "Last month, same day", colorVar: C.lastMonth, kind: "line" } as const]),
-    ...(narrowed ? [] : [{ label: "Target to date", colorVar: C.target, kind: "dashed" } as const]),
+    ...(noTarget ? [] : [{ label: "Target to date", colorVar: C.target, kind: "dashed" } as const]),
   ];
   return (
     <RunningLines
-      summary={`Revenue to date in CAD, ${model.month.label}: ${dollars(rev.inSystemCents)} in Sage and ${dollars(rev.totalCents)} with entries by hand, ${narrowed ? `for the customers of ${narrowed.label}.` : `against ${dollars(rev.dueSoFarCents)} due so far and ${dollars(rev.targetCents)} for the month.`}${lastMonth === null ? "" : ` Last month reached ${dollars(lastMonth)}.`}`}
+      summary={`Revenue to date in CAD, ${range ? range.label : model.month.label}: ${dollars(rev.inSystemCents)} in Sage and ${dollars(rev.totalCents)} with entries by hand${narrowed ? `, for the customers of ${narrowed.label}.` : range ? "." : `, against ${dollars(rev.dueSoFarCents)} due so far and ${dollars(rev.targetCents)} for the month.`}${lastMonth === null ? "" : ` Last month reached ${dollars(lastMonth)}.`}`}
       axis={dayAxis(page)}
       series={[
         ...(lastMonth === null ? [] : [{ key: "last-month", values: model.daily.map((d) => d.lastMonthToDateCents), colorVar: C.lastMonth }]),
-        ...(narrowed ? [] : [{ key: "target", values: model.daily.map((d) => d.targetToDateCents), colorVar: C.target, dashed: true, step: true }]),
+        ...(noTarget ? [] : [{ key: "target", values: model.daily.map((d) => d.targetToDateCents), colorVar: C.target, dashed: true, step: true }]),
         { key: "with-hand", values: model.daily.map((d) => past(d, d.withHandToDateCents)), colorVar: C.hand },
         { key: "sage", values: model.daily.map((d) => past(d, d.sageToDateCents)), colorVar: C.done },
       ]}
@@ -109,7 +121,7 @@ export function DailyRevenueChart({ page }: { page: ReadyPage }) {
             {d.isFuture ? null : <span>Sage: {dollars(d.sageToDateCents)}</span>}
             {d.isFuture ? null : <span className="gp-amber">With entries by hand: {dollars(d.withHandToDateCents)}</span>}
             {d.lastMonthToDateCents === null ? null : <span>Last month, same day: {dollars(d.lastMonthToDateCents)}</span>}
-            {narrowed ? null : <span>Target to date: {dollars(d.targetToDateCents)}</span>}
+            {noTarget ? null : <span>Target to date: {dollars(d.targetToDateCents)}</span>}
           </>
         );
       }}
@@ -120,6 +132,8 @@ export function DailyRevenueChart({ page }: { page: ReadyPage }) {
 /** The numbers behind both day-by-day charts (their text alternative). */
 export function DailyTable({ page }: { page: ReadyPage }) {
   const { model } = page;
+  // Some days of the month (TASK-4391): the month's target and last month have no column.
+  const monthly = !partialRange(page);
   return (
     <details className="gp-data">
       <summary>Day-by-day numbers</summary>
@@ -137,8 +151,12 @@ export function DailyTable({ page }: { page: ReadyPage }) {
               <th scope="col" className="num hand">By hand (CAD)</th>
               <th scope="col" className="num">Sage to date (CAD)</th>
               <th scope="col" className="num hand">With entries (CAD)</th>
-              <th scope="col" className="num">Target to date</th>
-              <th scope="col" className="num">Last month to date</th>
+              {monthly ? (
+                <>
+                  <th scope="col" className="num">Target to date</th>
+                  <th scope="col" className="num">Last month to date</th>
+                </>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -154,8 +172,12 @@ export function DailyTable({ page }: { page: ReadyPage }) {
                 <td className="num hand">{amount(d.byHandCadCents)}</td>
                 <td className="num">{d.isFuture ? "—" : amount(d.sageToDateCents)}</td>
                 <td className="num hand">{d.isFuture ? "—" : amount(d.withHandToDateCents)}</td>
-                <td className="num">{amount(d.targetToDateCents)}</td>
-                <td className="num">{d.lastMonthToDateCents === null ? "—" : amount(d.lastMonthToDateCents)}</td>
+                {monthly ? (
+                  <>
+                    <td className="num">{amount(d.targetToDateCents)}</td>
+                    <td className="num">{d.lastMonthToDateCents === null ? "—" : amount(d.lastMonthToDateCents)}</td>
+                  </>
+                ) : null}
               </tr>
             ))}
           </tbody>

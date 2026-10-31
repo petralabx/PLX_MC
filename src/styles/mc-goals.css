@@ -1101,6 +1101,28 @@
   color: var(--p-muted);
 }
 
+/* The dates picker's custom row (TASK-4391): two day fields and a button, wrapping at phone width. */
+.mc .goals .gp-pick-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--p-grid-2);
+  font-size: var(--p-text-small);
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-pick-dates input {
+  min-height: var(--p-touch);
+  padding: 0 8px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font: inherit;
+}
+
 .mc .goals .gp-pick-foot {
   border-top: 1px solid var(--p-grid-2);
   background: var(--p-paper-2);

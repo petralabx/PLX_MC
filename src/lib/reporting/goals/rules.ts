@@ -261,6 +261,17 @@ export interface BatchListRow {
   entryId: string | null;
 }
 
+/**
+ * Each FileMaker batch's date on the page (TASK-4391), keyed by its FileMaker
+ * id: its own, or the date of the hand entry that completes it. The dates
+ * filter keeps a batch by this date, read from the whole month's model.
+ */
+export function batchDates(model: Pick<GoalsModel, "batches">): Map<string, IsoDate> {
+  const out = new Map<string, IsoDate>();
+  for (const b of model.batches) if (b.key.startsWith("fm:")) out.set(b.key.slice(3), b.date);
+  return out;
+}
+
 export interface BandTile {
   band: SizeBand | "Total";
   count: number;
@@ -774,5 +785,19 @@ export function salespeopleTakeaway(model: GoalsModel, who: string, revenueCents
   return (
     `${wholeKg(line1.totalKg)} kg of Line 1 bulk against ${wholeKg(line1.dueSoFarKg)} kg due so far for every customer. ` +
     `${who}: ${plural(truckloads.full.total, "full truckload", "full truckloads")} and ${formatDollars(revenueCents)} of revenue toward the goal${share}.`
+  );
+}
+
+/**
+ * The takeaway of a page narrowed to some days of the month (TASK-4391): what
+ * those days did, with no comparison to the goals, which are the whole month's.
+ * `who` names the days (and the salespeople, when picked).
+ */
+export function datesTakeaway(model: GoalsModel, who: string, revenueCents: number, line1EveryCustomer = false): string {
+  const { line1, truckloads } = model;
+  return (
+    `${who}: ${wholeKg(line1.totalKg)} kg of Line 1 bulk${line1EveryCustomer ? " (every customer’s)" : ""}, ` +
+    `${plural(truckloads.full.total, "full truckload", "full truckloads")} and ${formatDollars(revenueCents)} of revenue. ` +
+    "The goals are for the whole month."
   );
 }

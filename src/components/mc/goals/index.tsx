@@ -14,7 +14,8 @@
 // Sections other than the goal cards open from a tab bar (TASK-4094). The
 // cards stay pinned under the top bar. The open section is `tab=` (absent =
 // Revenue → How it adds up, TASK-4373), kept alongside `fx`, `scope` and `sales`.
-// The salesperson filter (TASK-4277) works the same way (`sales=GGC,SM`).
+// The salesperson filter (TASK-4277) works the same way (`sales=GGC,SM`), and
+// so does the dates filter (TASK-4391, `dates=week`).
 // Module contract: docs/modules/reporting-goals/README.md.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -23,6 +24,7 @@ import { api, apiDownload, ApiClientError } from "@/lib/api";
 import { signInAgainAction } from "@/lib/auth/actions";
 import type { EvaluatedEntry, GoalsPage, RefreshRun, RevenueRateBasis, RevenueScope } from "@/lib/reporting/goals";
 import { torontoDate } from "@/lib/reporting/goals/calendar";
+import { datesKey, datesParam, datesTitle, WHOLE_MONTH, type DatesChoice } from "@/lib/reporting/goals/date-filter";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 import { salesParam } from "@/lib/reporting/goals/salesperson-filter";
 
@@ -30,6 +32,7 @@ import type { Route, ScreenProps } from "../route";
 
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
 import { CustomerRevenueSection } from "./customers";
+import { DatesNote, DatesPicker } from "./dates";
 import { DeleteEntryDialog, EntryDialog, ImportDialog } from "./entries";
 import { ForecastSection } from "./forecast";
 import { GoalCards } from "./goal-cards";
@@ -156,14 +159,15 @@ function saveFile(blob: Blob, fileName: string): void {
 }
 
 /**
- * A Goals path (the page model or the workbook) at a revenue rate and for some
- * salespeople: today's rate and every customer need no query, so the default
- * request stays exactly as it was.
+ * A Goals path (the page model or the workbook) at a revenue rate, for some
+ * salespeople and some days: today's rate, every customer and the whole month
+ * need no query, so the default request stays exactly as it was.
  */
-function goalsPath(base: string, basis: RevenueRateBasis, sales: readonly string[]): string {
+function goalsPath(base: string, basis: RevenueRateBasis, sales: readonly string[], dates = ""): string {
   const params = new URLSearchParams();
   if (basis === "sage") params.set("fx", "sage");
   if (sales.length > 0) params.set("sales", sales.join(","));
+  if (dates) params.set("dates", dates);
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
 }
@@ -174,6 +178,7 @@ function goalsLocation(
   scope: RevenueScope,
   tab: GoalsTab,
   sales: readonly string[],
+  dates: string,
 ): Omit<Route, "screen"> {
   const salesValue = (salesParam(sales.join(",")) ?? []).join(",");
   return {
@@ -181,6 +186,7 @@ function goalsLocation(
     ...(scope === "mfg" ? { scope: "mfg" as const } : {}),
     ...(tab !== DEFAULT_GOALS_TAB ? { tab } : {}),
     ...(salesValue ? { sales: salesValue } : {}),
+    ...(dates ? { dates } : {}),
   };
 }
 
@@ -192,19 +198,24 @@ export function GoalsView({ route, nav }: ScreenProps) {
   // Some salespeople's customers only (`sales=`, TASK-4277): a malformed link shows every customer.
   const salesKey = (salesParam(route.sales ?? null) ?? []).join(",");
   const sales = salesKey ? salesKey.split(",") : [];
-  // load() reads the chosen rate and salespeople from here, so it keeps one identity and a change never stops a refresh being followed.
+  // Some days of the month only (`dates=`, TASK-4391): a malformed link shows the whole month.
+  const datesChoice: DatesChoice = datesParam(route.dates ?? null) ?? WHOLE_MONTH;
+  const datesValue = datesKey(datesChoice);
+  // load() reads the chosen rate, salespeople and dates from here, so it keeps one identity and a change never stops a refresh being followed.
   const basisRef = useRef(basis);
   const salesRef = useRef(salesKey);
+  const datesRef = useRef(datesValue);
   useEffect(() => {
     basisRef.current = basis;
     salesRef.current = salesKey;
+    datesRef.current = datesValue;
   });
   // Every read is numbered; only the newest one is shown, so a slower answer at the other rate never overwrites it.
   const loadSeq = useRef(0);
   const [page, setPage] = useState<GoalsPage | null>(null);
   const [status, setStatus] = useState<SectionState>("loading");
-  // The rate and salespeople the failed read asked for, so a failure for one choice is never shown as another's.
-  const [loadError, setLoadError] = useState<{ code: string; message: string; basis: RevenueRateBasis; sales: string } | null>(null);
+  // The rate, salespeople and dates the failed read asked for, so a failure for one choice is never shown as another's.
+  const [loadError, setLoadError] = useState<{ code: string; message: string; basis: RevenueRateBasis; sales: string; dates: string } | null>(null);
   const [refresh, setRefresh] = useState<Refresh>({ kind: "idle" });
   const [download, setDownload] = useState<Download>({ kind: "idle" });
   // The run this page started or attached to: it counts toward the 5-minute
@@ -222,7 +233,8 @@ export function GoalsView({ route, nav }: ScreenProps) {
     const seq = ++loadSeq.current;
     const wanted = basisRef.current;
     const wantedSales = salesRef.current;
-    return api<GoalsPage>(goalsPath("/reporting/goals", wanted, wantedSales ? wantedSales.split(",") : []))
+    const wantedDates = datesRef.current;
+    return api<GoalsPage>(goalsPath("/reporting/goals", wanted, wantedSales ? wantedSales.split(",") : [], wantedDates))
       .then((data) => {
         if (seq !== loadSeq.current) return data;
         setPage(data);
@@ -233,7 +245,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
       .catch((err: Error) => {
         if (seq !== loadSeq.current) return null;
         setStatus((prev) => (prev === "ready" ? prev : "failed"));
-        setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message, basis: wanted, sales: wantedSales });
+        setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message, basis: wanted, sales: wantedSales, dates: wantedDates });
         return null;
       });
   }, []);
@@ -268,13 +280,13 @@ export function GoalsView({ route, nav }: ScreenProps) {
     return () => watcher.current?.stop();
   }, [load, follow]);
 
-  // A new rate or salespeople (the switches, or Back and Forward) read the page model again; the first render's read is above.
-  const loadedChoice = useRef(`${basis}|${salesKey}`);
+  // A new rate, salespeople or dates (the switches, or Back and Forward) read the page model again; the first render's read is above.
+  const loadedChoice = useRef(`${basis}|${salesKey}|${datesValue}`);
   useEffect(() => {
-    if (loadedChoice.current === `${basis}|${salesKey}`) return;
-    loadedChoice.current = `${basis}|${salesKey}`;
+    if (loadedChoice.current === `${basis}|${salesKey}|${datesValue}`) return;
+    loadedChoice.current = `${basis}|${salesKey}|${datesValue}`;
     void load();
-  }, [basis, salesKey, load]);
+  }, [basis, salesKey, datesValue, load]);
 
   const retry = () => {
     setStatus((prev) => (prev === "failed" ? "loading" : prev));
@@ -308,13 +320,18 @@ export function GoalsView({ route, nav }: ScreenProps) {
     }
   }
 
-  /** The workbook at the rate, and for the salespeople, the figures on screen are at (not ones still loading). */
-  async function exportWorkbook(today: string, shown: RevenueRateBasis, shownSales: readonly string[]) {
+  /** The workbook at the rate, and for the salespeople and days, the figures on screen are at (not ones still loading). */
+  async function exportWorkbook(
+    today: string,
+    shown: RevenueRateBasis,
+    shownSales: readonly string[],
+    shownRange: { asked: string; from: string; to: string } | null,
+  ) {
     setEntryNotice("");
     setDownload({ kind: "working" });
     try {
-      const { blob, fileName } = await apiDownload(goalsPath("/reporting/goals/export", shown, shownSales));
-      const name = fileName ?? workbookFileName(today, shown, shownSales);
+      const { blob, fileName } = await apiDownload(goalsPath("/reporting/goals/export", shown, shownSales, shownRange?.asked));
+      const name = fileName ?? workbookFileName(today, shown, shownSales, shownRange);
       saveFile(blob, name);
       setDownload({ kind: "done", fileName: name });
     } catch (err) {
@@ -343,23 +360,34 @@ export function GoalsView({ route, nav }: ScreenProps) {
   const shownSales = salespeople?.applied ? salespeople.selected : [];
   const salesWaiting = !!ready && (salespeople?.selected ?? []).join(",") !== salesKey;
   const salesFailed = salesWaiting && loadError?.sales === salesKey;
+  // The days the figures on screen cover, and whether the ones asked for are still loading.
+  const range = ready?.range ?? null;
+  const shownRange = range && !range.whole ? range : null;
+  const datesWaiting = !!ready && (range?.asked ?? "") !== datesValue;
+  const datesFailed = datesWaiting && loadError?.dates === datesValue;
   const chooseBasis = (next: RevenueRateBasis) => {
     if (next === basis) return;
     // A new read starts: an earlier failure (at either rate) no longer describes what's on screen.
     setLoadError(null);
-    nav("goals", goalsLocation(next, scope, tab, sales));
+    nav("goals", goalsLocation(next, scope, tab, sales, datesValue));
   };
   const chooseScope = (next: RevenueScope) => {
     if (next === scope) return;
-    nav("goals", goalsLocation(basis, next, tab, sales));
+    nav("goals", goalsLocation(basis, next, tab, sales, datesValue));
   };
   const chooseSales = (next: readonly string[]) => {
     setLoadError(null);
-    nav("goals", goalsLocation(basis, scope, tab, next));
+    nav("goals", goalsLocation(basis, scope, tab, next, datesValue));
+  };
+  const chooseDates = (next: DatesChoice) => {
+    // Compare with the URL as written: a malformed `dates` reads as the whole month, and picking This month must still clear it.
+    if (datesKey(next) === datesValue && (route.dates ?? "") === datesValue) return;
+    setLoadError(null);
+    nav("goals", goalsLocation(basis, scope, tab, sales, datesKey(next)));
   };
   const chooseTab = (next: GoalsTab) => {
     if (next === tab) return;
-    nav("goals", goalsLocation(basis, scope, next, sales));
+    nav("goals", goalsLocation(basis, scope, next, sales, datesValue));
   };
   // After a tab change, bring the section out from under the pinned cards.
   // The first render is the page the link opened, so it stays where it is.
@@ -417,7 +445,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
               <button
                 type="button"
                 className={canRefresh ? "btn ghost" : "btn"}
-                onClick={() => void exportWorkbook(ready.model.today, shownBasis, shownSales)}
+                onClick={() => void exportWorkbook(ready.model.today, shownBasis, shownSales, shownRange)}
                 disabled={download.kind === "working"}
                 aria-describedby="goals-refresh-status"
               >
@@ -509,7 +537,19 @@ export function GoalsView({ route, nav }: ScreenProps) {
         {ready && salespeople ? (
           <SalespeoplePicker view={salespeople} picked={sales} waiting={salesWaiting} failed={salesFailed} onPick={chooseSales} onRetry={retryRate} />
         ) : null}
+        {ready ? (
+          <DatesPicker
+            today={ready.model.today}
+            asked={datesChoice}
+            stray={(route.dates ?? "") !== datesValue}
+            waiting={datesWaiting}
+            failed={datesFailed}
+            onPick={chooseDates}
+            onRetry={retryRate}
+          />
+        ) : null}
         {ready && salespeople ? <SalespeopleNote view={salespeople} /> : null}
+        {ready && range ? <DatesNote range={range} month={ready.model.month.label} /> : null}
         {ready ? <p className="gp-takeaway">{ready.model.takeaway}</p> : null}
         <p id="goals-refresh-status" className="gp-status" role="status">
           {line ||
@@ -618,6 +658,8 @@ function Body({
   const ready = (render: (p: ReadyPage) => ReactNode) => (page ? render(page) : null);
   const behind = page && (page.model.behind.production || page.model.behind.sage);
   const failedAttempt = page?.latestAttempt?.status === "failed" ? page.latestAttempt : null;
+  // Some days of the month (TASK-4391): the goals card heading names them.
+  const partial = !!page?.range && !page.range.whole;
 
   return (
     <>
@@ -642,7 +684,7 @@ function Body({
 
       <div className="gp-sticky">
         <div className="gp-sticky-kpis" tabIndex={0} role="region" aria-label="Goal summary">
-          <Section id="goals" title="This month’s goals" state={state} onRetry={onRetry} resetKey={page} size="lg" bare>
+          <Section id="goals" title={partial && page ? datesTitle(page.range!) : "This month’s goals"} state={state} onRetry={onRetry} resetKey={page} size="lg" bare>
             {ready((p) => (
               <GoalCards page={p} scope={scope} onBreakdown={tab === "breakdown" ? undefined : () => onTab("breakdown")} />
             ))}
@@ -685,13 +727,15 @@ function ReportPanel({
   ready: (render: (p: ReadyPage) => ReactNode) => ReactNode;
   scope: RevenueScope;
 }) {
+  // Some days of the month (TASK-4391): the sections say so, and the monthly comparisons stay out.
+  const partial = !!page?.range && !page.range.whole;
   switch (tab) {
     case "breakdown":
       return (
         <Section
           id="breakdown"
           title="How the Revenue headline adds up"
-          note="The Revenue card taken apart, to the cent. It follows the Customers switch, the salespeople and the rate."
+          note="The Revenue card taken apart, to the cent. It follows the Customers switch, the salespeople, the dates and the rate."
           source={src("revenue")}
           state={state}
           onRetry={onRetry}
@@ -707,7 +751,7 @@ function ReportPanel({
         <Section
           id="classes"
           title="Revenue by customer class"
-          note="The Revenue card’s month split by each customer’s class, from Vince’s 5 Oct list."
+          note={`The Revenue card’s ${partial ? "dates" : "month"} split by each customer’s class, from Vince’s 5 Oct list.`}
           source={src("classes")}
           state={state}
           onRetry={onRetry}
@@ -741,7 +785,9 @@ function ReportPanel({
                   <figcaption>
                     {p.salespeople?.applied
                       ? `Revenue for the customers of ${p.salespeople.label} (CAD)`
-                      : `Revenue against the ${dollars(p.settings.revenueTargetCadCents)} target (CAD)`}
+                      : partial
+                        ? "Revenue to date in these dates (CAD)"
+                        : `Revenue against the ${dollars(p.settings.revenueTargetCadCents)} target (CAD)`}
                   </figcaption>
                   <DailyRevenueChart page={p} />
                 </figure>
@@ -780,7 +826,11 @@ function ReportPanel({
         <Section
           id="sizes"
           title="Batches completed by size"
-          note="Completed this month (FileMaker), with the pace per 20 working days. The chart compares the last three full months with this month’s pace."
+          note={
+            partial
+              ? "Completed in these dates (FileMaker). The monthly comparison is for whole months."
+              : "Completed this month (FileMaker), with the pace per 20 working days. The chart compares the last three full months with this month’s pace."
+          }
           source={src("sizes")}
           state={state}
           onRetry={onRetry}
@@ -789,8 +839,8 @@ function ReportPanel({
         >
           {ready((p) => (
             <>
-              <CompletedTiles tiles={p.model.sizes.completed} />
-              <SizeHistoryChart page={p} />
+              <CompletedTiles tiles={p.model.sizes.completed} pace={!partial} />
+              {partial ? null : <SizeHistoryChart page={p} />}
             </>
           ))}
         </Section>
@@ -808,7 +858,7 @@ function ReportPanel({
         <Section
           id="batches"
           title="Batch list"
-          note="Every batch this month. Select a column heading to sort."
+          note={`Every batch ${partial ? "in these dates" : "this month"}. Select a column heading to sort.`}
           source={src("batches")}
           state={state}
           onRetry={onRetry}
@@ -824,8 +874,8 @@ function ReportPanel({
       return (
         <Section
           id="shipments"
-          title="Shipments this month"
-          note="Every Sage invoice shipped this month, and the shipments entered by hand that count. The totals follow the search and filters."
+          title={partial ? "Shipments in these dates" : "Shipments this month"}
+          note={`Every Sage invoice shipped ${partial ? "in these dates" : "this month"}, and the shipments entered by hand that count. The totals follow the search and filters.`}
           source={src("shipments")}
           state={state}
           onRetry={onRetry}
@@ -842,7 +892,7 @@ function ReportPanel({
         <Section
           id="customers"
           title="Revenue by customer"
-          note={"Potential revenue from production for open orders, and this month's invoiced revenue, by customer and week (weeks start Monday). Amounts in CAD at the page's rate." /* pragma: allowlist secret */}
+          note={`Potential revenue from production for open orders, and ${partial ? "the invoiced revenue in these dates" : "this month's invoiced revenue"}, by customer and week (weeks start Monday). Amounts in CAD at the page's rate.` /* pragma: allowlist secret */}
           source={src("customers")}
           state={state}
           onRetry={onRetry}

@@ -6,7 +6,7 @@ import { Eye, EyeOff, Hand } from "lucide-react";
 
 import { ACTORS, PRIORITY, STAGES, STAGE_IDX, hasHumanAccountableOwner, inputRequired } from "@/lib/mc-data";
 import type { PriorityKey, Task } from "@/lib/mc-data";
-import { isStewardBlocked, needsVince, uatBlockCauses } from "@/lib/tasks/uat-labels";
+import { isStaleClosed, isStewardBlocked, needsVince, uatBlockCauses } from "@/lib/tasks/uat-labels";
 
 import { Assignee } from "./atoms";
 import { cappedRows, isDoneStage, isOutstanding, stageChipTone } from "./project-overview.helpers";
@@ -36,7 +36,9 @@ export function TaskTable({
   const visible = showAll ? rows : cappedRows(tasks, shownClosed, cap);
   const hidden = rows.length - visible.length;
   const closedDone = closed?.filter(isDoneStage).length ?? 0;
-  const closedCancelled = (closed?.length ?? 0) - closedDone;
+  // Closed as STALE (TASK-4200) is neither merged work nor cancelled.
+  const closedStale = closed?.filter(isStaleClosed).length ?? 0;
+  const closedCancelled = (closed?.length ?? 0) - closedDone - closedStale;
 
   return (
     <div className="pv-tt">
@@ -66,6 +68,7 @@ export function TaskTable({
         <button type="button" className="pv-tfoot" onClick={() => setShowClosed((open) => !open)}>
           {showClosed ? <EyeOff size={12} aria-hidden="true" /> : <Eye size={12} aria-hidden="true" />}
           {showClosed ? "Hide" : "Show"} {closed.length} closed · {closedDone} merged · {closedCancelled} cancelled
+          {closedStale > 0 && ` · ${closedStale} STALE`}
         </button>
       )}
     </div>

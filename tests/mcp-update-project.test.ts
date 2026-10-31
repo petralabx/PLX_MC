@@ -240,6 +240,19 @@ describe("actionListProjects", () => {
     expect((await actionListProjects(steward)).projects[0]).toMatchObject({ openTaskCount: 0, doneTaskCount: 0 });
   });
 
+  // TASK-4200: a STALE close is closed and unconfirmed: neither open nor done.
+  it("counts a STALE-closed UAT ticket task in neither openTaskCount nor doneTaskCount", async () => {
+    const snap = await mocks.snapshot();
+    const uat = ["kind:code", "uat:cmfb7q2xk0001"];
+    snap.tasks.push(
+      { id: "T8", bucket: "BKT-1", stage: "merged", labels: [...uat, "uat:stale"] },
+      { id: "T9", bucket: "BKT-2", stage: "merged", labels: uat },
+      { id: "T10", bucket: "BKT-2", stage: "verified", labels: [...uat, "uat:stale"] }
+    );
+    // T9 still awaits its re-test (open); T10 is a late PASS (done).
+    expect((await actionListProjects(steward)).projects[0]).toMatchObject({ openTaskCount: 2, doneTaskCount: 3 });
+  });
+
   it("returns closed projects for status=closed, and both for all", async () => {
     const closed = await actionListProjects(steward, { status: "closed" });
     expect(closed.projects).toMatchObject([

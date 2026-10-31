@@ -124,6 +124,20 @@ describe("BucketDetail strip and tasks", () => {
     expect(html).toMatch(/1 in\s+flight · <span class="warn">1 blocked<\/span>/);
     expect(html).toContain("Blocked · quota");
   });
+
+  // TASK-4200: a STALE close (merged plus uat:stale) is closed, never done.
+  it("counts a STALE close as unconfirmed in the subline and in its own work-bar segment", () => {
+    const bucket = addBucket({ name: "STALE close" });
+    const owner = { bucket: bucket.id, accountableOwner: "vince" };
+    addTask({ ...owner, title: "Verified fix", stage: "verified", labels: ["kind:code", "uat:cmfb7q2xk0001"] });
+    addTask({ ...owner, title: "STALE close", stage: "merged", labels: ["kind:code", "uat:cmfb7q2xk0002", "uat:stale"] });
+    addTask({ ...owner, title: "In flight", stage: "progress" });
+    addTask({ ...owner, title: "Not started", stage: "backlog" });
+    const html = render(bucket.id);
+    expect(html).toMatch(/4 tasks · 1 done · 0 cancelled · 1 unconfirmed · 1 in\s+flight · <span class="">0 blocked<\/span>/);
+    const segments = [...html.matchAll(/class="seg (\w+)" style="flex-grow:(\d+)"/g)].map(([, key, n]) => [key, Number(n)]);
+    expect(segments).toEqual([["done", 1], ["unconfirmed", 1], ["doing", 1], ["rest", 1]]);
+  });
 });
 
 describe("Owner picker at the phone tier", () => {

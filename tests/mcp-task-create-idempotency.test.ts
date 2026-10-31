@@ -459,6 +459,20 @@ describe("POST /api/cursor/tasks with an idempotency key", () => {
     expect(h.tasks).toHaveLength(1);
   });
 
+  // TASK-4200: no door creates a task with uat:stale; the MCP path refuses it
+  // before the claim, so the key stays usable.
+  it("refuses a uat:stale label with 403 before the claim, so the key is not used up", async () => {
+    const labels = ["kind:code", "uat:cmfb7q2xk0001"];
+    const refused = await restCreate({ ...TASK, labels: [...labels, "uat:stale"], idempotencyKey: "k-stale" });
+    expect(refused.status).toBe(403);
+    expect(refused.json.error?.code).toBe("forbidden");
+    expect(h.rows).toEqual([]);
+    expect(h.createInputs).toEqual([]);
+    const allowed = await restCreate({ ...TASK, labels, idempotencyKey: "k-stale" });
+    expect(allowed.status).toBe(200);
+    expect(h.tasks).toHaveLength(1);
+  });
+
   const malformed: unknown[] = ["", "a:b", "has space", "x".repeat(129), 42, null];
   for (const idempotencyKey of malformed) {
     it(`gives 400 for idempotencyKey ${JSON.stringify(idempotencyKey)?.slice(0, 20)}`, async () => {

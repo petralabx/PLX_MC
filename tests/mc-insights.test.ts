@@ -1,5 +1,8 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { FilterBar } from "@/components/mc/filter-bar";
 import { BUCKETS, PRIORITY, STAGES, TASKS, bandOf } from "@/lib/mc-data";
 import type { PriorityKey, StageKey, Task } from "@/lib/mc-data";
 import {
@@ -205,11 +208,46 @@ describe("click-to-filter contract — every slice.filter selects exactly its ta
     // status (band) → the band's stages (no synthetic band facet).
     const doingStages = STAGES.filter((s) => s.band === "doing").map((s) => s.key);
     expect(filterForSegment("status", "doing")).toEqual({ stage: doingStages as StageKey[] });
+    // The donut leaves STALE closes out (TASK-4200), so every slice that could
+    // list one leaves it out too: done, priority and assignee.
+    expect(filterForSegment("status", "done")).toEqual({ stage: ["merged", "verified"] as StageKey[], staleClosed: false });
     // priority → [key].
-    expect(filterForSegment("priority", "high")).toEqual({ priority: ["high" as PriorityKey] });
+    expect(filterForSegment("priority", "high")).toEqual({ priority: ["high" as PriorityKey], staleClosed: false });
     // assignee → [key], including the unassigned sentinel.
-    expect(filterForSegment("assignee", "greg")).toEqual({ assignee: ["greg"] });
-    expect(filterForSegment("assignee", UNASSIGNED_KEY)).toEqual({ assignee: [UNASSIGNED_KEY] });
+    expect(filterForSegment("assignee", "greg")).toEqual({ assignee: ["greg"], staleClosed: false });
+    expect(filterForSegment("assignee", UNASSIGNED_KEY)).toEqual({ assignee: [UNASSIGNED_KEY], staleClosed: false });
+  });
+
+  // S1-09: with a STALE close in the set, the Done slice showed fewer tasks
+  // than its board drill-down listed.
+  describe("with STALE closes in the set (TASK-4200)", () => {
+    const staleClose = (over: Partial<Task> = {}) =>
+      task({ stage: "merged", priority: "high", assignee: "greg", labels: ["kind:code", "uat:cmfb7q2xk0001", "uat:stale"], ...over });
+
+    it("every status, priority and assignee slice still selects exactly its tasks", () => {
+      const tasks = [...mixedTasks(), staleClose(), staleClose({ priority: "urgent", assignee: null })];
+      const m = buildInsights(tasks);
+      expect(m.total).toBe(tasks.length - 2);
+      for (const slice of [...m.byStatus, ...m.byPriority, ...m.byAssignee]) {
+        expect({ key: slice.key, n: applyFilters(tasks, slice.filter!).length }).toEqual({ key: slice.key, n: slice.value });
+      }
+    });
+
+    it("staleClosed false hides STALE closes, true keeps only them, and unset ignores them", () => {
+      const stale = staleClose();
+      const tasks = [...mixedTasks(), stale];
+      expect(applyFilters(tasks, { staleClosed: false })).toHaveLength(tasks.length - 1);
+      expect(applyFilters(tasks, { staleClosed: true })).toEqual([stale]);
+      expect(applyFilters(tasks, {})).toHaveLength(tasks.length);
+    });
+
+    it("the filter bar names the hidden STALE closes in a chip a person can remove", () => {
+      const html = renderToStaticMarkup(createElement(FilterBar, {
+        filters: { stage: ["merged", "verified"], staleClosed: false }, onChange: () => {}, resultCount: 2,
+        labels: [], assignees: [], hasUnassigned: false,
+      }));
+      expect(html).toContain("STALE closes hidden");
+    });
   });
 
   it("the Unassigned assignee slice round-trips through applyFilters", () => {

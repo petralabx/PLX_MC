@@ -141,6 +141,22 @@ describe("uatGroup and uatHolder", () => {
     for (const t of tasks) expect({ id: t.id, human: uatGroup(t) === "human" }).toEqual({ id: t.id, human: needsHuman(t) });
   });
 
+  // The portal says STALE before closeStale lands: a merged task the bucket
+  // table counts as Needs a human stays there, and only the others read STALE.
+  it("agrees with the bucket table's Needs a human on a merged task whose ticket the portal closed as STALE", () => {
+    const stale = ticket(FB_A, { status: "STALE", step: "STALE, no re-test result" });
+    const tasks = [
+      ticketTask(FB_A, { stage: "merged", accountableOwner: null }),
+      ticketTask(FB_A, { stage: "merged", blocked: true }),
+      ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "needs-vince"] }),
+      ticketTask(FB_A, { stage: "merged" }),
+    ];
+    for (const t of tasks) {
+      const group = uatGroup(t, stale);
+      expect({ id: t.id, group }).toEqual({ id: t.id, group: needsHuman(t) ? "human" : "stale" });
+    }
+  });
+
   it("names the holder", () => {
     const progress = ticketTask(FB_A, { stage: "progress" });
     expect(uatHolder(progress, "flight", lease(), nowMs)).toBe("Claude Code");
@@ -151,6 +167,28 @@ describe("uatGroup and uatHolder", () => {
     expect(uatHolder(ticketTask(FB_A, { labels: ["kind:code", `uat:${FB_A}`, "needs-vince"] }), "human", null, nowMs)).toBe("Vince");
     expect(uatHolder(progress, "submitter", null, nowMs)).toBe("Submitter");
     expect(uatHolder(progress, "verified", null, nowMs)).toBe("Closed");
+  });
+
+  // TASK-4200: a STALE close shows in its own closed group, never In flight.
+  // The task carries uat:stale (closed and unconfirmed in rollups), or it is
+  // merged and the portal already says STALE while closeStale is on its way
+  // (rollups still count it in progress until the label lands).
+  it("puts a STALE close in its own closed group, never In flight or Waiting on submitter", () => {
+    const stale = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale", "uat:blocked"] });
+    const unlabelled = ticketTask(FB_A, { stage: "merged" });
+    expect(uatGroup(stale)).toBe("stale");
+    expect(uatGroup(stale, ticket(FB_A, { status: "READY_FOR_RETEST" }))).toBe("stale");
+    expect(uatGroup(unlabelled, ticket(FB_A, { status: "STALE", step: "STALE, no re-test result" }))).toBe("stale");
+    expect(uatGroup(unlabelled, ticket(FB_A, { status: "IN_PROGRESS", step: "Deploying" }))).toBe("flight");
+    // Without the label or a STALE ticket, a merged task still waits on the submitter.
+    expect(uatGroup(unlabelled)).toBe("submitter");
+    // A task that never merged stays open in Mission Control; the drift check asks a person to cancel it.
+    expect(uatGroup(ticketTask(FB_A, { stage: "progress" }), ticket(FB_A, { status: "STALE" }))).toBe("flight");
+    // A late PASS verifies it; a later cancel cancels it.
+    expect(uatGroup({ ...stale, stage: "verified" })).toBe("verified");
+    expect(uatGroup({ ...stale, stage: "cancelled" })).toBe("cancelled");
+    for (const t of [stale, unlabelled]) expect(uatHolder(t, "stale", lease(), nowMs)).toBe("Closed");
+    expect(needsHuman(stale)).toBe(false);
   });
 });
 
@@ -186,10 +224,86 @@ describe("UatTicketsPanel", () => {
     const held = ticketTask(FB_B, { labels: ["kind:code", `uat:${FB_B}`, "uat:hold"] });
     const rows = uatRows([verified, held, blocked], null);
     expect(rows.map((r) => r.task.id)).toEqual([blocked.id, held.id, verified.id]);
-    expect(uatFilterCounts(rows)).toEqual({ all: 3, human: 1, flight: 0, submitter: 1, verified: 1 });
+    expect(uatFilterCounts(rows)).toEqual({ all: 3, human: 1, flight: 0, submitter: 1, stale: 0, verified: 1 });
     const html = renderPanel([verified, held, blocked], report());
-    for (const text of ["uat:blocked · quota", "uat:hold · question open", "Needs a human · 1", "Waiting on submitter · 1", "Verified · 1"]) {
+    // The verified filter reads PASS: UAT results are never "Verified" (fleet rule).
+    for (const text of ["uat:blocked · quota", "uat:hold · question open", "Needs a human · 1", "Waiting on submitter · 1", "PASS · 1", "STALE · 0"]) {
       expect(html).toContain(text);
+    }
+    expect(html).not.toContain("Verified · ");
+  });
+
+  it("lists a STALE close after the submitter's rows and before PASS, with its own filter and note", () => {
+    const stale = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale"] });
+    const waiting = ticketTask(FB_B, { stage: "merged" });
+    const verified = ticketTask(FB_B, { stage: "verified" });
+    const cancelled = ticketTask(FB_B, { stage: "cancelled" });
+    const rows = uatRows([cancelled, verified, stale, waiting], null);
+    expect(rows.map((r) => r.group)).toEqual(["submitter", "stale", "verified", "cancelled"]);
+    expect(uatFilterCounts(rows)).toEqual({ all: 4, human: 0, flight: 0, submitter: 1, stale: 1, verified: 1 });
+    const html = renderPanel([cancelled, verified, stale, waiting], report({ facts: { [stale.id]: { createdAt: at(30), lease: null } } }));
+    for (const text of ["STALE · 1", "PASS · 1", "uat:stale · re-test never answered", 'class="uat-row g-stale"']) expect(html).toContain(text);
+    // A closed row shows no age.
+    expect(html).not.toContain("1 day");
+  });
+
+  // One row's markup, for the chip tone and the note under it.
+  const rowOf = (html: string, id: string) => html.split('<div class="uat-row ').find((seg) => seg.includes(`>${id}</button>`)) ?? "";
+  const staleOf = (id: string) => ticket(id, { status: "STALE", step: "STALE, no re-test result", expectsTask: false });
+
+  // S1-10: the portal already says STALE, and closeStale has not landed yet.
+  it("marks a STALE row whose label has not landed: muted chip and a pending note, held or not", () => {
+    const plain = ticketTask(FB_A, { stage: "merged" });
+    const held = ticketTask(FB_B, { stage: "merged", labels: ["kind:code", `uat:${FB_B}`, "uat:hold"] });
+    const html = renderPanel([plain, held], report({ portal: ok([staleOf(FB_A), staleOf(FB_B)]) }));
+    for (const t of [plain, held]) {
+      const seg = rowOf(html, t.id);
+      expect(seg).toContain("g-stale");
+      expect(seg).toContain("pv-chip muted");
+      expect(seg).toContain("STALE in the portal · closeStale pending");
+      expect(seg).not.toContain("question open");
+    }
+  });
+
+  // S1-11: the portal's hold on a STALE ticket's open task is not a question.
+  it("names the hold on a STALE ticket's open task, and keeps question open for a real question", () => {
+    const heldStale = ticketTask(FB_A, { stage: "review", labels: ["kind:code", `uat:${FB_A}`, "uat:hold"] });
+    const heldQuestion = ticketTask(FB_B, { stage: "review", labels: ["kind:code", `uat:${FB_B}`, "uat:hold"] });
+    const r = report({ portal: ok([staleOf(FB_A), ticket(FB_B, { status: "IN_PROGRESS", step: "Question open" })]) });
+    const html = renderPanel([heldStale, heldQuestion], r);
+    expect(rowOf(html, heldStale.id)).toContain("uat:hold · ticket closed as STALE, late result possible");
+    expect(rowOf(html, heldQuestion.id)).toContain("uat:hold · question open");
+    // Deliberate: only the submitter can move a STALE ticket during the late window, so it waits on them.
+    const group = uatGroup(heldStale, staleOf(FB_A));
+    expect(group).toBe("submitter");
+    expect(uatHolder(heldStale, group, null, nowMs)).toBe("Submitter");
+  });
+
+  // Before closeStale lands, a merged task the bucket table counts as Needs a
+  // human shows its human reason and holder, never the STALE-pending note.
+  it("shows a Needs a human row on a STALE ticket with its reason and holder", () => {
+    const vince = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "needs-vince"] });
+    const blocked = ticketTask(FB_B, { stage: "merged", labels: ["kind:code", `uat:${FB_B}`, "uat:blocked", "uat:cause:quota"] });
+    const html = renderPanel([vince, blocked], report({ portal: ok([staleOf(FB_A), staleOf(FB_B)]) }));
+    // needs-vince names Vince; a Steward block names the accountable owner.
+    for (const [t, note, holder] of [[vince, "needs-vince", "Vince"], [blocked, "uat:blocked · quota", "Vince Alton"]] as const) {
+      const seg = rowOf(html, t.id);
+      expect(seg).toContain("g-human");
+      expect(seg).toContain(note);
+      expect(seg).toContain(`>${holder}</span>`);
+      expect(seg).not.toContain("closeStale pending");
+    }
+    expect(html).toContain("Needs a human · 2");
+    expect(html).toContain("STALE · 0");
+  });
+
+  // S1-02: the label stays until the portal's verify or cancel lands, but the re-test was answered.
+  it("says a late result came in once the ticket left STALE", () => {
+    const stale = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale"] });
+    for (const status of ["RESOLVED", "REOPENED"] as const) {
+      const html = renderPanel([stale], report({ portal: ok([ticket(FB_A, { status, expectsTask: false })]) }));
+      expect(rowOf(html, stale.id)).toContain("uat:stale · late result in the portal");
+      expect(html).not.toContain("re-test never answered");
     }
   });
 
@@ -318,6 +432,82 @@ describe("findUatDrift", () => {
 
   it("runs only the Mission Control cases when the portal read failed", () => {
     expect(drift([ticketTask(FB_A, { stage: "cancelled" })], { status: "error", at: NOW.toISOString(), message: "HTTP 500" })).toEqual([]);
+  });
+
+  // TASK-4200: a ticket that closed as STALE gets its own words, never
+  // "rejected" or "resolved". Only the portal's closeStale closes its task.
+  describe("a ticket that closed as STALE", () => {
+    const staleTicket = (over: Partial<PortalTicket> = {}) =>
+      ticket(FB_A, { status: "STALE", step: "STALE, no re-test result", expectsTask: false, ...over });
+    const words = (findings: UatDriftFinding[]) => JSON.stringify(findings);
+
+    it("asks the portal for the missing uat:stale on a merged task, with no fix in Mission Control", () => {
+      const merged = ticketTask(FB_A, { stage: "merged", prs: [{ repo: "plx-customer-portal", num: 2866, status: "merged", title: "fix" }] });
+      const findings = drift([merged], ok([staleTicket()]));
+      expect(findings).toEqual([{
+        case: "open_task_closed_ticket",
+        feedbackId: FB_A,
+        taskId: merged.id,
+        text: `Ticket ${ticketShortCode(FB_A)} is closed as STALE (no re-test result) in the portal, but ${merged.id} still awaits re-test. Only the portal's closeStale closes it.`,
+        fix: null,
+      }]);
+      expect(words(findings)).not.toMatch(/rejected|resolved/);
+    });
+
+    it("raises nothing once the task carries uat:stale", () => {
+      const stale = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale"] });
+      expect(drift([stale], ok([staleTicket()]))).toEqual([]);
+      expect(drift([], ok([staleTicket()]))).toEqual([]);
+    });
+
+    for (const [stage, name] of [["review", "In Review"], ["backlog", "Backlog"]] as const) {
+      it(`lists a ${stage} task that never merged, with a cancel only a person applies, and the cancel clears it`, () => {
+        const open = ticketTask(FB_A, { stage });
+        const portal = ok([staleTicket()]);
+        const code = ticketShortCode(FB_A);
+        const findings = drift([open], portal);
+        expect(findings).toEqual([{
+          case: "open_task_closed_ticket",
+          feedbackId: FB_A,
+          taskId: open.id,
+          text: `${open.id} is open (${name}), but ticket ${code} is closed as STALE (no re-test result) in the portal.`,
+          fix: { kind: "cancel", taskId: open.id, reason: "obsolete", note: `Portal ticket ${code} is closed as STALE (no re-test result).` },
+        }]);
+        expect(words(findings)).not.toMatch(/rejected|resolved/);
+        expect(drift(applyFix([open], findings[0].fix!), portal)).toEqual([]);
+      });
+    }
+
+    // S1-02: after a late PASS the ticket is RESOLVED; until the portal's
+    // verify lands, the newest attempt is still closed as STALE.
+    it("asks the portal to re-send verify for a STALE close on a resolved ticket, newest attempt only", () => {
+      const older = withAttempt(FB_A, 1, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale"] });
+      const newest = withAttempt(FB_A, 2, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat-attempt:2", "uat:stale"] });
+      const resolved = ok([ticket(FB_A, { status: "RESOLVED", expectsTask: false })]);
+      expect(drift([older, newest], resolved)).toEqual([{
+        case: "open_task_closed_ticket",
+        feedbackId: FB_A,
+        taskId: newest.id,
+        text: `Ticket ${ticketShortCode(FB_A)} is resolved in the portal, but ${newest.id} is still closed as STALE. Only the portal's verify closes it, so re-send it from the portal.`,
+        fix: null,
+      }]);
+      // Once the verify lands, the check is quiet.
+      expect(drift([older, { ...newest, stage: "verified" }], resolved)).toEqual([]);
+    });
+
+    it("raises nothing for a STALE close on a reopened ticket that expects no task", () => {
+      const stale = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale"] });
+      expect(drift([stale], ok([ticket(FB_A, { status: "REOPENED", expectsTask: false })]))).toEqual([]);
+    });
+
+    it("after a late FAIL reopens the ticket, offers the next attempt's task, never a reopen", () => {
+      const stale = withAttempt(FB_A, 1, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale"] });
+      const portal = ok([ticket(FB_A, { status: "REOPENED", step: "Re-opened", attempt: 2 })]);
+      const [finding] = drift([stale], portal);
+      expect(finding).toMatchObject({ case: "final_task_open_ticket", taskId: stale.id });
+      expect(finding.fix).toMatchObject({ kind: "create", feedbackId: FB_A, attempt: 2 });
+      expect(drift(applyFix([stale], finding.fix!), portal)).toEqual([]);
+    });
   });
 });
 

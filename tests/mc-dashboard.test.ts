@@ -6,11 +6,15 @@
 // counted nowhere else; empty sets never produce NaN; and the counts agree with
 // the project overview's own rollup on the same tasks.
 
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { BUCKETS, PROJECTS, TASKS, bandOf } from "@/lib/mc-data";
 import type { Bucket, Project, Task } from "@/lib/mc-data";
 import { DASHBOARD_SCOPES, buildDashboard, inScope, openStageCounts } from "@/lib/mc-data/dashboard";
+import { addBucket, addProject, addTask, resetStore } from "@/lib/mc-data/store";
+import { DashboardView } from "@/components/mc/dashboard";
 import { projectProgress } from "@/components/mc/project-overview.helpers";
 
 let seq = 0;
@@ -153,6 +157,50 @@ describe("UAT ticket tasks (TASK-3697)", () => {
     const counts = openStageCounts(uatModel.remaining);
     expect(counts.find((c) => c.stage === "merged")).toMatchObject({ tasks: 1 });
     expect(counts.reduce((n, c) => n + c.tasks, 0)).toBe(uatModel.remaining.length);
+  });
+});
+
+// TASK-4200: a STALE close (merged plus uat:stale) is closed and unconfirmed.
+describe("STALE closes (TASK-4200)", () => {
+  const labels = ["kind:code", "uat:cmfb7q2xk0001"];
+  const staleTasks = [
+    task({ bucket: b1.id, stage: "merged", labels: [...labels, "uat:stale"] }),
+    task({ bucket: b1.id, stage: "merged", labels }),
+    task({ bucket: b1.id, stage: "verified", labels: [...labels, "uat:stale"] }),
+    task({ bucket: b3.id, stage: "merged", labels: [...labels, "uat:stale"] }),
+  ];
+  const staleModel = buildDashboard(staleTasks, [b1, b3], [open, shut]);
+
+  it("counts it as closed and unconfirmed in bucket, project and scope totals, never done or remaining", () => {
+    const expected = { done: 1, inProgress: 1, unconfirmed: 1, closedTasks: 2, remaining: 1, total: 3 };
+    expect(staleModel.buckets.find((r) => r.bucket.id === b1.id)).toMatchObject(expected);
+    expect(staleModel.projects.find((p) => p.project.id === open.id)).toMatchObject(expected);
+    expect(staleModel.scopes.active).toMatchObject(expected);
+    expect(staleModel.scopes.closed).toMatchObject({ done: 0, unconfirmed: 1, closedTasks: 1, remaining: 0, total: 1, pctDone: 1 });
+    expect(staleModel.scopes.all).toMatchObject({ done: 1, unconfirmed: 2, closedTasks: 3, remaining: 1, total: 4 });
+    for (const row of [...staleModel.buckets, ...staleModel.projects, ...Object.values(staleModel.scopes)]) {
+      expect(row.total).toBe(row.done + row.cancelled + row.unconfirmed + row.remaining);
+    }
+  });
+
+  it("leaves it out of the remaining list and the stage bars", () => {
+    expect(staleModel.remaining.map((r) => r.task.id)).toEqual([staleTasks[1].id]);
+    expect(openStageCounts(staleModel.remaining).find((c) => c.stage === "merged")).toMatchObject({ tasks: 1 });
+  });
+
+  it("names it as unconfirmed on the project, initiative and summary lines of the screen", () => {
+    resetStore();
+    const p = addProject({ name: "STALE rollup" });
+    const owner = { bucket: addBucket({ name: "STALE rollup initiative", project: p.id }).id, accountableOwner: "vince" };
+    addTask({ ...owner, title: "Verified fix", stage: "verified", labels: ["kind:code", "uat:cmfb7q2xk0001"] });
+    addTask({ ...owner, title: "STALE close", stage: "merged", labels: ["kind:code", "uat:cmfb7q2xk0002", "uat:stale"] });
+    addTask({ ...owner, title: "In flight", stage: "progress" });
+    addTask({ ...owner, title: "Not started", stage: "backlog" });
+    const html = renderToStaticMarkup(createElement(DashboardView, { route: { screen: "dashboard" }, nav: () => {} }));
+    resetStore();
+    expect(html).toContain("2 of 4 closed · 1 done · 0 cancelled · 1 unconfirmed · 2 left · 1 initiative");
+    expect(html).toContain("2 of 4 closed · 1 done · 0 cancelled · 1 unconfirmed · 2 left, 1 in progress");
+    expect(html).toMatch(/ of [\d,]+ tasks · [\d,]+ done · [\d,]+ cancelled · 1 unconfirmed</);
   });
 });
 

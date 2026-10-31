@@ -1,7 +1,8 @@
 // Pure rollup math for the Project Overview lens (no store reads — buckets and
 // tasks are INJECTED, the same contract as work-views.helpers). "Done" is the
 // explicit stage band (merged/verified); progress counts cancelled as closed.
-// A merged UAT ticket task stays outstanding until verified (TASK-3697).
+// A merged UAT ticket task stays outstanding until verified (TASK-3697); one
+// closed as STALE (uat:stale) is closed and unconfirmed, never done (TASK-4200).
 
 import {
   STAGES,
@@ -13,13 +14,15 @@ import {
   isOpenInRollup,
 } from "@/lib/mc-data";
 import type { Bucket, Task } from "@/lib/mc-data";
-import { hasHumanBlockLabel } from "@/lib/tasks/uat-labels";
+import { hasHumanBlockLabel, isStaleClosed } from "@/lib/tasks/uat-labels";
 
 export interface InitiativeRollup {
   bucket: Bucket;
   tasks: Task[];
   done: number;
   cancelled: number;
+  /** Closed as STALE (TASK-4200): closed, never done. */
+  unconfirmed: number;
   closedTasks: number;
   remaining: number;
   /** All tasks, including cancelled (TASK-2815). */
@@ -28,7 +31,7 @@ export interface InitiativeRollup {
 }
 
 export function isDoneStage(task: Task): boolean {
-  return STAGES[STAGE_IDX[task.stage]].band === "done";
+  return STAGES[STAGE_IDX[task.stage]].band === "done" && !isStaleClosed(task);
 }
 
 export function isDoingStage(task: Task): boolean {
@@ -40,8 +43,8 @@ export function isDoingStage(task: Task): boolean {
 export function rollupForProject(buckets: Bucket[], tasks: Task[]): InitiativeRollup[] {
   return buckets.map((bucket) => {
     const bucketTasks = tasks.filter((t) => t.bucket === bucket.id);
-    const { done, cancelled, closedTasks, remaining, total, pctDone } = countTaskProgress(bucketTasks);
-    return { bucket, tasks: bucketTasks, done, cancelled, closedTasks, remaining, total, pct: Math.round((pctDone ?? 0) * 100) };
+    const { done, cancelled, unconfirmed, closedTasks, remaining, total, pctDone } = countTaskProgress(bucketTasks);
+    return { bucket, tasks: bucketTasks, done, cancelled, unconfirmed, closedTasks, remaining, total, pct: Math.round((pctDone ?? 0) * 100) };
   });
 }
 
@@ -56,6 +59,8 @@ export function projectProgress(tasks: Task[]) {
 export function stageChipTone(task: Pick<Task, "stage"> & { labels?: readonly string[] }): "muted" | "info" | "acc" | "warn" | "ok" {
   const stage = STAGES[STAGE_IDX[task.stage]];
   if (awaitsRetest(task)) return "acc";
+  // Closed as STALE: nobody confirmed the fix, so never the delivered tone.
+  if (isStaleClosed(task)) return "muted";
   if (stage.band === "done") return "ok";
   if (stage.band === "cancelled") return "muted";
   if (stage.key === "qa") return "warn";

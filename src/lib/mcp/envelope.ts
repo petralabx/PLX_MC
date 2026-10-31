@@ -95,6 +95,8 @@ export interface McpToolErrorBody {
 // neither this map nor NO_HINT_CODES.
 export const ERROR_HINTS: Readonly<Record<string, string>> = {
   agent_required: "Pass agent as <runtime>/<lane> to mc_checkout_task, or send it in the X-MC-Agent header.",
+  already_cancelled: "Leave this UAT ticket task cancelled: a cancelled ticket is never verified and is never closed as STALE.",
+  already_verified: "Leave this UAT ticket task verified: the submitter's PASS already closed it, so closeStale does not apply.",
   ambiguous_checkout_ref: "Pass the full checkoutId from your mc_checkout_task receipt instead of the short checkoutRef.",
   autonomy_approval_required:
     "Raise mc_request_approval with this checkoutId and wait for a person to approve it before you call mc_complete_task again.",

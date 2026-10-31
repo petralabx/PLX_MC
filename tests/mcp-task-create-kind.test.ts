@@ -102,7 +102,10 @@ describe("actionCreateTask kind", () => {
       [{ labels: ["kind:code", "uat:cmfb7q2xk0001"] }, "merged"],
     ];
     for (const [extra, stage] of cases) {
-      await expect(create({ ...extra, stage })).rejects.toMatchObject({ code: "forbidden", status: 403 });
+      // A verified create is refused first by the person-only rule (W02). Merged
+      // still hits the UAT ticket rule. The web door keeps the UAT message.
+      const mcpCode = stage === "verified" ? "verified_needs_person" : "forbidden";
+      await expect(create({ ...extra, stage })).rejects.toMatchObject({ code: mcpCode, status: 403 });
       await expect(createTask({ title: "T", bucket: "BKT-OPS", reporter: "vince@petrasoap.com", ...extra, stage }))
         .rejects.toMatchObject({ code: "forbidden", status: 403, message: expect.stringContaining("UAT ticket task") });
     }
@@ -110,10 +113,10 @@ describe("actionCreateTask kind", () => {
     expect(db.transactions).toBe(0);
   });
 
-  it("still creates a UAT ticket task at a working stage, and any other task at verified", async () => {
+  it("still creates a UAT ticket task at a working stage, and refuses any task born Verified", async () => {
     expect((await create({ labels: ["uat:cmfb7q2xk0001"], kind: "code", stage: "progress" })).task.stage).toBe("progress");
-    expect((await create({ kind: "code", stage: "verified" })).task.stage).toBe("verified");
-    expect(db.tasks).toHaveLength(2);
+    await expect(create({ kind: "code", stage: "verified" })).rejects.toMatchObject({ code: "verified_needs_person", status: 403 });
+    expect(db.tasks).toHaveLength(1);
   });
 });
 

@@ -478,10 +478,11 @@ describe("POST /api/cursor/tasks with an idempotency key", () => {
   it("refuses a UAT ticket task at merged or verified with 403 before the claim, so the key is not used up", async () => {
     const labels = ["kind:code", "uat:cmfb7q2xk0001"];
     for (const ticket of [{ labels }, { labels: ["uat:cmfb7q2xk0001"], kind: "code" }]) {
-      for (const stage of ["merged", "verified"]) {
+      for (const stage of ["merged", "verified"] as const) {
         const refused = await restCreate({ ...TASK, ...ticket, stage, idempotencyKey: "k-landed" });
         expect(refused.status).toBe(403);
-        expect(refused.json.error?.code).toBe("forbidden");
+        // Verified is refused by the person-only rule before the UAT check (W02).
+        expect(refused.json.error?.code).toBe(stage === "verified" ? "verified_needs_person" : "forbidden");
       }
     }
     expect(h.rows).toEqual([]);

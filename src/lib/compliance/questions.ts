@@ -24,6 +24,7 @@ import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-ac
 import { ensureSeeded, patchTask } from "@/lib/sync";
 import { getBuckets, getEntities, getEntity, getProjects, stamp } from "@/lib/sync/repo";
 import { loadMyProjects } from "./my-projects";
+import { isOwner } from "./owner-override";
 import { appendEvent, appendEventTx } from "./repo";
 
 export { normalizeAddressee };
@@ -224,7 +225,9 @@ export async function answerQuestion(
       const task = row.data as unknown as Task;
       const question = (task.questions ?? []).find((x) => x.id === input.questionId);
       if (!question) throw new ApiError("not_found", `unknown question ${input.questionId} on ${input.taskId}`, 404);
-      if (normalizeAddressee(question.addressee) !== input.answeredBy) {
+      // TASK-4308: the owner may answer a question addressed to anyone; logged below.
+      const ownerOverride = normalizeAddressee(question.addressee) !== input.answeredBy && isOwner(input.answeredBy);
+      if (normalizeAddressee(question.addressee) !== input.answeredBy && !ownerOverride) {
         denial.addressee = question.addressee;
         throw new ApiError("not_addressee", "Only the person the question is addressed to can answer it.", 403);
       }
@@ -262,6 +265,19 @@ export async function answerQuestion(
         input.answeredBy,
         { query: q, attribution: { source: "human", actorId: input.answeredBy } }
       );
+      if (ownerOverride) {
+        await appendEventTx(q, {
+          kind: "question.owner_override",
+          actor: input.answeredBy,
+          taskId: input.taskId,
+          payload: {
+            questionId: question.id,
+            reasonCode: "not_addressee",
+            addressee: question.addressee,
+            at: answered.answer!.answeredAt,
+          },
+        });
+      }
       await appendEventTx(q, {
         kind: "question.answered",
         actor: input.answeredBy,

@@ -42,6 +42,7 @@ import {
   waitingOnPeople,
   waitingOnPerson,
   waitingOnViewer,
+  gateBlockedForViewer,
   type KeyInput,
   type KeyState,
 } from "@/components/mc/approvals-inbox.helpers";
@@ -335,6 +336,19 @@ describe("waiting on the viewer (review S3)", () => {
     );
     expect(waitingOnViewer(items, ME).map((i) => i.id)).toEqual(["q1", "g-other"]);
     expect(waitingOnViewer(items, new Set<string>()).map((i) => i.id)).toEqual(["q1", "g-mine", "g-other"]);
+  });
+
+  // TASK-4168 (Vince, 2026-10-31): the owner decides a gate an agent raised in the owner's name.
+  it("keeps the owner's own gate when an agent raised it, and only then", () => {
+    const agentRaised = gate("g-agent", hoursAgo(2), { requestedBy: "vince@petrasoap.com", requestedByPrincipal: "sp_mcp_cursor" });
+    const noPrincipal = gate("g-bare", hoursAgo(3), { requestedBy: "vince@petrasoap.com" });
+    const items = forMeItems([], [gRow("TASK-2", agentRaised), gRow("TASK-3", noPrincipal)]);
+    expect(waitingOnViewer(items, ME, true).map((i) => i.id)).toEqual(["g-agent"]);
+    expect(waitingOnViewer(items, ME, false).map((i) => i.id)).toEqual([]);
+    expect(gateBlockedForViewer(agentRaised, ME, true)).toBe(false);
+    expect(gateBlockedForViewer(agentRaised, ME, false)).toBe(true);
+    expect(gateBlockedForViewer(noPrincipal, ME, true)).toBe(true);
+    expect(gateBlockedForViewer(gate("g-x", hoursAgo(1)), ME, false)).toBe(false);
   });
 });
 

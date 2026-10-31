@@ -188,7 +188,9 @@ export async function decideApprovalGate(
   const violation = separationOfDutiesViolation(gate, input.decidedBy);
   // TASK-4308: the owner may decide a gate raised in their own name (a bot's
   // gate lists the operator email as requester). Logged in the decide transaction.
-  const ownerOverride = violation !== null && isOwner(input.decidedBy);
+  // TASK-4168: only a gate an agent raised on the owner's behalf, which names the
+  // service principal that raised it (Vince, 2026-10-31, q_5f0490c7fe604176).
+  const ownerOverride = violation !== null && isOwner(input.decidedBy) && Boolean(gate.requestedByPrincipal);
   if (violation && !ownerOverride) {
     // The rejected attempt is itself audit evidence; the gate is left untouched.
     await appendEvent({

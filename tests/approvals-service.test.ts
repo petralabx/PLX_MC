@@ -266,8 +266,8 @@ describe("decideApprovalGate", () => {
     expect((h.tasks.get("TASK-700")!.data as Task).approvalGates).toEqual([own]);
   });
 
-  it("owner override (TASK-4308): the owner decides a gate raised in their name, logged", async () => {
-    seedTask("TASK-700", { approvalGates: [pending] });
+  it("owner override (TASK-4308): the owner decides a gate an agent raised in their name, logged", async () => {
+    seedTask("TASK-700", { approvalGates: [{ ...pending, requestedByPrincipal: "sp_mcp_cursor" }] });
     const { gate } = await decideApprovalGate({
       taskId: "TASK-700",
       gateId: "apg_1",
@@ -290,10 +290,17 @@ describe("decideApprovalGate", () => {
     );
   });
 
+  it("owner override (TASK-4168): no override on a gate in the owner's name that no agent raised", async () => {
+    seedTask("TASK-700", { approvalGates: [pending] });
+    await expect(decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "rejected", decidedBy: "vince@petrasoap.com" }))
+      .rejects.toMatchObject({ code: "separation_of_duties", status: 403 });
+    expect([...h.events].some((e) => e.kind === "approval.owner_override")).toBe(false);
+  });
+
   it("owner override follows PLX_MC_OWNER_EMAIL; the default owner then gets no override", async () => {
     process.env.PLX_MC_OWNER_EMAIL = "stephen@petrasoap.com";
     try {
-      seedTask("TASK-700", { approvalGates: [pending] });
+      seedTask("TASK-700", { approvalGates: [{ ...pending, requestedByPrincipal: "sp_mcp_cursor" }] });
       await expect(decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "rejected", decidedBy: "vince@petrasoap.com" }))
         .rejects.toMatchObject({ code: "separation_of_duties", status: 403 });
     } finally {

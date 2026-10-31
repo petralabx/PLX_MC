@@ -69,6 +69,7 @@ import {
   queueEmptyText,
   queueOrder,
   queueView,
+  gateBlockedForViewer,
   raisedByViewer,
   readDrafts,
   rejectNoteError,
@@ -90,7 +91,7 @@ import {
   type TaskGroup,
   type WaitingOn,
 } from "./approvals-inbox.helpers";
-import { viewerTokens } from "./needs-me";
+import { isOwnerViewer, viewerTokens } from "./needs-me";
 import { DraftsToReviewPanel } from "./drafts";
 import {
   ColleagueQuestionSheet,
@@ -659,6 +660,7 @@ export function GateSheet({
   item,
   nav,
   raisedByMe,
+  ownerDecides = false,
   note,
   noteError,
   busy,
@@ -670,8 +672,10 @@ export function GateSheet({
 }: {
   item: Extract<QueueItem, { kind: "gate" }>;
   nav: Nav;
-  /** Separation of duties: the viewer raised this gate. */
+  /** Separation of duties: the viewer raised this gate and may not decide it. */
   raisedByMe: boolean;
+  /** TASK-4168: an agent raised this gate in the owner's name, and the owner is viewing it. */
+  ownerDecides?: boolean;
   note: string;
   noteError: string | null;
   busy: boolean;
@@ -766,7 +770,9 @@ export function GateSheet({
           <p>
             {raisedByMe
               ? "You raised this gate, so another person must decide it."
-              : "Someone other than the requester must decide a gate. You did not raise this one."}
+              : ownerDecides
+                ? "An agent raised this gate in your name. As the owner you may decide it; MC records an owner override."
+                : "Someone other than the requester must decide a gate. You did not raise this one."}
           </p>
         </div>
         <div className="ap-field">
@@ -975,6 +981,8 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const me = viewer ? viewerTokens(viewer) : new Set<string>();
   const directoryEmail = viewer ? (actorById(viewer.id) as Human | undefined)?.email : undefined;
   if (directoryEmail) me.add(directoryEmail.trim().toLowerCase());
+  const viewerIsOwner = viewer ? isOwnerViewer(viewer) : false;
+  const blockedFor = (gate: ApprovalGate) => gateBlockedForViewer(gate, me, viewerIsOwner);
   const lookup = (idOrEmail: string): Human | undefined => {
     const actor = actorById(idOrEmail);
     if (actor?.kind === "human") return actor;
@@ -1020,7 +1028,7 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     ? null
     : scope === "me"
       ? forMeStats(
-          waitingOnViewer(forMe, me),
+          waitingOnViewer(forMe, me, viewerIsOwner),
           decided.status === "ready" ? decidedTodayCount(decided.data, new Date(now)) : null,
           now
         )
@@ -1216,7 +1224,7 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   };
 
   const decideGate = async (item: Extract<QueueItem, { kind: "gate" }>, decision: "approved" | "rejected") => {
-    if (busy || raisedByViewer(item.gate, me)) return;
+    if (busy || blockedFor(item.gate)) return;
     const note = draftOf(item.id).text.trim();
     if (decision === "rejected") {
       const message = rejectNoteError(note);
@@ -1324,7 +1332,7 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   // ── Render ──
   const whoFor = (item: QueueItem) => {
     if (item.kind === "gate") {
-      return { label: raisedByViewer(item.gate, me) ? "Another approver" : "Any approver", person: null, me: false };
+      return { label: blockedFor(item.gate) ? "Another approver" : "Any approver", person: null, me: false };
     }
     if (item.kind === "question" && item.mine) {
       return { label: "On you", person: viewer ? person(viewer.id) : null, me: true };
@@ -1398,7 +1406,8 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
       <GateSheet
         item={cur}
         nav={nav}
-        raisedByMe={raisedByViewer(cur.gate, me)}
+        raisedByMe={blockedFor(cur.gate)}
+        ownerDecides={raisedByViewer(cur.gate, me) && !blockedFor(cur.gate)}
         note={draftOf(cur.id).text}
         noteError={noteError?.id === cur.id ? noteError.message : null}
         busy={busy === cur.id}
@@ -1433,7 +1442,7 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     >
       <ApprovalsHeader
         scope={scope}
-        count={scopeReady ? (scope === "me" ? waitingOnViewer(forMe, me).length : scopedOpen.length) : null}
+        count={scopeReady ? (scope === "me" ? waitingOnViewer(forMe, me, viewerIsOwner).length : scopedOpen.length) : null}
         projectName={projectName}
         stats={stats}
       />

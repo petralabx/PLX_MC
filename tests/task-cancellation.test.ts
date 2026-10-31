@@ -33,6 +33,9 @@ const h = vi.hoisted(() => ({
   // Bucket and project rows a test adds beside BKT-OPEN (move targets).
   buckets: [] as { id: string; data: Record<string, unknown> }[],
   projects: [] as { id: string; data: Record<string, unknown> }[],
+  // Row locks taken so far, and each seed with the transactions and locks open when it ran.
+  locks: 0,
+  seeds: [] as { fn: string; txOpen: number; locks: number }[],
 }));
 const rows = () => h.rows as Map<string, Row>;
 const events = () => h.events as Ev[];
@@ -50,7 +53,12 @@ vi.mock("@/lib/permissions/grants", async (importOriginal) => {
 });
 vi.mock("@/lib/sync/engine", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/sync/engine")>();
-  return { ...real, ensureSeeded: vi.fn(async () => undefined), ensureReposSeeded: vi.fn(real.ensureReposSeeded) };
+  const seen = (fn: string) => h.seeds.push({ fn, txOpen: h.txOpen, locks: h.locks });
+  return {
+    ...real,
+    ensureSeeded: vi.fn(async () => { seen("ensureSeeded"); }),
+    ensureReposSeeded: vi.fn(async () => { seen("ensureReposSeeded"); await real.ensureReposSeeded(); }),
+  };
 });
 // The web PATCH door runs as a signed-in admin. Only that route reads the
 // session; the MCP doors in this file authorize through requireMcpActor.
@@ -79,6 +87,7 @@ vi.mock("@/lib/db", () => {
     }
     if (sql.includes("FROM entities WHERE")) {
       if (sql.includes("FOR UPDATE")) {
+        h.locks += 1;
         const hook = h.onRowLock;
         h.onRowLock = null;
         hook?.();
@@ -143,7 +152,6 @@ import { patchTask } from "@/lib/sync";
 import { getEntity, updateEntity } from "@/lib/sync/repo";
 import { outboundFields, parseFieldValue } from "@/lib/sync/mapping";
 import { inboundCancellation } from "@/lib/sync/cancel-validate";
-import { ensureReposSeeded } from "@/lib/sync/engine";
 import { PATCH } from "@/app/api/tasks/[id]/route";
 
 const identityFor = (operatorEmail: string, principal: "sp_mcp_codex" | "sp_mcp_grok" = "sp_mcp_codex"): McpIdentity => ({
@@ -178,7 +186,7 @@ const cancelled = (id: string, patch: Record<string, unknown>) => actionUpdateTa
 beforeEach(() => {
   vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
   rows().clear(); events().length = 0; h.updates.length = 0; h.onRowLock = null; h.committed = null; h.txOpen = 0; h.poolQueriesInTx.length = 0;
-  h.buckets.length = 0; h.projects.length = 0;
+  h.buckets.length = 0; h.projects.length = 0; h.locks = 0; h.seeds.length = 0;
   seed("TASK-2360"); seed("TASK-2341"); seed("TASK-1544", "qa");
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -380,16 +388,26 @@ describe("web PATCH that reopens a cancelled task (TASK-4292)", () => {
     expect(events().map((e) => e.kind)).toEqual(["task.cancelled"]);
   });
 
-  it("an allowed patch reopens and applies the rest together; the registry is seeded before the transaction", async () => {
+  it("an allowed patch reopens and applies the rest together; the seeds run before the transaction", async () => {
     await cancelled("TASK-1544", { reason: "obsolete" });
-    vi.mocked(ensureReposSeeded).mockClear();
+    h.seeds.length = 0;
+    const locksBefore = h.locks;
     const task = await webPatch("TASK-1544", { stage: "backlog", priority: "high", repos: ["PLX_MC"] });
     expect(task).toMatchObject({ id: "TASK-1544", stage: "backlog", priority: "high", repos: ["PLX_MC"] });
     expect(row("TASK-1544").data).toMatchObject({ stage: "backlog", priority: "high", repos: ["PLX_MC"] });
     expect(row("TASK-1544").cancellation).toBeNull();
     expect(events().map((e) => e.kind)).toEqual(["task.cancelled", "task.reopened"]);
     expect(events()[1]).toMatchObject({ actor: "human:vince@petrasoap.com", payload: { stage: "backlog", reopenedBy: "oid-admin" } });
-    expect(ensureReposSeeded).toHaveBeenCalled();
+    // The rest is written under the session's attribution, as its own patch was.
+    expect(JSON.parse(String(h.updates.at(-1)!.params[6]))).toMatchObject({
+      priority: { source: "human", actorId: "oid-admin" },
+      repos: { source: "human", actorId: "oid-admin" },
+    });
+    // Both seeds run once, on the pool, before the reopen takes its row lock.
+    expect(h.seeds).toEqual([
+      { fn: "ensureSeeded", txOpen: 0, locks: locksBefore },
+      { fn: "ensureReposSeeded", txOpen: 0, locks: locksBefore },
+    ]);
     expect(h.poolQueriesInTx).toEqual([]);
   });
 

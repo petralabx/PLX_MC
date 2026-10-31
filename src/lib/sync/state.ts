@@ -542,8 +542,8 @@ export async function createTask(
   // writes its own row, refuses it the same way.
   const staleViolation = staleLabelCreateViolation(input.labels);
   if (staleViolation) throw new ApiError("forbidden", staleViolation, 403);
-  // Nor starts a UAT ticket task at merged or verified (TASK-4286): only its
-  // PR's merge and the portal's verify move it there.
+  // Nor starts a UAT ticket task at merged or verified (TASK-4286): it starts
+  // before merged, and only the portal's verify moves it to verified.
   const labels = createLabelsWithKind(input.labels, input.kind);
   const stageViolation = uatCreateStageViolation(labels, input.stage);
   if (stageViolation) throw new ApiError("forbidden", stageViolation, 403);

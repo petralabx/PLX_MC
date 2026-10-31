@@ -4,18 +4,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpIdentity } from "@/lib/mcp/auth";
 import { taskCreatePayloadHash } from "@/lib/mcp/task-create-idempotency";
 
-const db = vi.hoisted(() => ({ tasks: [] as { labels: string[] }[] }));
+// Transactions opened: a refused create must open none, or it would burn a TASK id (nextval).
+const db = vi.hoisted(() => ({ tasks: [] as { labels: string[] }[], transactions: 0 }));
 
 vi.mock("@/lib/db", () => ({
-  withTransaction: async <T>(fn: (q: unknown) => Promise<T>) =>
-    fn(async (sql: string, params: unknown[] = []) => {
+  withTransaction: async <T>(fn: (q: unknown) => Promise<T>) => {
+    db.transactions += 1;
+    return fn(async (sql: string, params: unknown[] = []) => {
       if (sql.includes("nextval")) return [{ next_id: 700 + db.tasks.length }];
       if (sql.includes("INSERT INTO entities")) {
         db.tasks.push(JSON.parse(String(params[1])));
         return [{ id: params[0] }];
       }
       return [];
-    }),
+    });
+  },
 }));
 vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
@@ -50,7 +53,7 @@ const identity: McpIdentity = {
 const create = (extra: Record<string, unknown> = {}) =>
   actionCreateTask(identity, { title: "T", bucket: "BKT-OPS", reporter: "x", ...extra });
 
-beforeEach(() => { db.tasks.length = 0; });
+beforeEach(() => { db.tasks.length = 0; db.transactions = 0; });
 
 describe("actionCreateTask kind", () => {
   it("defaults a task with no labels to kind:needs-review and never rejects a missing kind", async () => {
@@ -89,9 +92,10 @@ describe("actionCreateTask kind", () => {
     expect(db.tasks).toEqual([]);
   });
 
-  // TASK-4286: a UAT ticket task starts before merged. Only its PR's merge moves it
-  // to merged, and only the portal's verify to verified, so no create starts there:
-  // not the MCP and REST door (actionCreateTask), nor the web door (createTask).
+  // TASK-4286: a UAT ticket task starts before merged (the portal creates it in
+  // backlog), and only the portal's verify moves it to verified. No create starts
+  // there: not the REST door (POST /api/cursor/tasks, actionCreateTask), nor the web door
+  // (createTask). mc_create_task has no stage field.
   it("refuses a UAT ticket task created at merged or verified with 403 and writes nothing", async () => {
     const cases: [{ labels: string[]; kind?: "code" }, "merged" | "verified"][] = [
       [{ labels: ["uat:cmfb7q2xk0001"], kind: "code" }, "verified"],
@@ -103,6 +107,7 @@ describe("actionCreateTask kind", () => {
         .rejects.toMatchObject({ code: "forbidden", status: 403, message: expect.stringContaining("UAT ticket task") });
     }
     expect(db.tasks).toEqual([]);
+    expect(db.transactions).toBe(0);
   });
 
   it("still creates a UAT ticket task at a working stage, and any other task at verified", async () => {

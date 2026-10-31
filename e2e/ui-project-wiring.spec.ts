@@ -5,8 +5,9 @@ import { gotoProject } from "./helpers/project";
 test.describe("project wiring (G2)", () => {
   test("health, owner, target, description, and initiative navigation are wired", async ({ page }) => {
     // The e2e server runs DB-less, so every project save fails and rolls back. Each save is held
-    // here until the optimistic value has been checked, then let through (TASK-4393): otherwise a
-    // fast failure rolls the field back before the check reads it.
+    // here until the optimistic value has been checked, then let through, and the test waits for
+    // its rollback before the next edit (TASK-4393): otherwise a fast failure rolls the field back
+    // before the check reads it, or a late one lands on top of the next edit.
     let hold = true;
     const held: Array<() => void> = [];
     await page.route("**/api/projects/**", async (route) => {
@@ -18,18 +19,27 @@ test.describe("project wiring (G2)", () => {
       await expect.poll(() => held.length).toBeGreaterThan(0);
       held.splice(0).forEach((go) => go());
     };
+    // Notices stay until dismissed, so each rollback is checked by the count going up by one.
+    const rolledBack = page.locator(".mc .mc-notice .body", { hasText: "rolled back" });
 
     await gotoProject(page);
 
-    await page.getByLabel("Set project health").selectOption("risk");
+    const health = page.getByLabel("Set project health");
+    const priorHealth = await health.inputValue();
+    await health.selectOption("risk");
     await expect(page.locator(".mc .ph .r .pill", { hasText: "At risk" })).toBeVisible();
     await letSavesThrough();
+    await expect(health).toHaveValue(priorHealth);
+    await expect(rolledBack).toHaveCount(1);
 
     const ownerButton = page.locator(".mc .pv-strip .ntm-field-btn");
+    const priorOwner = (await ownerButton.textContent()) ?? "";
     await ownerButton.click();
     await page.locator(".ppick .pi", { hasText: "Stephen Alton" }).click();
     await expect(ownerButton).toContainText("Stephen Alton");
     await letSavesThrough();
+    await expect(ownerButton).toHaveText(priorOwner);
+    await expect(rolledBack).toHaveCount(2);
 
     await ownerButton.click();
     await page.locator(".ppick .pi.clear").click();
@@ -45,13 +55,14 @@ test.describe("project wiring (G2)", () => {
     await letSavesThrough();
     // The failed save rolls back, and says so.
     await expect(target).toHaveValue(prior);
-    await expect(page.locator(".mc .mc-notice .body", { hasText: "rolled back" }).first()).toBeVisible();
+    await expect(rolledBack).toHaveCount(3);
 
     await target.fill("");
     await target.press("Enter");
     await expect(target).toHaveValue("—");
     await letSavesThrough();
     await expect(target).toHaveValue(prior);
+    await expect(rolledBack).toHaveCount(4);
     hold = false;
 
     // Description save: the e2e server runs DB-less, so the PATCH mirror fails
@@ -61,9 +72,7 @@ test.describe("project wiring (G2)", () => {
     await page.locator(".mc .ph .tl-link", { hasText: "Edit" }).click();
     await page.getByLabel("Edit project description").fill("Hardening updated this project description.");
     await page.locator(".mc .ph .desc-edit-acts .btn", { hasText: "Save" }).click();
-    await expect(
-      page.locator(".mc .mc-notice .body", { hasText: "rolled back" }).first()
-    ).toBeVisible();
+    await expect(rolledBack).toHaveCount(5);
     await expect(page.locator(".mc .ph .sub")).toContainText(
       "Umbrella project for all PLX Portal go-live initiatives."
     );

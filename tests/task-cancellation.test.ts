@@ -30,6 +30,9 @@ const h = vi.hoisted(() => ({
   // Transactions open now, and global-pool queries issued while one was open.
   txOpen: 0,
   poolQueriesInTx: [] as string[],
+  // Bucket and project rows a test adds beside BKT-OPEN (move targets).
+  buckets: [] as { id: string; data: Record<string, unknown> }[],
+  projects: [] as { id: string; data: Record<string, unknown> }[],
 }));
 const rows = () => h.rows as Map<string, Row>;
 const events = () => h.events as Ev[];
@@ -45,13 +48,29 @@ vi.mock("@/lib/permissions/grants", async (importOriginal) => {
       id === "sp_mcp_codex" ? [...real.capabilitiesForServicePrincipal(id), "task.cancel", "task.reopen"] : real.capabilitiesForServicePrincipal(id),
   };
 });
-vi.mock("@/lib/sync/engine", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/sync/engine")>()), ensureSeeded: vi.fn(async () => undefined) }));
+vi.mock("@/lib/sync/engine", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/sync/engine")>();
+  return { ...real, ensureSeeded: vi.fn(async () => undefined), ensureReposSeeded: vi.fn(real.ensureReposSeeded) };
+});
+// The web PATCH door runs as a signed-in admin. Only that route reads the
+// session; the MCP doors in this file authorize through requireMcpActor.
+vi.mock("@/lib/routing/mutations/actors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/routing/mutations/actors")>()),
+  requireSessionActor: vi.fn(async () => ({
+    actor: { kind: "human", id: "oid-admin", role: "admin", status: "active" },
+    actorId: "oid-admin", actorKind: "human", auditLabel: "vince@petrasoap.com",
+  })),
+}));
+vi.mock("@/lib/api/route", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/route")>()),
+  route: (handler: unknown) => handler,
+}));
 vi.mock("@/lib/permissions/decision-log", () => ({ recordPermissionDecision: vi.fn(async () => true) }));
 vi.mock("@/lib/compliance/go-live-announcer", () => ({ announceGoLiveEventSafe: vi.fn(async () => undefined) }));
 vi.mock("@/lib/db", () => {
   async function execute(sql: string, params: unknown[] = []) {
-    if (sql.includes("FROM buckets ORDER BY")) return [{ id: "BKT-OPEN", data: { id: "BKT-OPEN", project: null } }];
-    if (sql.includes("FROM projects ORDER BY")) return [];
+    if (sql.includes("FROM buckets ORDER BY")) return [{ id: "BKT-OPEN", data: { id: "BKT-OPEN", project: null } }, ...structuredClone(h.buckets)];
+    if (sql.includes("FROM projects ORDER BY")) return structuredClone(h.projects);
     // The principal holds an active checkout (actionProgress requires one, TASK-2560).
     if (sql.includes("FROM mc_dispatch d")) return [{ id: "dsp_test" }];
     if (sql.startsWith("INSERT INTO repos")) return [];
@@ -124,6 +143,8 @@ import { patchTask } from "@/lib/sync";
 import { getEntity, updateEntity } from "@/lib/sync/repo";
 import { outboundFields, parseFieldValue } from "@/lib/sync/mapping";
 import { inboundCancellation } from "@/lib/sync/cancel-validate";
+import { ensureReposSeeded } from "@/lib/sync/engine";
+import { PATCH } from "@/app/api/tasks/[id]/route";
 
 const identityFor = (operatorEmail: string, principal: "sp_mcp_codex" | "sp_mcp_grok" = "sp_mcp_codex"): McpIdentity => ({
   operatorEmail, runtime: "codex", workerId: "cancel-test", repo: "petralabx/PLX_MC",
@@ -157,6 +178,7 @@ const cancelled = (id: string, patch: Record<string, unknown>) => actionUpdateTa
 beforeEach(() => {
   vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
   rows().clear(); events().length = 0; h.updates.length = 0; h.onRowLock = null; h.committed = null; h.txOpen = 0; h.poolQueriesInTx.length = 0;
+  h.buckets.length = 0; h.projects.length = 0;
   seed("TASK-2360"); seed("TASK-2341"); seed("TASK-1544", "qa");
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -318,6 +340,63 @@ describe("reopen (acceptance 4)", () => {
 
   it("refuses to reopen a task that is not cancelled", async () => {
     await expect(actionUpdateTask(steward, { taskId: "TASK-1544", patch: { reopen: {} } })).rejects.toMatchObject({ code: "not_cancelled" });
+  });
+});
+
+// TASK-4292: a web PATCH that moves a cancelled task to a stage reopens it and
+// applies the rest of the patch in one transaction.
+describe("web PATCH that reopens a cancelled task (TASK-4292)", () => {
+  const webPatch = (id: string, body: Record<string, unknown>) =>
+    (PATCH as unknown as (req: Request, ctx: unknown) => Promise<unknown>)(
+      new Request(`http://localhost/api/tasks/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id }) }
+    );
+  const bucketIn = (bucket: string, project: Record<string, unknown>) => {
+    h.buckets.push({ id: bucket, data: { id: bucket, project: project.id } });
+    h.projects.push({ id: String(project.id), data: project });
+  };
+
+  const refusals: [string, Record<string, unknown>, { code: string; status: number }, () => void][] = [
+    ["a repo off the allow-list", { repos: ["no-such-repo"] }, { code: "repo_not_allowed", status: 422 }, () => undefined],
+    ["an agent executor on a human-only task", { assignee: "atlas" }, { code: "human_only_violation", status: 409 }, () => {
+      row("TASK-1544").data.humanOnly = true;
+    }],
+    ["a move into a project that closes after the route's own check", { bucket: "BKT-CLOSING" }, { code: "project_closed", status: 409 }, () => {
+      bucketIn("BKT-CLOSING", { id: "PRJ-CLOSING", status: "active" });
+      // Another session closes the project while this request waits on the row lock.
+      h.onRowLock = () => { h.projects[0].data.status = "closed"; };
+    }],
+    ["a move of shared evidence into a restricted project", { bucket: "BKT-PRIVATE" }, { code: "shared_evidence", status: 409 }, () => {
+      bucketIn("BKT-PRIVATE", { id: "PRJ-PRIVATE", visibility: "restricted", members: ["vince@petrasoap.com"] });
+      row("TASK-1544").data.evidence = { artifacts: [{ id: "ev-1" }] };
+    }],
+  ];
+  it.each(refusals)("%s: the refusal leaves the task cancelled, with no task.reopened", async (_n, rest, refusal, arrange) => {
+    await cancelled("TASK-1544", { reason: "obsolete" });
+    arrange();
+    const before = structuredClone(row("TASK-1544"));
+    await expect(webPatch("TASK-1544", { stage: "backlog", ...rest })).rejects.toMatchObject(refusal);
+    expect(row("TASK-1544")).toEqual(before);
+    expect(events().map((e) => e.kind)).toEqual(["task.cancelled"]);
+  });
+
+  it("an allowed patch reopens and applies the rest together; the registry is seeded before the transaction", async () => {
+    await cancelled("TASK-1544", { reason: "obsolete" });
+    vi.mocked(ensureReposSeeded).mockClear();
+    const task = await webPatch("TASK-1544", { stage: "backlog", priority: "high", repos: ["PLX_MC"] });
+    expect(task).toMatchObject({ id: "TASK-1544", stage: "backlog", priority: "high", repos: ["PLX_MC"] });
+    expect(row("TASK-1544").data).toMatchObject({ stage: "backlog", priority: "high", repos: ["PLX_MC"] });
+    expect(row("TASK-1544").cancellation).toBeNull();
+    expect(events().map((e) => e.kind)).toEqual(["task.cancelled", "task.reopened"]);
+    expect(events()[1]).toMatchObject({ actor: "human:vince@petrasoap.com", payload: { stage: "backlog", reopenedBy: "oid-admin" } });
+    expect(ensureReposSeeded).toHaveBeenCalled();
+    expect(h.poolQueriesInTx).toEqual([]);
+  });
+
+  it("a bare reopen returns the reopened task", async () => {
+    await cancelled("TASK-1544", { reason: "obsolete" });
+    await expect(webPatch("TASK-1544", { stage: "backlog" })).resolves.toMatchObject({ id: "TASK-1544", stage: "backlog" });
+    expect(row("TASK-1544").cancellation).toBeNull();
   });
 });
 

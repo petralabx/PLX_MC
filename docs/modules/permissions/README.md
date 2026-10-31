@@ -82,7 +82,9 @@ Humans cancel from the task detail (click **Cancelled** in the lifecycle rail,
 pick a reason): `PATCH /api/tasks/{id}` with `{cancel: {reason, replacedBy?,
 note?}}` alone, authorized as `task.cancel` on the Entra session (TASK-2598);
 a refusal appends `task.cancel_denied`. Clicking any other stage on a cancelled
-task reopens it through `task.reopen`.
+task reopens it through `task.reopen`. A reopening `PATCH` commits its other
+fields in the same transaction, so a refusal of any of them leaves the task
+cancelled (TASK-4292).
 
 **Portal principal (agent fleet P8, decision CG-07b):** `sp_mcp_portal`
 (migration 028) does not get the shared agent bundle. Its grant is

@@ -1,20 +1,23 @@
 // Structured tool errors for the stdio PLX-MC client. Mirrors
 // mcpToolErrorResult in src/lib/mcp/envelope.ts (this package runs outside the
 // web app and cannot import its src/): a failed tool returns MCP isError + the
-// cursor REST envelope { error: { code, message } } instead of prose, so agents
-// can branch on the code (e.g. repo_not_allowlisted).
+// cursor REST envelope { error: { code, message, hint? } } instead of prose, so
+// agents can branch on the code (e.g. repo_not_allowlisted). The hint is the
+// server's next step (W04), passed through unchanged.
 
 export class McRestError extends Error {
   /**
    * @param {string} code
    * @param {string} message
    * @param {number} status
+   * @param {string} [hint]
    */
-  constructor(code, message, status) {
+  constructor(code, message, status, hint) {
     super(message);
     this.name = "McRestError";
     this.code = code;
     this.status = status;
+    this.hint = hint;
   }
 }
 
@@ -25,18 +28,21 @@ export class McRestError extends Error {
  */
 export function restErrorFromResponse(status, json) {
   const error =
-    json && typeof json === "object" ? /** @type {{ error?: { code?: unknown, message?: unknown } }} */ (json).error : undefined;
+    json && typeof json === "object"
+      ? /** @type {{ error?: { code?: unknown, message?: unknown, hint?: unknown } }} */ (json).error
+      : undefined;
   const code = typeof error?.code === "string" && error.code ? error.code : `http_${status}`;
   const message =
     typeof error?.message === "string" && error.message ? error.message : `HTTP ${status}`;
-  return new McRestError(code, message, status);
+  const hint = typeof error?.hint === "string" && error.hint ? error.hint : undefined;
+  return new McRestError(code, message, status, hint);
 }
 
 /** @param {unknown} err */
 export function toolErrorResult(err) {
   const error =
     err instanceof McRestError
-      ? { code: err.code, message: err.message }
+      ? { code: err.code, message: err.message, ...(err.hint ? { hint: err.hint } : {}) }
       : { code: "client_error", message: err instanceof Error ? err.message : String(err) };
   return {
     content: [{ type: "text", text: JSON.stringify({ error }, null, 2) }],

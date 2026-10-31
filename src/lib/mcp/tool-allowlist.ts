@@ -12,7 +12,6 @@ import {
   CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID,
   INFRA_MCP_SERVICE_PRINCIPAL_ID,
   POLICY_VERSION,
-  PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID,
   WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
   type McpAgentServicePrincipalId,
@@ -40,13 +39,9 @@ const CIP_AUTO_UNDRAFT_MCP_TOOLS = [
 export const MCP_TOOL_ALLOWLISTS: Readonly<
   Partial<Record<McpAgentServicePrincipalId, readonly string[]>>
 > = {
-  // The portal's COS delegate tool creates tasks (an agent: assignee
-  // included) and searches them. The portal also reads agent reports through
-  // GET /api/cursor/agent-reports (fleet P8b). It mirrors a ticket onto its UAT
-  // ticket task with mc_update_task under task.uat_sync (TASK-3697); that
-  // action refuses it every other patch and task. Nothing else:
-  // mc_update_tasks remains Hub-only, like progress/release.
-  [PORTAL_MCP_SERVICE_PRINCIPAL_ID]: ["mc_create_task", "mc_search_tasks", "mc_list_agent_reports", "mc_update_task"],
+  // sp_mcp_portal has no allowlist since TASK-4313 (Vince 2026-10-31): it
+  // holds sp_mcp_cip's task rights, and each action's capability check refuses
+  // it the rest (buckets, projects, routing, approvals, drafts).
   // The PLX Agent Workbench (tswaterloo/OntologyProject) only reads.
   [WORKBENCH_MCP_SERVICE_PRINCIPAL_ID]: READ_ONLY_MCP_TOOLS,
   // PLX Infra only reads, like the Workbench.

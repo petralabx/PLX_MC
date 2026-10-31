@@ -100,7 +100,8 @@ beforeEach(() => {
 });
 
 describe("mc_link_merged_pr authorization (acceptance 1)", () => {
-  it.each(["sp_mcp_claude_code", "sp_mcp_codex", "sp_mcp_portal"])(
+  // TASK-4313: sp_mcp_portal now holds sp_mcp_cip's task.link_merged_pr.
+  it.each(["sp_mcp_claude_code", "sp_mcp_codex", "sp_mcp_workbench_intake"])(
     "refuses %s with 403 and writes nothing, even with a steward operator email",
     async (principal) => {
       const deps = facts();
@@ -263,6 +264,7 @@ describe("grant", () => {
       "sp_mcp_cursor_team",
       "sp_mcp_ledger",
       "sp_mcp_plx_cos",
+      "sp_mcp_portal",
       "sp_mcp_steward",
     ]);
   });

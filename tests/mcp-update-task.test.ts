@@ -287,7 +287,9 @@ for (const transport of ["MCP", "REST"] as const) {
       if (transport === "REST") expect(out.status).toBe(404);
       expect(h.events).toEqual([]);
     });
-    it("denies restricted projects, missing keys and the portal principal", async () => {
+    // TASK-4313: the portal now holds task.progress like sp_mcp_cip, so it is
+    // no longer refused a plain metadata patch here.
+    it("denies restricted projects and missing keys", async () => {
       seed("TASK-1", { bucket: "BKT-SECRET" });
       const hidden = await update({ title: "Secret" });
       expect(hidden.ok).toBe(false);
@@ -295,7 +297,6 @@ for (const transport of ["MCP", "REST"] as const) {
       seed();
       for (const tool of ["mc_update_task", "mc_update_tasks"]) {
         const args = tool === "mc_update_task" ? { taskId: "TASK-1", patch: { title: "Bad" } } : { items: [{ taskId: "TASK-1", patch: { title: "Bad" } }] };
-        expect((await call(transport, tool, args, "portal-key")).body.error.code).toBe("forbidden");
         expect((await call(transport, tool, args, "bad-key")).status).toBe(401);
       }
       expect(h.events).toEqual([]);
@@ -707,11 +708,13 @@ describe("UAT ticket task mirror (TASK-3697)", () => {
     expect(h.events).toHaveLength(2);
   });
 
-  it("refuses the portal every other patch, and every task that is not a UAT ticket task", async () => {
+  // TASK-4313: the portal holds task.progress like sp_mcp_cip, so title,
+  // description, priority and bucket patches take the normal path. A verify,
+  // cancel or label-only patch from it is still held to the mirror rules. A
+  // reopen needs task.reopen, which neither it nor sp_mcp_cip holds.
+  it("refuses the portal every other mirror patch, and every task that is not a UAT ticket task", async () => {
     uat("TASK-UAT", { stage: "merged" });
-    for (const patch of [
-      { title: "Renamed" }, { description: "x" }, { priority: "low" }, { bucket: "BKT-PROJECT" },
-      { reopen: {} }, { addLabels: ["lane:claude-uat"] }, { addLabels: ["uat:blocked"] }, { addLabels: ["uat:cause:quota"] },
+    for (const patch of [ { addLabels: ["lane:claude-uat"] }, { addLabels: ["uat:blocked"] }, { addLabels: ["uat:cause:quota"] },
       { removeLabels: ["uat:cmfb7q2xk0001"] },
     ]) {
       const result = await portal(patch);

@@ -136,23 +136,16 @@ const COS_MCP_CAPABILITIES: readonly Capability[] = [
   "task.assign",
 ];
 
-// sp_mcp_portal (agent fleet P8) is least privilege (decision CG-07b): it
-// creates tasks, an `agent:` assignee included, and searches them. No
-// checkout, progress, complete, bucket, project, routing or approval action.
-// task.read also admits read tools such as mc_get_context and mc_list_buckets,
-// so src/lib/mcp/tool-allowlist.ts limits the portal to mc_create_task and
-// mc_search_tasks over HTTP MCP and the cursor REST routes. Fleet P8b adds one
-// read, agent_report.read, for GET /api/cursor/agent-reports. Only the portal
-// holds it. TASK-3697 adds task.uat_sync and mc_update_task: the portal mirrors
-// a ticket onto its UAT ticket task (verify, cancel, uat:hold, uat-attempt:<n>).
-// mc_update_task refuses every other patch, and every other task, from it.
-// Only the portal holds task.uat_sync, so no agent can verify a task this way.
-const PORTAL_MCP_CAPABILITIES: readonly Capability[] = [
-  "task.read",
-  "task.create",
-  "agent_report.read",
-  "task.uat_sync",
-];
+// sp_mcp_portal (agent fleet P8): Vince widened it on 2026-10-31 at 9:42 AM ET
+// (TASK-4313) to sp_mcp_cip's task rights: every task.* capability sp_mcp_cip
+// holds, so it checks out, records progress, completes and links tasks like
+// CIP. Not CIP's bucket, project, routing, approval, question, telemetry, sync
+// or draft rights. It keeps its two portal-only grants: agent_report.read
+// (fleet P8b, GET /api/cursor/agent-reports) and task.uat_sync (TASK-3697, the
+// UAT ticket mirror through mc_update_task). Only the portal holds either. It
+// no longer has a tool allowlist in src/lib/mcp/tool-allowlist.ts; each
+// action's capability check limits it.
+// Defined below CLOSE_OUT_MCP_CAPABILITIES (sp_mcp_cip's grant), which it filters.
 
 // sp_mcp_workbench (PLX Agent Workbench, tswaterloo/OntologyProject): read-only,
 // least privilege; owner Tanush 2026-10-13. task.read only, and
@@ -194,6 +187,11 @@ const CURSOR_PARITY_MCP_CAPABILITIES: readonly Capability[] = [
 const CLOSE_OUT_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
   "task.link_merged_pr",
+];
+const PORTAL_MCP_CAPABILITIES: readonly Capability[] = [
+  ...CLOSE_OUT_MCP_CAPABILITIES.filter((capability) => capability.startsWith("task.")),
+  "agent_report.read",
+  "task.uat_sync",
 ];
 // TASK-4015 (migration 057): personal principals for MC humans. Least
 // privilege: exactly the human member role bundle, whatever the person's

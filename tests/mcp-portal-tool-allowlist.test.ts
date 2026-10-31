@@ -9,6 +9,9 @@ import { legacySearchFixture } from "./helpers/task-search-fixture";
 // GET /api/cursor/agent-reports. It is a REST route, not an HTTP MCP tool.
 // TASK-3697 adds mc_update_task, under task.uat_sync: the action refuses the
 // portal every patch but a UAT ticket mirror (tests/mcp-update-task.test.ts).
+// TASK-4313 (Vince 2026-10-31 9:42 AM ET) gives the portal sp_mcp_cip's task
+// rights and removes its allowlist: these tests now check it gets exactly what
+// sp_mcp_cip gets, tool by tool and route by route.
 
 import { readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -145,6 +148,7 @@ const INTAKE = "sp_mcp_workbench_intake";
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
   sp_mcp_portal: "portal-key",
+  sp_mcp_cip: "cip-full-key",
   sp_mcp_workbench: "workbench-key",
   sp_mcp_infra: "infra-key",
   sp_mcp_cip_auto_undraft: "cip-key",
@@ -261,6 +265,17 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_publish_draft_page: { draftId: "DRF-1", version: 1, url: "https://claude.ai/artifact/abcdef123456" },
 };
 
+// TASK-4313: the portal holds only sp_mcp_cip's task.* rights, so the tools
+// behind CIP's bucket, project, routing, approval, question, telemetry, conflict
+// (sync.mutate) and draft rights stay refused to it.
+const PORTAL_NON_TASK_TOOLS = new Set([
+  "mc_create_bucket", "mc_update_bucket", "mc_create_project", "mc_update_project",
+  "mc_request_approval", "mc_ask_question", "mc_report_session_telemetry",
+  "mc_suggest_work", "mc_create_routed_task", "mc_confirm_existing", "mc_attach_checkout",
+  "mc_dismiss_conflict", "mc_dismiss_conflicts", "mc_resolve_conflict", "mc_resolve_conflicts",
+  "mc_save_draft", "mc_submit_draft", "mc_review_draft", "mc_upload_draft_artifact", "mc_publish_draft_page",
+]);
+
 beforeEach(() => {
   vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
   vi.stubEnv("PLX_MC_MCP_API_KEY", "");
@@ -278,17 +293,11 @@ afterEach(() => {
 });
 
 describe("MCP tool allowlist", () => {
-  it("lets sp_mcp_portal call only mc_create_task, mc_search_tasks, mc_list_agent_reports and mc_update_task", () => {
-    expect([...(MCP_TOOL_ALLOWLISTS[PORTAL] ?? [])].sort()).toEqual(
-      [...ALLOWED_TOOLS, ...ALLOWED_ROUTE_NAMES, ...PORTAL_UAT_TOOLS].sort()
-    );
-    for (const tool of [...ALLOWED_TOOLS, ...ALLOWED_ROUTE_NAMES, ...PORTAL_UAT_TOOLS]) {
-      expect(isMcpToolAllowed(PORTAL, tool)).toBe(true);
+  it("gives sp_mcp_portal no tool allowlist, like sp_mcp_cip (TASK-4313)", () => {
+    expect(MCP_TOOL_ALLOWLISTS[PORTAL]).toBeUndefined();
+    for (const tool of [...ALLOWED_TOOLS, ...ALLOWED_ROUTE_NAMES, ...PORTAL_UAT_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)]) {
+      expect({ tool, allowed: isMcpToolAllowed(PORTAL, tool) }).toEqual({ tool, allowed: true });
     }
-    for (const tool of Object.keys(REFUSED_TOOL_ARGS)) {
-      expect({ tool, allowed: isMcpToolAllowed(PORTAL, tool) }).toEqual({ tool, allowed: false });
-    }
-    expect(isMcpToolAllowed(PORTAL, "mc_tool_added_later")).toBe(false);
   });
 
   it("lets sp_mcp_workbench call only its six read tools", () => {
@@ -336,9 +345,9 @@ describe("MCP tool allowlist", () => {
 
   it("leaves every other MCP principal without a tool allowlist", () => {
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP && id !== INTAKE
+      (id) => id !== WORKBENCH && id !== INFRA && id !== CIP && id !== INTAKE
     );
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 5);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 4);
     for (const principalId of others) {
       expect(MCP_TOOL_ALLOWLISTS[principalId]).toBeUndefined();
       for (const tool of [...ALLOWED_TOOLS, ...PORTAL_UAT_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)]) {
@@ -353,14 +362,6 @@ describe("sp_mcp_portal through HTTP MCP (POST /api/cursor/mcp)", () => {
     const json = await rpc("portal-key", "tools/list", {});
     const names = (json.result.tools as { name: string }[]).map((t) => t.name).sort();
     expect(names).toEqual([...ALLOWED_TOOLS, ...PORTAL_UAT_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)].sort());
-  });
-
-  it("refuses an mc_update_task patch outside the UAT ticket mirror, before any read or write", async () => {
-    const result = await callTool("portal-key", "mc_update_task", { taskId: "TASK-1", patch: { title: "Renamed" } });
-    expect(result.isError).toBe(true);
-    expect(result.body).toMatchObject({ error: { code: "forbidden" } });
-    expect(JSON.stringify(result.body)).toContain("task.uat_sync");
-    expect(h.writes).toEqual([]);
   });
 
   it("creates a task with an agent: assignee", async () => {
@@ -390,8 +391,6 @@ describe("sp_mcp_portal through HTTP MCP (POST /api/cursor/mcp)", () => {
     const result = await callTool("portal-key", "mc_search_tasks", { limit: 1 });
     expect(result.isError).toBe(false);
     expect(result.body.meta).toMatchObject({ actor: { servicePrincipalId: PORTAL } });
-    const selfCheck = await callTool("portal-key", "mc_self_check", {});
-    expect(selfCheck.body).toMatchObject({ error: { code: "forbidden" } });
   });
 
   it("reports a full MCP principal in the search metadata too", async () => {
@@ -401,12 +400,20 @@ describe("sp_mcp_portal through HTTP MCP (POST /api/cursor/mcp)", () => {
     });
   });
 
+  // TASK-4313: every task tool admits or refuses the portal as it does
+  // sp_mcp_cip; every non-task tool refuses it.
+  // Only the permission outcome is compared: the mocks make some later calls fail
+  // for other reasons.
   for (const [tool, args] of Object.entries(REFUSED_TOOL_ARGS)) {
-    it(`refuses ${tool} with forbidden`, async () => {
-      const result = await callTool("portal-key", tool, args);
-      expect(result.isError).toBe(true);
-      expect(result.body).toMatchObject({ error: { code: "forbidden" } });
-      expect(h.writes).toEqual([]);
+    it(`answers ${tool} for the portal as TASK-4313 grants`, async () => {
+      const code = (r: { isError: boolean; body: Record<string, unknown> }) => ({
+        isError: r.isError,
+        forbidden: (r.body.error as { code?: string } | undefined)?.code === "forbidden",
+      });
+      const cip = code(await callTool("cip-full-key", tool, args));
+      const portal = code(await callTool("portal-key", tool, args));
+      const expected = PORTAL_NON_TASK_TOOLS.has(tool) ? { isError: true, forbidden: true } : cip;
+      expect({ tool, ...portal }).toEqual({ tool, ...expected });
     });
   }
 
@@ -795,9 +802,9 @@ describe("sp_mcp_portal through the cursor REST routes", () => {
     expect(h.writes).toEqual([]);
   });
 
-  it("refuses every other cursor route with 403 forbidden", async () => {
-    const refused: string[] = [];
-    const wrong: string[] = [];
+  it("answers every other cursor route as it answers sp_mcp_cip, bar routing (TASK-4313)", async () => {
+    const differ: string[] = [];
+    let checked = 0;
     for (const file of cursorRouteFiles()) {
       // POST /api/cursor/mcp is the HTTP MCP transport, covered above.
       if (file === "mcp/route.ts") continue;
@@ -809,60 +816,28 @@ describe("sp_mcp_portal through the cursor REST routes", () => {
         const label = `${method} /api/cursor/${dir}`;
         if (dir === "tasks" && (method === "GET" || method === "POST")) continue;
         if (dir === "agent-reports" && method === "GET") continue;
-        // The UAT ticket mirror (TASK-3697): covered by its own test below.
-        if (dir === "tasks/update" && method === "POST") continue;
         const path = dir.replace("[id]", "TASK-1");
-        const resp = await handler(
-          new Request(`http://localhost/api/cursor/${path}`, {
-            method,
-            headers: headers("portal-key"),
-            ...(method === "GET" ? {} : { body: "{}" }),
-          }),
-          { params: Promise.resolve({ id: "TASK-1" }) }
-        );
-        const json = (await resp.json().catch(() => ({}))) as { error?: { code?: string } };
-        if (resp.status === 403 && json.error?.code === "forbidden") refused.push(label);
-        else wrong.push(`${label} -> ${resp.status} ${json.error?.code ?? ""}`);
+        const answer = async (key: string) => {
+          const resp = await handler(
+            new Request(`http://localhost/api/cursor/${path}`, {
+              method,
+              headers: headers(key),
+              ...(method === "GET" ? {} : { body: "{}" }),
+            }),
+            { params: Promise.resolve({ id: "TASK-1" }) }
+          );
+          const json = (await resp.json().catch(() => ({}))) as { error?: { code?: string } };
+          return `${resp.status} ${json.error?.code ?? ""}`;
+        };
+        const [cip, portal] = [await answer("cip-full-key"), await answer("portal-key")];
+        checked += 1;
+        // routing.suggest is not a task right: the portal is refused before the cohort check.
+        const expected = label === "POST /api/cursor/routing/suggest" ? "403 forbidden" : cip;
+        if (portal !== expected) differ.push(`${label}: portal ${portal}, cip ${cip}`);
       }
     }
-    expect(wrong).toEqual([]);
-    expect(refused).toEqual(
-      expect.arrayContaining([
-        "GET /api/cursor/buckets",
-        "GET /api/cursor/conflicts",
-        "GET /api/cursor/context",
-        "GET /api/cursor/self-check",
-        "GET /api/cursor/tasks/[id]",
-        "GET /api/cursor/checkouts",
-        "POST /api/cursor/checkout",
-        "POST /api/cursor/progress",
-        "POST /api/cursor/tasks/update-batch",
-        "POST /api/cursor/complete",
-        "POST /api/cursor/buckets",
-        "PATCH /api/cursor/buckets",
-        "POST /api/cursor/projects",
-        "POST /api/cursor/agent-report",
-        "POST /api/cursor/skills/submit",
-      ])
-    );
-    expect(h.writes).toEqual([]);
-  });
-
-  it("refuses a POST /api/cursor/tasks/update patch outside the UAT ticket mirror (TASK-3697)", async () => {
-    const mod = (await import(join(CURSOR_API_DIR, "tasks", "update", "route.ts"))) as { POST: RouteHandler };
-    const resp = await mod.POST(
-      new Request("http://localhost/api/cursor/tasks/update", {
-        method: "POST",
-        headers: headers("portal-key"),
-        body: JSON.stringify({ taskId: "TASK-1", patch: { description: "Rewritten" } }),
-      }),
-      { params: Promise.resolve({}) }
-    );
-    expect(resp.status).toBe(403);
-    const json = (await resp.json()) as { error: { code: string; message: string } };
-    expect(json.error.code).toBe("forbidden");
-    expect(json.error.message).toContain("task.uat_sync");
-    expect(h.writes).toEqual([]);
+    expect(checked).toBeGreaterThan(10);
+    expect(differ).toEqual([]);
   });
 });
 

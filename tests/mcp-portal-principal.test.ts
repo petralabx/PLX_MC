@@ -6,6 +6,9 @@ import { legacySearchFixture } from "./helpers/task-search-fixture";
 // adds one read, agent_report.read, for GET /api/cursor/agent-reports.
 // TASK-3697 adds task.uat_sync: the portal mirrors a ticket onto its UAT ticket
 // task (tests/mcp-update-task.test.ts covers what that allows).
+// TASK-4313 (Vince 2026-10-31 9:42 AM ET): the portal now holds sp_mcp_cip's
+// task rights (the full MCP bundle plus task.link_merged_pr) on top of those
+// two portal-only grants, and it is admitted or refused exactly like sp_mcp_cip.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
@@ -154,6 +157,7 @@ const FULL_MCP_BUNDLE = [
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
   sp_mcp_portal: "portal-key",
+  sp_mcp_cip: "cip-full-key",
   sp_mcp_workbench_intake: "intake-key",
 };
 
@@ -211,11 +215,20 @@ describe("sp_mcp_portal grant", () => {
     expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain(PORTAL);
   });
 
-  it("holds exactly task.read, task.create, agent_report.read and task.uat_sync", () => {
+  it("holds sp_mcp_cip's task.* grant plus agent_report.read and task.uat_sync (TASK-4313)", () => {
     // Fleet P8b adds one read: agent reports, for the portal only. TASK-3697
     // adds the UAT ticket mirror, for the portal only.
-    const granted = ["agent_report.read", "task.create", "task.read", "task.uat_sync"];
-    expect([...capabilitiesForServicePrincipal(PORTAL)].sort()).toEqual(granted);
+    const cipTask = capabilitiesForServicePrincipal("sp_mcp_cip").filter((c) => c.startsWith("task."));
+    expect([...cipTask].sort()).toEqual(
+      ["task.read", "task.create", "task.checkout", "task.progress", "task.complete", "task.link", "task.link_merged_pr"].sort()
+    );
+    const granted = [...cipTask, "agent_report.read", "task.uat_sync"];
+    for (const capability of ["bucket.create", "project.create", "routing.suggest", "approval.request", "sync.mutate", "draft.create"]) {
+      expect(granted).not.toContain(capability);
+    }
+    expect(granted).not.toContain("task.assign");
+    expect(granted).not.toContain("task.cancel");
+    expect([...capabilitiesForServicePrincipal(PORTAL)].sort()).toEqual([...granted].sort());
     for (const capability of CAPABILITIES) {
       const allowed = authorize({
         actor: { kind: "service", id: PORTAL, status: "active" },
@@ -445,12 +458,23 @@ describe("sp_mcp_portal through the MCP tools", () => {
     expect((result.body.data as { total: number }).total).toBe(1);
   });
 
+// TASK-4313: the portal holds only sp_mcp_cip's task.* rights, so the tools
+  // behind CIP's bucket, project, routing, approval, question, telemetry, conflict
+  // (sync.mutate) and draft rights stay refused to it.
+  const PORTAL_NON_TASK_TOOLS = new Set([
+    "mc_create_bucket", "mc_update_bucket", "mc_create_project", "mc_update_project",
+    "mc_request_approval", "mc_ask_question", "mc_report_session_telemetry",
+    "mc_suggest_work", "mc_create_routed_task", "mc_confirm_existing", "mc_attach_checkout",
+    "mc_dismiss_conflict", "mc_dismiss_conflicts", "mc_resolve_conflict", "mc_resolve_conflicts",
+    "mc_save_draft", "mc_submit_draft", "mc_review_draft", "mc_upload_draft_artifact", "mc_publish_draft_page",
+  ]);
   for (const [tool, args] of forbidden) {
-    it(`refuses ${tool}`, async () => {
-      const result = await callTool("portal-key", tool, args);
-      expect(result.isError).toBe(true);
-      expect(result.body).toMatchObject({ error: { code: "forbidden" } });
-      expect(h.writes).toEqual([]);
+    it(`answers ${tool} as TASK-4313 grants`, async () => {
+      const forbiddenFor = async (key: string) =>
+        ((await callTool(key, tool, args)).body.error as { code?: string } | undefined)?.code === "forbidden";
+      const cip = await forbiddenFor("cip-full-key");
+      const expected = PORTAL_NON_TASK_TOOLS.has(tool) || cip;
+      expect({ tool, forbidden: await forbiddenFor("portal-key") }).toEqual({ tool, forbidden: expected });
     });
   }
 
@@ -510,20 +534,23 @@ describe("sp_mcp_workbench_intake through the MCP tools", () => {
 });
 
 describe("sp_mcp_portal through POST /api/cursor/skills/submit", () => {
-  it("refuses the legacy submission shape too", async () => {
-    const resp = await skillsSubmitPost(
-      new Request("http://localhost/api/cursor/skills/submit", {
-        method: "POST",
-        headers: headers("portal-key"),
-        body: JSON.stringify({
-          skillId: "portal-skill",
-          title: "x",
-          submitterEmail: "vince@petrasoap.com",
-        }),
-      }),
-      { params: Promise.resolve({}) }
-    );
-    expect(resp.status).toBe(403);
-    expect(h.writes).toEqual([]);
+  it("answers the legacy submission shape as it does sp_mcp_cip (TASK-4313)", async () => {
+    const status = async (key: string) =>
+      (
+        await skillsSubmitPost(
+          new Request("http://localhost/api/cursor/skills/submit", {
+            method: "POST",
+            headers: headers(key),
+            body: JSON.stringify({
+              skillId: "portal-skill",
+              title: "x",
+              submitterEmail: "vince@petrasoap.com",
+            }),
+          }),
+          { params: Promise.resolve({}) }
+        )
+      ).status;
+    const cip = await status("cip-full-key");
+    expect(await status("portal-key")).toBe(cip);
   });
 });

@@ -11,6 +11,7 @@ const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
   sp_mcp_codex: "codex-key",
   sp_mcp_portal: "portal-key",
+  sp_mcp_workbench_intake: "intake-key",
   sp_mcp_workbench: "workbench-key",
 };
 
@@ -205,7 +206,8 @@ describe("draft tools", () => {
   });
 
   it("keeps the draft tools from the restricted principals", async () => {
-    for (const key of ["portal-key", "workbench-key"]) {
+    // TASK-4313: sp_mcp_portal lost its tool allowlist; the intake principal keeps one.
+    for (const key of ["intake-key", "workbench-key"]) {
       const { isError, body } = await callTool(key, "mc_list_drafts", {});
       expect(isError).toBe(true);
       expect(body.error.code).toBe("forbidden");

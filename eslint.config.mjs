@@ -15,5 +15,8 @@ export default defineConfig([
     // .cursor/environment.json). Linting it breaks the preflight gate on any
     // machine with the swarm bootstrapped — CI never sees this directory.
     ".swarm/**",
+    // Local git worktrees (gitignored; see docs/workstreams/README.md).
+    ".worktrees/**",
+    ".claude/worktrees/**",
   ]),
 ]);

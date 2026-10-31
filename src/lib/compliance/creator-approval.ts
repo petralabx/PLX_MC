@@ -47,7 +47,8 @@ export async function recordCreatorApprovalBlocked(
 
 /**
  * A stage move that a pending creator approval refuses. patchTask throws it
- * inside its transaction and records it after the rollback.
+ * inside a transaction; the transaction's owner records it after the rollback
+ * with recordingCreatorRefusal.
  */
 export class CreatorApprovalRefusal extends ApiError {
   constructor(
@@ -59,8 +60,30 @@ export class CreatorApprovalRefusal extends ApiError {
     super("creator_approval_pending", message, 409);
   }
 
-  record(): Promise<void> {
-    return recordCreatorApprovalBlocked(this.task, "stage", this.ctx, this.requestedStage);
+  /** `over` lets the caller that owns the transaction name itself (TASK-4293). */
+  record(over?: Partial<CreatorApprovalGuardContext>): Promise<void> {
+    return recordCreatorApprovalBlocked(this.task, "stage", { ...this.ctx, ...over }, this.requestedStage);
+  }
+}
+
+/**
+ * Run a transaction and record a creator-gate refusal it threw, once the
+ * rollback has released its connection. Every caller that can move a gated
+ * task into progress or later inside its own transaction goes through here,
+ * so each refusal leaves one event (TASK-4293). cancelTask does not, since a
+ * cancel is never gated. Neither does the projection's patchLocked: promoteMerged
+ * skips a pending task before it, and linkPr's locked build never sets a stage
+ * on one (heldMergeReady). An MCP caller passes its audit actor, repo and door.
+ */
+export async function recordingCreatorRefusal<T>(
+  transaction: () => Promise<T>,
+  ctx?: Partial<CreatorApprovalGuardContext>
+): Promise<T> {
+  try {
+    return await transaction();
+  } catch (err) {
+    if (err instanceof CreatorApprovalRefusal) await err.record(ctx);
+    throw err;
   }
 }
 

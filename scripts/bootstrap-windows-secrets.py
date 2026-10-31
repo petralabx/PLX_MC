@@ -1217,9 +1217,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--legacy-personal-pat",
         action="store_true",
-        help=(
-            "Removed (TASK-4361): exits with an error. The personal PAT is retired."
-        ),
+        help=("Removed (TASK-4361): exits with an error. The personal PAT is retired."),
     )
     parser.add_argument(
         "--github-app-slug",

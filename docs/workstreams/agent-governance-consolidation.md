@@ -5,7 +5,8 @@
 - Branches: `claude/nice-albattani-rand8f` (TASK-4348), `claude/nice-albattani-rand8f-ci` (TASK-4346).
   Merged: W01 to W04, W06 and TASK-4257 (#519 to #525)
 - MC tasks: TASK-4201 (W01), TASK-4204 (W02), TASK-4205 (W03), TASK-4206 (W04), TASK-4207 (W06),
-  TASK-3928, TASK-4257, TASK-4346, TASK-4348; draft DRF-4
+  TASK-3928, TASK-4257, TASK-4346, TASK-4348, TASK-4352 to TASK-4358 (handshake adoption, one per repo);
+  draft DRF-4
 - SharePoint handoff: n/a. The plan is the Agent Governance Handoff bundle of 2026-10-30. The
   status and the zero-drift and CI speed plans are on the Governance Handoff Status page:
   https://claude.ai/artifact/Fv26Dp57T5pa1bE1Vcftyv
@@ -21,7 +22,8 @@ and every other copy is generated from it or not written.
 
 active, as of 2026-10-31. Every "now" item (W01 to W04, W06, TASK-4257) is in main. DRF-4 waits
 for Vince. Two follow-ups are in PRs: TASK-4348 (the contract feeds both MCP servers' instructions
-and each repo's handshake block) and TASK-4346 (PLX_MC CI runs as parallel jobs). This note names
+and each repo's handshake block), TASK-4346 (PLX_MC CI runs as parallel jobs) and TASK-4352 to
+TASK-4358 (each consumer repo adopts the generated block). This note names
 PRs and tasks; GitHub and Mission Control hold their state.
 
 ## Done
@@ -40,10 +42,11 @@ PRs and tasks; GitHub and Mission Control hold their state.
 
 1. Vince decides gate `apg_6e5c8db52d26f8f2` (TASK-4346, PLX_MC#538, a workflow change). CIP
    lands it.
-2. TASK-4348 lands. Then adopt the generated block in each consumer repo, one docs PR per repo:
-   `python scripts/generate-governance-surfaces.py --fleet ..` rewrites the hand-written section in
-   furgenics, for-and-against, 1hr-after and local-inference. The portal, agentic-swarm and
-   plx_secondbrain need the markers placed by hand (portal: W07 in DRF-4).
+2. TASK-4348 (PLX_MC#539) lands, then the seven adoption PRs: furgenics#19, for-and-against#32,
+   1hr-after#46, local-inference#70, plx_secondbrain#10, agentic-swarm#1810 and
+   plx-customer-portal#3235. After a contract change, `--fleet ..` rewrites every block and
+   `--fleet .. --check` catches a stale one. In agentic-swarm, run its three generators after.
+   The portal's `.cursor/rules/mc-compliance.mdc` stays with W07 in DRF-4.
 3. Vince accepts DRF-4. Then move W01 to W06, TASK-4257, TASK-4346 and TASK-4348 into its buckets,
    and start W07 to W22, W13 first. W09 replaces PLX_MC's hand-written CLAUDE.md copy.
 4. A person applies the 17 closures Vince approved on 2026-10-26 (Ledger or CoS for the 3 duplicates).

@@ -138,12 +138,14 @@ ruleset):
 | `silent-failure-audit` | L1-adjacent | **Real fail** on portal `product_app` repos. Do not raise `BASELINE`. Fix new catch-empty-returns with `QueryResult<T>`. |
 
 Hub `PLX_MC` local equivalent is `./scripts/preflight.sh` (pre-commit / pre-push /
-CI) — that is **this repo’s** product gate, not an org-wide Next/Playwright
-requirement. CI runs each pre-push step as its own parallel job
+full / CI) — that is **this repo’s** product gate, not an org-wide Next/Playwright
+requirement. CI runs each step of the full suite as its own parallel job
 (`preflight.sh --mode ci` once, then `--only python-tests`, `node-tests`, `build`
 and four `e2e` shards), and `Preflight + full suite` passes only when every job
-passes (TASK-4346). `tests/ci-parallel-jobs.test.ts` fails if a pre-push step
-has no CI job.
+passes (TASK-4346). `tests/ci-parallel-jobs.test.ts` fails if a full-suite step
+has no CI job. Locally, `--mode pre-push` runs the policy checks and the changed
+files (ruff, changed Python tests, typecheck, ESLint, `vitest related` within 120 s);
+`--mode full` runs the whole suite in sequence (TASK-4389).
 
 ### AI review verdict (`ai-review/verdict`)
 

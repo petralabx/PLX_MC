@@ -243,26 +243,68 @@ describe("decideApprovalGate", () => {
     }
   });
 
-  it("separation of duties: requester deciding own gate is 403", async () => {
-    seedTask("TASK-700", { approvalGates: [pending] });
+  it("separation of duties: a non-owner requester deciding own gate is 403", async () => {
+    const own = { ...pending, requestedBy: "greg@petrasoap.com" };
+    seedTask("TASK-700", { approvalGates: [own] });
     await expect(
       decideApprovalGate({
         taskId: "TASK-700",
         gateId: "apg_1",
         decision: "approved",
-        decidedBy: "vince@petrasoap.com",
+        decidedBy: "greg@petrasoap.com",
       })
     ).rejects.toMatchObject({ code: "separation_of_duties", status: 403 });
     // Exactly one audit denial, attributed to the attempter; the gate is unchanged.
     expect(h.events).toHaveLength(1);
     expect(h.events[0]).toMatchObject({
       kind: "approval.denied",
-      actor: "vince@petrasoap.com",
+      actor: "greg@petrasoap.com",
       taskId: "TASK-700",
       payload: { gateId: "apg_1", reasonCode: "separation_of_duties", attemptedDecision: "approved" },
     });
     expect(h.patches).toHaveLength(0);
-    expect((h.tasks.get("TASK-700")!.data as Task).approvalGates).toEqual([pending]);
+    expect((h.tasks.get("TASK-700")!.data as Task).approvalGates).toEqual([own]);
+  });
+
+  it("owner override (TASK-4308): the owner decides a gate raised in their name, logged", async () => {
+    seedTask("TASK-700", { approvalGates: [pending] });
+    const { gate } = await decideApprovalGate({
+      taskId: "TASK-700",
+      gateId: "apg_1",
+      decision: "rejected",
+      decidedBy: "vince@petrasoap.com",
+    });
+    expect(gate).toMatchObject({ status: "rejected", decidedBy: "vince@petrasoap.com" });
+    const all = [...h.events];
+    expect(all.find((e) => e.kind === "approval.denied")).toBeUndefined();
+    expect(all).toContainEqual(
+      expect.objectContaining({
+        kind: "approval.owner_override",
+        actor: "vince@petrasoap.com",
+        taskId: "TASK-700",
+        payload: expect.objectContaining({ gateId: "apg_1", reasonCode: "self_requested", requestedBy: "vince@petrasoap.com", at: gate.decidedAt }),
+      })
+    );
+    expect(all).toContainEqual(
+      expect.objectContaining({ kind: "approval.decided", payload: expect.objectContaining({ ownerOverride: "self_requested" }) })
+    );
+  });
+
+  it("owner override follows PLX_MC_OWNER_EMAIL; the default owner then gets no override", async () => {
+    process.env.PLX_MC_OWNER_EMAIL = "stephen@petrasoap.com";
+    try {
+      seedTask("TASK-700", { approvalGates: [pending] });
+      await expect(decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "rejected", decidedBy: "vince@petrasoap.com" }))
+        .rejects.toMatchObject({ code: "separation_of_duties", status: 403 });
+    } finally {
+      delete process.env.PLX_MC_OWNER_EMAIL;
+    }
+  });
+
+  it("no owner_override event when the owner decides someone else's gate", async () => {
+    seedTask("TASK-700", { approvalGates: [{ ...pending, requestedBy: "cos@petrasoap.com" }] });
+    await decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "rejected", decidedBy: "vince@petrasoap.com" });
+    expect([...h.events].some((e) => e.kind === "approval.owner_override")).toBe(false);
   });
 
   it("an already-decided gate is a 409, not a silent overwrite", async () => {

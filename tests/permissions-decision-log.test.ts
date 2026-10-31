@@ -259,7 +259,7 @@ describe("mutating decisions in log-only", () => {
     vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "log-only");
     requireMcpActor(mcpIdentity("sp_mcp_cursor"), "task.progress", { type: "task", id: "TASK-1" });
     expect(() =>
-      requireMcpActor(mcpIdentity("sp_mcp_portal"), "task.checkout", { type: "task", id: "TASK-1" })
+      requireMcpActor(mcpIdentity("sp_mcp_workbench_intake"), "task.checkout", { type: "task", id: "TASK-1" })
     ).toThrow(/task\.checkout denied/);
     await flushDecisions();
     expectDecision({
@@ -361,7 +361,7 @@ describe("mutating decisions in log-only", () => {
     vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "log-only");
     expect(() =>
       assertMcpToolAllowed(
-        { servicePrincipalId: "sp_mcp_portal", operatorEmail: "vince@petrasoap.com" },
+        { servicePrincipalId: "sp_mcp_workbench_intake", operatorEmail: "vince@petrasoap.com" },
         "mc_report_progress"
       )
     ).toThrow(/denied/);

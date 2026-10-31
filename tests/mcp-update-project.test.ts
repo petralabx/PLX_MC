@@ -249,7 +249,8 @@ describe("actionListProjects", () => {
     expect(all.projects.map((p) => p.id)).toEqual(["PRJ-A"]);
   });
 
-  it("is not available to the portal principal", async () => {
-    await expect(actionListProjects(identity("sp_mcp_portal"), {})).rejects.toMatchObject({ status: 403 });
+  // TASK-4313: the portal lost its tool allowlist; the intake principal keeps one.
+  it("is not available to the workbench intake principal", async () => {
+    await expect(actionListProjects(identity("sp_mcp_workbench_intake"), {})).rejects.toMatchObject({ status: 403 });
   });
 });

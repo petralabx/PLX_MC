@@ -169,8 +169,9 @@ async function verifyUatTicketTx(
 }
 
 // TASK-3697: task.uat_sync covers a portal ticket's mirror onto its UAT ticket
-// task: verify, cancel, or a label-only patch. A principal holding it without
-// task.progress (the portal) may send nothing else, on no other task.
+// task: verify, cancel, or a label-only patch. Such a patch from a holder (the
+// portal) is held to the mirror rules; a holder without task.progress may send
+// nothing else, on no other task.
 const UAT_SYNC_FIELDS: readonly string[] = ["verify", "cancel", "labels", "addLabels", "removeLabels"];
 
 function holds(identity: McpIdentity, capability: Capability): boolean {
@@ -184,12 +185,15 @@ function uatSyncForbidden(message: string): ApiError {
 export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
   assertMcpToolAllowed(identity, "mc_update_task");
   const { taskId, patch } = parseInput(updateTaskSchema, input);
-  const uatSyncOnly = holds(identity, "task.uat_sync") && !holds(identity, "task.progress");
+  // TASK-4313: the portal now also holds task.progress, so a patch made only of
+  // UAT_SYNC_FIELDS still takes the UAT ticket mirror path (and its rules).
+  const sentFields = Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key);
+  const uatSyncOnly = holds(identity, "task.uat_sync")
+    && (!holds(identity, "task.progress") || sentFields.every((key) => UAT_SYNC_FIELDS.includes(key)));
   const authorized = requireMcpActor(identity, uatSyncOnly ? "task.uat_sync" : "task.progress", { type: "task", id: taskId });
   if (uatSyncOnly) {
-    const fields = Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key);
-    if (!fields.every((key) => UAT_SYNC_FIELDS.includes(key))) {
-      throw uatSyncForbidden(`only verify, cancel and label edits are allowed; got ${fields.join(", ")}.`);
+    if (!sentFields.every((key) => UAT_SYNC_FIELDS.includes(key))) {
+      throw uatSyncForbidden(`only verify, cancel and label edits are allowed; got ${sentFields.join(", ")}.`);
     }
   }
   if (patch.assignee !== undefined || patch.accountableOwner !== undefined) {

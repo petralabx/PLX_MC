@@ -174,7 +174,8 @@ describe("verifyMcpRequest with per-agent keys", () => {
     expect(authorize({ actor: identity.actor, capability: "repo.approve" }).allowed).toBe(false);
   });
 
-  it("authenticates the portal key as sp_mcp_portal with only task create and read", async () => {
+  // TASK-4313: the portal holds sp_mcp_cip's task rights (checkout, complete included).
+  it("authenticates the portal key as sp_mcp_portal with CIP's task rights", async () => {
     const { authorize } = await import("@/lib/permissions");
     const identity = await verifyMcpRequest(
       req({ "x-api-key": "portal-key", ...OPERATOR_HEADERS })
@@ -183,8 +184,10 @@ describe("verifyMcpRequest with per-agent keys", () => {
     expect(identity.actor).toEqual({ kind: "service", id: "sp_mcp_portal", status: "active" });
     expect(authorize({ actor: identity.actor, capability: "task.create" }).allowed).toBe(true);
     expect(authorize({ actor: identity.actor, capability: "task.read" }).allowed).toBe(true);
-    expect(authorize({ actor: identity.actor, capability: "task.checkout" }).allowed).toBe(false);
-    expect(authorize({ actor: identity.actor, capability: "task.complete" }).allowed).toBe(false);
+    expect(authorize({ actor: identity.actor, capability: "task.checkout" }).allowed).toBe(true);
+    expect(authorize({ actor: identity.actor, capability: "task.complete" }).allowed).toBe(true);
+    expect(authorize({ actor: identity.actor, capability: "task.cancel" }).allowed).toBe(false);
+    expect(authorize({ actor: identity.actor, capability: "bucket.create" }).allowed).toBe(false);
   });
 
   it("loads the portal principal from its migration 028 row when enforcement is on", async () => {

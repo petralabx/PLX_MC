@@ -321,6 +321,18 @@ metadata edits above). The portal's existing MC key does not change. `mc_search_
 `meta.actor.servicePrincipalId`. Key rotation uses that search to verify the
 portal key, because `mc_self_check` stays forbidden to it.
 
+**Portal task rights (TASK-4313):** Vince widened `sp_mcp_portal` on
+2026-10-31 at 9:42 AM ET to `sp_mcp_cip`'s task rights: every `task.*`
+capability `sp_mcp_cip` holds (`task.read`, `task.create`, `task.checkout`,
+`task.progress`, `task.complete`, `task.link`, `task.link_merged_pr`), plus its
+own `agent_report.read` and `task.uat_sync`. It does not get CIP's bucket,
+project, routing, approval, question, telemetry, `sync.mutate` or draft rights,
+nor `task.cancel`, `task.reopen` or `task.assign`. The portal's tool allowlist
+is removed, so each action's capability check limits it, as for CIP. A
+`mc_update_task` patch from it made only of verify, cancel or label fields still
+follows the UAT ticket mirror rules above. This supersedes the least-privilege
+text above where they conflict.
+
 **Workbench principal:** `sp_mcp_workbench` (PLX Agent Workbench, `tswaterloo/OntologyProject`; migration 038; owner Tanush) is read-only: its grant is `task.read` only, and its allowlist is `mc_self_check`, `mc_get_context`, `mc_list_buckets`, `mc_search_knowledge`, `mc_search_tasks` and `mc_get_task`; every write tool gives 403.
 
 **Infra principal:** `sp_mcp_infra` (PLX Infra; migration 040; owner Infra, approved by Vince 2026-10-15) is read-only like the Workbench: its grant is `task.read` only, its allowlist is the same six read tools, and every write tool gives 403. A later grant change can widen it.

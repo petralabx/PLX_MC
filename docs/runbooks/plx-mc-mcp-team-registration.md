@@ -51,7 +51,7 @@ Cloud user broader write access.
 | Command | `npx` |
 | Args | `tsx tools/plx-mc-mcp/index.ts` |
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
-| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`, `sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, `sp_mcp_portal` (create and search tasks only), `sp_mcp_workbench` (read-only: six read tools), `sp_mcp_infra` (read-only: the same six read tools), `sp_mcp_cip_auto_undraft` (read-only: four task read tools), or `sp_mcp_workbench_intake` (create and search tasks only) |
+| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`, `sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, `sp_mcp_portal` (`sp_mcp_cip`'s task rights plus agent reports and the UAT ticket mirror, TASK-4313), `sp_mcp_workbench` (read-only: six read tools), `sp_mcp_infra` (read-only: the same six read tools), `sp_mcp_cip_auto_undraft` (read-only: four task read tools), or `sp_mcp_workbench_intake` (create and search tasks only) |
 | `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise that principal's lane secret (below), never the bundle |
 | `MC_OPERATOR_EMAIL` | allowlisted operator on `PLX_MC_ALLOWED_USERS` — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com`. Vince-approved gmail/Proton exceptions must also appear on that CSV. |
 | `MC_REPO` | target repo slug (e.g. `petralabx/plx-customer-portal`) |

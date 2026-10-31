@@ -7,7 +7,7 @@ export const HANDSHAKE_TITLE = "Mission Control handshake";
 export const HANDSHAKE_STEPS = [
   "Search projects, buckets and TASK-* first (mc_search_tasks: branch, title, runId). Create a task only on a real miss, with mc_create_task in {default_bucket}. Never create a task to escape incomplete evidence on a live checkout.",
   "Check out with mc_checkout_task, passing repo `{repo}`, your own `runtime/lane` as agent, and your branch. Confirm the returned taskId and that actor.repo is `{repo}`. Copy prBodyLine exactly.",
-  "Never invent a dsp_* id, never write `MC-Checkout: pending`, and never push with --no-verify. If the MC tools fail, stop and ask CoS or CIP to paste the prBodyLine.",
+  "Never invent a dsp_* id, never write `MC-Checkout: pending`, and never push with --no-verify. Without the MC tools, check out over HTTP: `COMPLIANCE_CAPTURE=1 MC_REPO={repo} MC_TASK_ID=TASK-N node scripts/compliance-checkout.mjs`. If that fails too, stop and ask CoS or CIP to paste the prBodyLine.",
   "End every commit with Agent, On-Behalf-Of and MC-Checkout as its last three lines. Name the TASK id in the PR title or branch.",
   "Save evidence with mc_save_evidence before you open the PR, and put the MC-Checkout line in the PR body when you open it.",
   "After you fix a PR body, re-run the failed compliance job. Never push an empty commit, and never close and reopen a PR, to restart a check.",

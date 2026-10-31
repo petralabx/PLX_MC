@@ -138,7 +138,16 @@ export async function actionResolveConflicts(
   const winner = mapConflictResolution(input.resolution);
   const results = [];
   for (const conflictId of input.conflictIds) {
-    const resolved = await resolveConflict(conflictId, winner, authorized.actorId);
+    let resolved: boolean;
+    try {
+      resolved = await resolveConflict(conflictId, winner, authorized.actorId);
+    } catch (err) {
+      // A refusal is an ApiError, raised before any write: report it for its id
+      // and go on (TASK-4295). Any other error fails the batch.
+      if (!(err instanceof ApiError)) throw err;
+      results.push({ conflictId, resolved: false, code: err.code, error: err.message });
+      continue;
+    }
     results.push(
       resolved
         ? { conflictId, resolved: true }
@@ -218,7 +227,7 @@ export function registerSyncConflictTools(server: McpServer, identity: McpIdenti
 
   server.tool(
     "mc_resolve_conflicts",
-    "Resolve a batch of SharePoint Sync conflicts with one explicit resolution (keep_mc | keep_sp). Never default keep_sp. Ledger owns Keep MC for stage-lag leftovers. Agents never mark a task Verified.",
+    "Resolve a batch of SharePoint Sync conflicts with one explicit resolution (keep_mc | keep_sp). Never default keep_sp. Ledger owns Keep MC for stage-lag leftovers. Agents never mark a task Verified. Returns per-id outcomes, and the rest still run when an id is refused: a refusal the engine raises (for example a pending creator approval) comes back resolved:false with its code; resolved:false with no code means the conflict was not found or its value was declined.",
     {
       conflictIds: z.array(z.string().min(1)).min(1),
       resolution: conflictResolutionSchema,

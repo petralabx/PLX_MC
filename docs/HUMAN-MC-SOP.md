@@ -75,7 +75,9 @@ of recreating it. Set
 **Sync leftovers:** Ledger lists open `cf-*` ids via Hub MCP `mc_list_conflicts`,
 then drains SharePoint Sync/Conflicts via `mc_resolve_conflict` /
 `mc_resolve_conflicts` (`keep_mc` \| `keep_sp`). Keep MC is canonical for
-stage-lag leftovers. You can still resolve in the Sync console (Entra session).
+stage-lag leftovers. `mc_resolve_conflicts` returns per-id outcomes: compare
+`resolvedCount` with the ids you sent, and list again to confirm none is left
+open. You can still resolve in the Sync console (Entra session).
 Agents never silently choose Keep SP and never mark a task Verified.
 
 Never create a new task to escape one with incomplete evidence. Never invent a

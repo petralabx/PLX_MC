@@ -10,6 +10,7 @@
 @import "../styles/mc-views.css" layer(mc.legacy);
 @import "../styles/mc-charts.css" layer(mc.legacy);
 @import "../styles/mc-task.css" layer(mc.legacy);
+@import "../styles/mc-text.css" layer(mc.legacy);
 @import "../styles/mc-record.css" layer(mc.legacy);
 @import "../styles/mc-overview.css" layer(mc.legacy);
 @import "../styles/mc-authoring.css" layer(mc.legacy);

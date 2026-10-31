@@ -57,6 +57,7 @@ import {
 } from "@/lib/mc-data/store";
 
 import { Avatar, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
+import { McText } from "./mc-text";
 import { OverviewStrip, StripFact, StripHealthSelect } from "./overview-strip";
 import { PeoplePicker } from "./people-picker";
 import {
@@ -300,7 +301,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             </button>
             <span className="kk bucket-kicker">Initiative · {bucket.id}</span>
             <h1>{bucket.name}</h1>
-            <p className="sub">{bucket.desc}</p>
+            <McText className="sub" text={bucket.desc ?? ""} nav={nav} testId="bucket-desc" />
           </div>
           <div className="r">
             <HealthPill h={bucket.health} />
@@ -373,7 +374,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             </button>
           </div>
           <h1>{bucket.name}</h1>
-          <p className="sub">{bucket.desc}</p>
+          <McText className="sub" text={bucket.desc ?? ""} nav={nav} testId="bucket-desc" />
           {editingSpec && (
             <div className="ini-spec-field">
               <PrdLinkField key={specKey} bucketId={bucket.id} prd={bucket.prd} />

@@ -62,6 +62,7 @@ import {
   SyncTick,
 } from "./atoms";
 import { KindSelect, LabelEditor } from "./label-editor";
+import { McText } from "./mc-text";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
 import { repoEditMode } from "./record-logic";
 import { RepoEditor } from "./repo-editor";
@@ -487,7 +488,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                 </div>
               </div>
             ) : task.description ? (
-              <div className="prose">{task.description}</div>
+              <McText className="prose" text={task.description} nav={nav} testId="task-desc" />
             ) : (
               <div className="prose muted">No description yet.</div>
             )}

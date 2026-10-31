@@ -91,6 +91,7 @@ import {
   type TaskGroup,
   type WaitingOn,
 } from "./approvals-inbox.helpers";
+import { McText } from "./mc-text";
 import { isOwnerViewer, viewerTokens } from "./needs-me";
 import { DraftsToReviewPanel } from "./drafts";
 import {
@@ -713,7 +714,7 @@ export function GateSheet({
             {gate.reason}
           </h2>
         </div>
-        {proposal?.summary ? <p className="ap-context">{proposal.summary}</p> : null}
+        {proposal?.summary ? <McText className="ap-context" text={proposal.summary} nav={nav} testId="ap-summary" /> : null}
         <ApprovalDecisionScope gate={gate} />
         <div className="ap-block">
           <span className="ap-kicker">Where it came from</span>

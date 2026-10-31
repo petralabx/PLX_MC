@@ -37,6 +37,10 @@ unverified/stale content is badged — no false authority.
    nesting, GFM tables, fenced code, blockquote callouts, thematic breaks,
    inline strong/em/code/link). The UI renders the tree through React, so text
    is auto-escaped — **no raw HTML is ever injected**.
+   A numbered item after bullets, or the reverse, starts a new list. Mission
+   Control text (`docs/modules/mc-text/README.md`) reuses the parser with
+   `{ breaks: true }`, which keeps a single line break inside a paragraph; the
+   SOP reader still joins those lines with a space.
 4. **Loader** — `listSopSummaries` / `getSopDetail` derive each row's state:
    `ready` (source readable), `planned` (no source → calm "coming soon"), or
    `degraded` (configured but missing/empty/unreadable → loud). One bad SOP

@@ -25,6 +25,7 @@ key files change, update its contract in the same PR.
 | compliance | Vince | Critical | `docs/modules/compliance/README.md` |
 | mcp | Vince | Critical | `docs/modules/mcp/README.md` |
 | loop-ledgers | Vince | Medium | `docs/modules/loop-ledgers/README.md` |
+| mc-text | Vince | Medium | `docs/modules/mc-text/README.md` |
 | uat | Vince | Medium | `docs/modules/uat/README.md` |
 | vendor-spend | Vince | Medium | `docs/modules/vendor-spend/README.md` |
 | reporting-goals | Vince | Medium | `docs/modules/reporting-goals/README.md` |

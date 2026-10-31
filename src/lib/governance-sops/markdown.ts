@@ -15,9 +15,18 @@ import type { MdInline, MdListItem, MdNode, TableAlign, TocEntry } from "./types
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export function parseMarkdown(raw: string): MdNode[] {
+export interface ParseOptions {
+  /**
+   * Keep a single line break inside a paragraph as "\n" (Mission Control text,
+   * TASK-4390) instead of joining the lines with a space (the SOP reader). The
+   * renderer shows it with `white-space: pre-line`.
+   */
+  breaks?: boolean;
+}
+
+export function parseMarkdown(raw: string, options: ParseOptions = {}): MdNode[] {
   const lines = raw.replace(/\r\n?/g, "\n").split("\n");
-  const nodes = parseBlocks(lines);
+  const nodes = parseBlocks(lines, options);
   ensureUniqueHeadingIds(nodes);
   return nodes;
 }
@@ -41,7 +50,7 @@ const RE_FENCE = /^(\s*)(```+|~~~+)\s*([^\s`~]*)\s*$/;
 const RE_LIST = /^(\s*)([-*+]|\d+[.)])(\s+)(.*)$/;
 const RE_BLOCKQUOTE = /^\s*>/;
 
-function parseBlocks(lines: string[]): MdNode[] {
+function parseBlocks(lines: string[], options: ParseOptions = {}): MdNode[] {
   const nodes: MdNode[] = [];
   let i = 0;
 
@@ -94,7 +103,7 @@ function parseBlocks(lines: string[]): MdNode[] {
         inner.push(lines[i].replace(/^\s*>\s?/, ""));
         i++;
       }
-      nodes.push({ type: "blockquote", children: parseBlocks(inner) });
+      nodes.push({ type: "blockquote", children: parseBlocks(inner, options) });
       continue;
     }
 
@@ -114,7 +123,7 @@ function parseBlocks(lines: string[]): MdNode[] {
 
     // List (ordered or unordered)
     if (RE_LIST.test(line)) {
-      const { node, next } = parseList(lines, i);
+      const { node, next } = parseList(lines, i, options);
       nodes.push(node);
       i = next;
       continue;
@@ -135,13 +144,13 @@ function parseBlocks(lines: string[]): MdNode[] {
       para.push(lines[i].trim());
       i++;
     }
-    nodes.push({ type: "paragraph", text: parseInline(para.join(" ")) });
+    nodes.push({ type: "paragraph", text: parseInline(para.join(options.breaks ? "\n" : " ")) });
   }
 
   return nodes;
 }
 
-function parseList(lines: string[], start: number): { node: MdNode; next: number } {
+function parseList(lines: string[], start: number, options: ParseOptions = {}): { node: MdNode; next: number } {
   const ordered = /^\s*\d+[.)]\s/.test(lines[start]);
   const items: MdListItem[] = [];
   let i = start;
@@ -149,6 +158,8 @@ function parseList(lines: string[], start: number): { node: MdNode; next: number
   while (i < lines.length) {
     const m = lines[i].match(RE_LIST);
     if (!m) break;
+    // A numbered item after bullets (or the reverse) starts a new list, as in CommonMark.
+    if (/^\d/.test(m[2]) !== ordered) break;
     const contentCol = m[1].length + m[2].length + m[3].length;
     let rest = m[4];
 
@@ -183,7 +194,7 @@ function parseList(lines: string[], start: number): { node: MdNode; next: number
     items.push({
       checked,
       lead: parseInline(rest),
-      children: childLines.length ? parseBlocks(childLines) : [],
+      children: childLines.length ? parseBlocks(childLines, options) : [],
     });
   }
 

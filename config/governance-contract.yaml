@@ -146,7 +146,8 @@ agent_workflow:
 # repo (TASK-4348). The generator renders it into both MCP servers'
 # instructions, filled in with the session's repo, so every MCP-connected agent
 # gets the current steps at session start. `--fleet DIR` also writes it into a
-# marked block in each tracked repo's AGENTS.md and CLAUDE.md. {repo},
+# marked block in each tracked repo's AGENTS.md and CLAUDE.md (fleet_overrides
+# names other files); each repo keeps its own heading above the block. {repo},
 # {default_bucket} and {integration_branch} come from
 # config/tracked-repos-registry.json. Each step restates a rule above in one
 # sentence or three; change the rule above and the step together.
@@ -171,6 +172,12 @@ handshake:
     fleet_files:
       - AGENTS.md
       - CLAUDE.md
+    # agentic-swarm keeps its rules in docs/AGENT-RULES.md (AR-01); its CLAUDE.md
+    # and AGENTS.md hold only a pointer and the file's sha256 (AR-16). After
+    # --fleet changes that file, run its scripts/check-agent-rules-drift.py --write.
+    fleet_overrides:
+      petralabx/agentic-swarm:
+        - docs/AGENT-RULES.md
 
 repo_hygiene:
   forbidden_root_patterns:

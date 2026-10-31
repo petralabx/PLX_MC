@@ -39,7 +39,7 @@ HANDSHAKE_START = "<!-- plx-mc:handshake:start -->"
 HANDSHAKE_END = "<!-- plx-mc:handshake:end -->"
 # A hand-written handshake section that --fleet may replace once, on adoption.
 HANDWRITTEN_HANDSHAKE = re.compile(
-    r"^## Mission Control handshake\b[^\n]*\n.*?(?=^## |\Z)", re.M | re.S
+    r"^(## Mission Control handshake\b[^\n]*\n)(.*?)(?=^## |\Z)", re.M | re.S
 )
 
 START_MARKER = "<!-- governance:auto:start -->"
@@ -187,10 +187,10 @@ def repo_values(slug: str, info: dict) -> dict[str, str]:
 
 def render_fleet_block(h: dict, slug: str, info: dict) -> str:
     values = repo_values(slug, info)
+    # No heading inside the block: each repo keeps its own heading (agentic-swarm's
+    # is a numbered AR rule with an Enforcement line), so the block fits any layout.
     out = [
         HANDSHAKE_START,
-        f"## {h['title']}",
-        "",
         f"Generated from PLX_MC [`config/governance-contract.yaml`]({h['full_rules']}) by "
         "`scripts/generate-governance-surfaces.py --fleet`. Do not edit this block: change the "
         "contract and regenerate.",
@@ -274,7 +274,15 @@ def splice_handshake(text: str, block: str) -> str | None:
         return pre + block + post
     match = HANDWRITTEN_HANDSHAKE.search(text)
     if match:
-        return text[: match.start()] + block + "\n\n" + text[match.end() :].lstrip("\n")
+        heading = match.group(1)
+        rest = text[match.end() :]
+        return (
+            text[: match.start()]
+            + heading
+            + "\n"
+            + block
+            + ("\n\n" + rest if rest else "\n")
+        )
     return None
 
 
@@ -293,7 +301,12 @@ def fleet(h: dict, repos: dict[str, dict], parent: Path, check_mode: bool) -> in
         if root is None:
             continue
         block = render_fleet_block(h, slug, info)
-        for rel in h["surfaces"]["fleet_files"]:
+        files = (
+            h["surfaces"]
+            .get("fleet_overrides", {})
+            .get(slug, h["surfaces"]["fleet_files"])
+        )
+        for rel in files:
             path = root / rel
             if not path.exists():
                 continue

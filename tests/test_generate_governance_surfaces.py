@@ -94,6 +94,12 @@ def test_fleet_adopts_a_handwritten_section_then_checks_clean(
         in text
     )
     assert text.startswith("# CLAUDE.md\n\nIntro stays.\n\n")
+    # The repo keeps its own heading; the block replaces only the section body.
+    assert (
+        "## Mission Control handshake (Claude Code and every agent)\n\n"
+        + gen.HANDSHAKE_START
+        in text
+    )
     assert "## Workstream protocol\n\nWorkstream text stays.\n" in text
 
     assert gen.fleet(handshake, repos, tmp_path, check_mode=True) == 0
@@ -142,4 +148,28 @@ def test_fleet_leaves_the_hub_alone(
 ) -> None:
     root = make_repo(tmp_path, "PLX_MC", {"CLAUDE.md": HANDWRITTEN})
     assert gen.fleet(handshake, repos, tmp_path, check_mode=False) == 0
+    assert (root / "CLAUDE.md").read_text(encoding="utf-8") == HANDWRITTEN
+
+
+def test_fleet_uses_a_repos_override_files_only(
+    tmp_path: Path, handshake: dict, repos: dict
+) -> None:
+    # agentic-swarm keeps its rules in docs/AGENT-RULES.md under an AR heading;
+    # its CLAUDE.md is a pointer file that --fleet must not touch.
+    rules = (
+        "### AR-01 Mission Control handshake\n\nEnforcement: GitHub, MC.\n\n"
+        f"{gen.HANDSHAKE_START}\nold\n{gen.HANDSHAKE_END}\n\nVMC note stays.\n"
+    )
+    root = make_repo(tmp_path, "agentic-swarm", {"CLAUDE.md": HANDWRITTEN})
+    (root / "docs").mkdir()
+    (root / "docs" / "AGENT-RULES.md").write_text(rules, encoding="utf-8")
+
+    assert gen.fleet(handshake, repos, tmp_path, check_mode=True) == 1
+    assert gen.fleet(handshake, repos, tmp_path, check_mode=False) == 0
+    text = (root / "docs" / "AGENT-RULES.md").read_text(encoding="utf-8")
+    assert text.startswith(
+        "### AR-01 Mission Control handshake\n\nEnforcement: GitHub, MC.\n\n"
+    )
+    assert text.endswith(f"{gen.HANDSHAKE_END}\n\nVMC note stays.\n")
+    assert "\nold\n" not in text
     assert (root / "CLAUDE.md").read_text(encoding="utf-8") == HANDWRITTEN

@@ -49,6 +49,7 @@ import { registerProjectTools } from "./project-actions";
 import { registerLinkMergedPrTools } from "./link-merged-pr-actions";
 import { registerSessionTelemetryTools } from "./session-telemetry-actions";
 import { registerDraftTools } from "./draft-actions";
+import { renderHandshake } from "./handshake.generated";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -160,10 +161,12 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       version: "1.0.0",
     },
     {
+      // The rules come from the governance contract, filled in with this session's
+      // repo (TASK-4348); only the tool overview is written here.
       instructions:
         "PLX Mission Control MCP — project/bucket creation, task lifecycle (checkout/progress/complete), routing suggestions (mc_suggest_work), skills directory install/sync/submit, and optional swarm delegation. " +
-        "Prefer mc_suggest_work when the Task is unknown; always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies. " +
-        "A plan that adds a project, or two or more buckets, goes through a draft: mc_save_draft, then mc_submit_draft; its author accepts it in Mission Control.",
+        "Prefer mc_suggest_work when the Task is unknown.\n\n" +
+        renderHandshake(identity.repo),
     }
   );
   // Before any registration: every tool (incl. split modules) returns a thrown

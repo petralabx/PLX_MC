@@ -5,10 +5,10 @@
 // linkage, and the disabled-by-default gating (flag off / not opted in disables
 // capture and promotion). The transcript extractor is injected as a mock — the
 // in-tenant Azure path is never hit here.
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BUCKET_IDX, type Human } from "@/lib/mc-data";
-import { resetStore, taskById } from "@/lib/mc-data/store";
+import { __setStateLoaderForTests, allTasks, resetStore, taskById, type ServerSnapshot } from "@/lib/mc-data/store";
 import {
   draftProposedTask,
   meetingIntakeEnabled,
@@ -215,6 +215,109 @@ describe("capture → triage → promote (governed)", () => {
     // The proposal is marked promoted and leaves the pending queue.
     expect(proposedTasks().find((p) => p.id === proposal.id)?.status).toBe("promoted");
     expect(pendingProposedTasks()).toHaveLength(1);
+  });
+
+  // TASK-4294: a create the server refuses is rolled back, and the item it
+  // came from goes back to the triage queue instead of pointing at nothing.
+  it("puts a proposal back in the queue when the server refuses its task", async () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ error: { code: "forbidden", message: "Refused." } }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      })
+    ));
+    try {
+      const [proposal] = captureFromAiInsights(MEETING, AI_INSIGHTS);
+      const task = promoteProposedTask(proposal.id, { bucket: "BKT-WMS" });
+      expect(proposedTasks().find((p) => p.id === proposal.id)?.status).toBe("promoted");
+      for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+      const back = proposedTasks().find((p) => p.id === proposal.id)!;
+      expect(back.status).toBe("proposed");
+      expect(back.promotedTaskId).toBeUndefined();
+      expect(pendingProposedTasks().map((p) => p.id)).toContain(proposal.id);
+      expect(taskById(task!.id)).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  // TASK-4294: with no clear answer, the reload decides. The item goes back to
+  // the queue if the task did not land, and links the server's task if it did.
+  describe("a promote whose create gets no clear answer", () => {
+    const flush = async () => {
+      for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    const reloadWith = (tasks: () => ReturnType<typeof allTasks>) =>
+      __setStateLoaderForTests(async (): Promise<ServerSnapshot> => ({
+        tasks: structuredClone(tasks()), risks: [], files: [], conflicts: [], errors: [], audit: [], counts: {}, lastSweep: "now",
+      }));
+    beforeEach(() => {
+      vi.stubGlobal("window", {});
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it("puts the item back when the reload has no such task", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }));
+      const before = structuredClone(allTasks());
+      let lookalike = before[0];
+      // A task with the same title and text that did not come from a meeting.
+      reloadWith(() => [...before, lookalike]);
+      const [proposal] = captureFromAiInsights(MEETING, AI_INSIGHTS);
+      const task = promoteProposedTask(proposal.id, { bucket: "BKT-WMS" })!;
+      lookalike = { ...structuredClone(task), id: "TASK-9998", labels: [] };
+      await flush();
+      const back = proposedTasks().find((p) => p.id === proposal.id)!;
+      expect(back.status).toBe("proposed");
+      expect(back.promotedTaskId).toBeUndefined();
+    });
+
+    it("puts the item back when the reload fails too", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }));
+      __setStateLoaderForTests(async () => {
+        throw new TypeError("fetch failed");
+      });
+      const [proposal] = captureFromAiInsights(MEETING, AI_INSIGHTS);
+      promoteProposedTask(proposal.id, { bucket: "BKT-WMS" });
+      await flush();
+      const back = proposedTasks().find((p) => p.id === proposal.id)!;
+      expect(back.status).toBe("proposed");
+      expect(back.promotedTaskId).toBeUndefined();
+    });
+
+    it("links the server's task when the reload shows it landed", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>Gateway timeout</html>", { status: 504 })));
+      let optimisticId = "";
+      reloadWith(() => allTasks().map((t) => (t.id === optimisticId ? { ...t, id: "TASK-9999" } : t)));
+      const [proposal] = captureFromAiInsights(MEETING, AI_INSIGHTS);
+      optimisticId = promoteProposedTask(proposal.id, { bucket: "BKT-WMS" })!.id;
+      await flush();
+      const linked = proposedTasks().find((p) => p.id === proposal.id)!;
+      expect(linked.status).toBe("promoted");
+      expect(linked.promotedTaskId).toBe("TASK-9999");
+      expect(taskById("TASK-9999")?.labels).toContain("from-meeting");
+    });
+
+    it("follows the server's id when the create is accepted under another id", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () =>
+        new Response(JSON.stringify({ data: { id: "TASK-9999", title: "Update the API contract" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        })
+      ));
+      const [proposal] = captureFromAiInsights(MEETING, AI_INSIGHTS);
+      promoteProposedTask(proposal.id, { bucket: "BKT-WMS" });
+      await flush();
+      expect(proposedTasks().find((p) => p.id === proposal.id)?.promotedTaskId).toBe("TASK-9999");
+    });
   });
 
   it("clamps promoted repos to the allow-list", () => {

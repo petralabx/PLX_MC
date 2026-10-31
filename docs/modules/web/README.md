@@ -21,7 +21,15 @@ hardcoded current user) and mirrors every
 mutation through the shared fetch wrapper (`src/lib/api`), staying
 optimistic-local-first so the UI degrades to the last-synced view offline —
 labelled by an app-wide "Offline — showing cached or demo data" banner with
-Retry whenever `GET /api/state` fails (store `dataSource()`).
+Retry whenever `GET /api/state` fails (store `dataSource()`). A task create
+the server refuses is rolled back with a notice that says why, as a failed
+edit is (`patchTaskFields`). A failed conflict resolve, and a create that gets
+no clear answer, show a notice and reload. Once the reload reaches the server,
+its state replaces the optimistic one; offline, the optimistic state stays
+until Retry works. A resolve refused because the session ended does not
+reload, since the reload would leave the page to sign in; the next read does
+that. A promoted sub-task leaves its parent only once the server has created
+its task (`addTask`, `resolveConflict`, `promoteSubtaskToTask`; TASK-4294).
 The getter/action surface is unchanged from the prototype port. It owns
 routing, screens, and client state only — it is NOT the system of record
 (SharePoint is) and NOT the sync engine (the `sync` module is).

@@ -34,7 +34,8 @@ editable description, and enriched sub-tasks. No repo-registry / governance work
   rollback+notice-on-failure). Edit/delete are author-gated.
 - Sub-tasks: `updateSubtask` (keeps `done` ⇄ `status` consistent),
   `reorderSubtasks`, `promoteSubtaskToTask` (reuses `addTask`; inherits the
-  parent bucket + repos and removes the sub-task with a traceable activity line).
+  parent bucket + repos and, once the server has created the task, removes the
+  sub-task with a traceable activity line; TASK-4294).
 - Bucket comments: `addBucketComment` / `editBucketComment` /
   `deleteBucketComment` + `commentsForBucket` getter, backed by a new
   store-authoritative `bucketComments` map (see persistence note below).

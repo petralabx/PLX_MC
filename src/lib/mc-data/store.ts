@@ -12,7 +12,7 @@
 // per-screen state for anything that the topbar pill / sidebar badges or other
 // screens must observe.
 
-import { api } from "@/lib/api";
+import { ApiClientError, api } from "@/lib/api";
 import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 
 import {
@@ -330,14 +330,21 @@ function pushAudit(actor: string, body: string, syncState: SyncState) {
 const canPersist = () => typeof window !== "undefined" && !!window.localStorage;
 
 // Server mirror: fire-and-forget on the client, a no-op on the server/tests.
-// Failures keep the optimistic local state — the UI degrades to the
+// With onFailure, a failure is the caller's to handle (TASK-4294). Without it,
+// failures keep the optimistic local state — the UI degrades to the
 // last-synced view rather than blocking (TOOLS.md fallback path).
-function serverCall(fn: () => Promise<void>) {
+function serverCall(fn: () => Promise<void>, onFailure?: (err: unknown) => void) {
   if (typeof window === "undefined") return;
   void fn().catch((err) => {
+    if (onFailure) return onFailure(err);
     console.warn("[mc-store] server mirror unavailable — staying on local state:", err);
   });
 }
+
+// The server's own answer in the error envelope: it did not take the write. No
+// answer, or one that is not ours, leaves open whether the write landed.
+const isRefusal = (err: unknown): err is ApiClientError =>
+  err instanceof ApiClientError && err.code !== "bad_response" && err.code !== "http_error";
 
 // API response shape of GET /api/state (the engine's snapshot).
 export interface ServerSnapshot {
@@ -549,7 +556,20 @@ export interface NewTaskInput {
 
 // Build a fully-formed task from the modal's form values, append + persist.
 // New tasks land PENDING in the ToDos register until the next sweep.
-export function addTask(input: NewTaskInput): Task {
+// What a caller does once the server has answered addTask (TASK-4294).
+export interface AddTaskHooks {
+  /** The server created the task (with its own id), or there is no server here. */
+  onCreated?: (task: Task) => void;
+  /** The server refused it; the task is already rolled back. */
+  onRefused?: (err: ApiClientError) => void;
+  /**
+   * No clear answer: runs once the reload that follows has settled. reloaded
+   * is false when the board still holds the optimistic task (the reload failed).
+   */
+  onUncertain?: (reloaded: boolean) => void;
+}
+
+export function addTask(input: NewTaskInput, hooks: AddTaskHooks = {}): Task {
   const id = nextTaskId();
   const num = (id.match(/(\d+)/) ?? ["", ""])[1];
   const reporter = input.reporter ?? viewerId();
@@ -603,20 +623,65 @@ export function addTask(input: NewTaskInput): Task {
   state.tasks = [...state.tasks, task];
   const todos = state.lists.find((l) => l.key === "todos");
   if (todos) todos.counts.pending += 1;
+  // A reload that brings ToDos counts replaces this object, and its counts
+  // then leave this create out until the server has it.
+  const counted = todos?.counts;
   emit();
+  // No server here (SSR/tests): the optimistic task stands.
+  if (typeof window === "undefined") {
+    hooks.onCreated?.(task);
+    return task;
+  }
   // Mirror to the engine; the server owns id assignment, so adopt its task
-  // if the optimistic id raced another writer.
-  serverCall(async () => {
-    const created = await api<Task>("/tasks", {
-      method: "POST",
-      body: JSON.stringify({ ...input, reporter, repos }),
-    });
-    const local = state.tasks.findIndex((t) => t.id === id);
-    if (local !== -1 && created.id !== id) {
-      state.tasks[local] = created;
+  // if the optimistic id raced another writer. Match this create's own object,
+  // never its id, which another writer's task can share. A refusal rolls the
+  // task back, as addProject does; with no clear answer, reload so the
+  // server's state shows whether it landed (TASK-4294).
+  serverCall(
+    async () => {
+      const created = await api<Task>("/tasks", {
+        method: "POST",
+        body: JSON.stringify({ ...input, reporter, repos }),
+      });
+      const local = state.tasks.indexOf(task);
+      if (local !== -1) {
+        if (created.id !== id) {
+          state.tasks[local] = created;
+          emit();
+        }
+      } else if (!state.tasks.some((t) => t.id === created.id)) {
+        // A reload while this create was in flight dropped the optimistic
+        // copy; the server has the task now, so show it.
+        state.tasks = [...state.tasks, created];
+        const list = state.lists.find((l) => l.key === "todos");
+        if (list && list.counts !== counted) list.counts.pending += 1;
+        emit();
+      }
+      // The task exists now; a failing follow-up must not roll it back.
+      try {
+        hooks.onCreated?.(created);
+      } catch (hookErr) {
+        console.error("[mc-store] a follow-up after creating a task failed:", hookErr);
+      }
+    },
+    (err) => {
+      if (!isRefusal(err)) {
+        pushNotice(
+          `Couldn't confirm that the new task "${task.title}" was saved: ${
+            err instanceof Error ? err.message : "there was no answer"
+          }. Reloading from the server.`
+        );
+        void loadState().then(() => hooks.onUncertain?.(!state.tasks.includes(task)));
+        return;
+      }
+      if (state.tasks.includes(task)) state.tasks = state.tasks.filter((t) => t !== task);
+      const list = state.lists.find((l) => l.key === "todos");
+      if (list && list.counts === counted && list.counts.pending > 0) list.counts.pending -= 1;
+      pushNotice(`Couldn't save the new task "${task.title}" — it was rolled back. ${err.message}`);
       emit();
+      hooks.onRefused?.(err);
     }
-  });
+  );
   return task;
 }
 
@@ -1211,27 +1276,58 @@ export const reorderSubtasks = (taskId: string, orderedIds: string[]) => {
 // Promote a sub-task into a full governed Task (EN-001 / WS-3). Reuses addTask
 // (Pillar 3) — the new task inherits the parent's bucket + repos, carries the
 // sub-task's description/assignee/due, and the sub-task is removed from the
-// parent. Returns the new task, or null when nothing matched.
+// parent. Returns the new task, or null when nothing matched or this sub-task's
+// promote has not been answered yet.
+const promoting = new Set<string>();
+
 export function promoteSubtaskToTask(taskId: string, subtaskId: string): Task | null {
   const t = taskById(taskId);
   if (!t) return null;
   const sub = t.subtasks.find((s) => s.id === subtaskId);
   if (!sub) return null;
-  const created = addTask({
-    title: sub.t,
-    description: sub.description ?? "",
-    bucket: t.bucket,
-    assignee: sub.assignee ?? null,
-    reporter: viewerId(),
-    repos: t.repos,
-    due: sub.due,
-  });
-  patchTaskFields(
-    taskId,
-    { subtasks: t.subtasks.filter((s) => s.id !== subtaskId) },
-    { activity: `promoted a subtask to ${created.id}` }
+  // The sub-task comes off the parent only once the new task exists, so a
+  // refused create loses nothing. Until the server answers, a second promote
+  // would make a second task (TASK-4294).
+  const key = `${taskId}:${subtaskId}`;
+  if (promoting.has(key)) {
+    pushNotice(`Sub-task "${sub.t}" is already being promoted.`, "info");
+    return null;
+  }
+  promoting.add(key);
+  return addTask(
+    {
+      title: sub.t,
+      description: sub.description ?? "",
+      bucket: t.bucket,
+      assignee: sub.assignee ?? null,
+      reporter: viewerId(),
+      repos: t.repos,
+      due: sub.due,
+    },
+    {
+      onCreated: (created) => {
+        promoting.delete(key);
+        patchTaskFields(
+          taskId,
+          { subtasks: (taskById(taskId)?.subtasks ?? []).filter((s) => s.id !== subtaskId) },
+          { activity: `promoted a subtask to ${created.id}` }
+        );
+      },
+      onRefused: () => {
+        promoting.delete(key);
+      },
+      // The task may exist now or not: the reload shows which, and the person
+      // decides, so nothing is lost or removed by guess.
+      onUncertain: (reloaded) => {
+        promoting.delete(key);
+        pushNotice(
+          reloaded
+            ? `Sub-task "${sub.t}" stays on ${taskId}. If the board now shows it as its own task, remove the sub-task; if not, promote it again.`
+            : `Sub-task "${sub.t}" stays on ${taskId}. The board could not reload: after Retry, check whether it shows as its own task before you remove the sub-task or promote it again.`
+        );
+      },
+    }
   );
-  return created;
 }
 
 // ─── Description (SP-tier — mirrors via the Description column) ────────────────
@@ -1943,14 +2039,33 @@ export function resolveConflict(conflictId: string, winner: "mc" | "sp") {
     "synced"
   );
   emit();
-  // The engine writes the chosen value to the loser and audits the choice.
-  serverCall(async () => {
-    await api(`/sync/conflicts/${conflictId}/resolve`, {
-      method: "POST",
-      body: JSON.stringify({ winner, actor: viewerId() }),
-    });
-    await refreshFromServer();
-  });
+  // The engine writes the chosen value to the loser and audits the choice. On a
+  // refusal or no answer, say so and reload: once the reload reaches the
+  // server, its conflicts, counts and sync state replace this optimistic
+  // resolve; offline, the resolve stays on screen until Retry (TASK-4294). A
+  // reload that fails after a resolve the server took only logs (loadState).
+  // A 404 is not always "already resolved": the engine also declines a value
+  // that way, leaving the conflict open, so it gets the same notice.
+  serverCall(
+    async () => {
+      await api(`/sync/conflicts/${conflictId}/resolve`, {
+        method: "POST",
+        body: JSON.stringify({ winner, actor: viewerId() }),
+      });
+      await loadState();
+    },
+    (err) => {
+      pushNotice(
+        `Couldn't resolve the conflict on ${c.entityId} · ${c.field}. ${
+          err instanceof Error ? err.message : "There was no answer."
+        }`
+      );
+      // A reload is a read: after a 401 it would leave the page to sign in and
+      // drop this notice. The next read does that anyway.
+      if (isRefusal(err) && err.code === "signin_required") return;
+      void loadState();
+    }
+  );
 }
 
 // Retry a push error. The mapping layer normalizes the Likelihood value
@@ -2035,5 +2150,6 @@ export function resetStore() {
   sweepMirror = defaultSweepMirror;
   sweepMirrorInjected = false;
   sweeping = null;
+  promoting.clear();
   emit();
 }

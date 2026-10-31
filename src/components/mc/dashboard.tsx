@@ -162,7 +162,12 @@ function bucketMeta(row: BucketProgress, withProject: boolean) {
   const lead = withProject ? `${row.project.name} · ` : "";
   if (row.total === 0) return `${lead}No tasks yet`;
   const moving = row.inProgress > 0 ? `, ${fmt(row.inProgress)} in progress` : "";
-  return `${lead}${fmt(row.closedTasks)} of ${fmt(row.total)} closed · ${fmt(row.done)} done · ${fmt(row.cancelled)} cancelled · ${fmt(row.remaining)} left${moving}`;
+  return `${lead}${fmt(row.closedTasks)} of ${fmt(row.total)} closed · ${fmt(row.done)} done · ${fmt(row.cancelled)} cancelled${unconfirmedText(row)} · ${fmt(row.remaining)} left${moving}`;
+}
+
+/** " · N unconfirmed" for STALE closes (TASK-4200); empty when there are none. */
+function unconfirmedText(counts: ProgressCounts): string {
+  return counts.unconfirmed > 0 ? ` · ${fmt(counts.unconfirmed)} unconfirmed` : "";
 }
 
 function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
@@ -281,7 +286,7 @@ export function DashboardView({ nav }: ScreenProps) {
               <span style={{ width: widthOf(summary.pctDone) }} />
             </span>
             <span className="dash-sub">
-              {summary.total > 0 ? `${pctText(summary.pctDone, 1)} of ${plural(summary.total, "task", "tasks")} · ${fmt(summary.done)} done · ${fmt(summary.cancelled)} cancelled` : "No tasks yet"}
+              {summary.total > 0 ? `${pctText(summary.pctDone, 1)} of ${plural(summary.total, "task", "tasks")} · ${fmt(summary.done)} done · ${fmt(summary.cancelled)} cancelled${unconfirmedText(summary)}` : "No tasks yet"}
             </span>
           </div>
           <div className="kpi">
@@ -337,7 +342,7 @@ export function DashboardView({ nav }: ScreenProps) {
                     pressed={focus?.project.id === p.project.id}
                     onSelect={() => selectProject(p.project.id)}
                   >
-                    {fmt(p.closedTasks)} of {fmt(p.total)} closed · {fmt(p.done)} done · {fmt(p.cancelled)} cancelled · {fmt(p.remaining)} left · {plural(p.buckets, "initiative", "initiatives")}
+                    {fmt(p.closedTasks)} of {fmt(p.total)} closed · {fmt(p.done)} done · {fmt(p.cancelled)} cancelled{unconfirmedText(p)} · {fmt(p.remaining)} left · {plural(p.buckets, "initiative", "initiatives")}
                   </ProgressRow>
                 ))
               )}

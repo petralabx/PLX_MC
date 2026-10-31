@@ -225,9 +225,11 @@ Routing mutations fail closed when required registers are stale.
 
 ### Audit boundary
 
-Every adoption, invalid-row skip, conflict, human-over-service precedence
-event, and sweep outcome appends to `sync_audit_log`. Conflict/error queues
-retain history after resolution.
+Every adoption, invalid-row skip, conflict, applied human-over-service
+precedence event, and sweep outcome appends to `sync_audit_log`. In the ToDos
+task pull, a refused field writes its conflict, never a precedence line
+(TASK-4286).
+Conflict/error queues retain history after resolution.
 
 ### Key files
 

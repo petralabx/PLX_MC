@@ -44,7 +44,7 @@ import {
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { isCreatorApprovalGated } from "@/lib/permissions";
 import { createLabelsWithKind } from "@/lib/tasks/kind";
-import { isUatTicketTask } from "@/lib/tasks/uat-labels";
+import { isUatTicketTask, staleLabelCreateViolation, uatCreateStageViolation } from "@/lib/tasks/uat-labels";
 import {
   assertBucketProjectAccess,
   assertProjectIdAccess,
@@ -286,13 +286,18 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
   if (input.stage === "verified") throw new ApiError("verified_needs_person", VERIFIED_NEEDS_PERSON, 403);
   const principal = aclPrincipalFromMcp(identity);
   await assertBucketProjectAccess(input.bucket, principal);
+  // createTask refuses uat:stale too (TASK-4200); refused here first, so the
+  // refusal comes before the idempotency claim and does not use up the key.
+  const staleViolation = staleLabelCreateViolation(input.labels);
+  if (staleViolation) throw new ApiError("forbidden", staleViolation, 403);
+  // So does a UAT ticket task at merged or verified (TASK-4286), against the
+  // labels createTask will store.
+  const labels = createLabelsWithKind(input.labels, input.kind);
+  const stageViolation = uatCreateStageViolation(labels, input.stage);
+  if (stageViolation) throw new ApiError("forbidden", stageViolation, 403);
   // Evidence standard (TASK-3165): a task a person must verify gets an STE-lite
-  // description. Checked before the idempotency claim, like the checks above,
-  // against the labels createTask will store.
-  const evidenceStandard = evidenceStandardReport(
-    input.description ?? "",
-    requiresHumanVerification(createLabelsWithKind(input.labels, input.kind))
-  );
+  // description. Checked before the idempotency claim, like the checks above.
+  const evidenceStandard = evidenceStandardReport(input.description ?? "", requiresHumanVerification(labels));
   assertEvidenceStandard("The task description", evidenceStandard);
   const standardMeta = evidenceStandard.applies ? { evidenceStandard } : {};
   // TASK-3530: a gated creator's task starts with a pending creator approval,

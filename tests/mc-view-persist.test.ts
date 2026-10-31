@@ -69,6 +69,13 @@ describe("sanitizeFilterState — the F↔E trust boundary (SPEC §3.A.4)", () =
     expect(sanitizeFilterState(clean)).toEqual(clean);
   });
 
+  // TASK-4200 (S1-09): an Insights drill-down can carry the STALE-close facet.
+  it("keeps a boolean staleClosed and drops any other value", () => {
+    expect(sanitizeFilterState({ stage: ["merged"], staleClosed: false })).toEqual({ stage: ["merged"], staleClosed: false });
+    expect(sanitizeFilterState({ staleClosed: true })).toEqual({ staleClosed: true });
+    expect(sanitizeFilterState({ staleClosed: "no" })).toEqual({});
+  });
+
   it("drops an unknown priority enum value", () => {
     const out = sanitizeFilterState({ priority: ["urgent", "bogus", "high"] });
     expect(out.priority).toEqual(["urgent", "high"]);

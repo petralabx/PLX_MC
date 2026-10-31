@@ -142,9 +142,11 @@ const COS_MCP_CAPABILITIES: readonly Capability[] = [
 // CIP. Not CIP's bucket, project, routing, approval, question, telemetry, sync
 // or draft rights. It keeps its two portal-only grants: agent_report.read
 // (fleet P8b, GET /api/cursor/agent-reports) and task.uat_sync (TASK-3697, the
-// UAT ticket mirror through mc_update_task). Only the portal holds either. It
-// no longer has a tool allowlist in src/lib/mcp/tool-allowlist.ts; each
-// action's capability check limits it.
+// UAT ticket mirror through mc_update_task). TASK-4200 widens task.uat_sync
+// with closeStale, which only adds uat:stale to a merged UAT ticket task; the
+// capability list does not change (Vince's OK, 2026-10-30). Only the portal
+// holds either grant. It no longer has a tool allowlist in
+// src/lib/mcp/tool-allowlist.ts; each action's capability check limits it.
 // Defined below CLOSE_OUT_MCP_CAPABILITIES (sp_mcp_cip's grant), which it filters.
 
 // sp_mcp_workbench (PLX Agent Workbench, tswaterloo/OntologyProject): read-only,

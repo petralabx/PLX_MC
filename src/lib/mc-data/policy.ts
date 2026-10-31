@@ -6,7 +6,7 @@
 //   3. a task cannot reach a done stage (merged/verified) with an incomplete
 //      evidence bundle (the completion contract — reuses evidenceComplete).
 
-import { isUatTicketTask } from "@/lib/tasks/uat-labels";
+import { isStaleClosed, isUatTicketTask } from "@/lib/tasks/uat-labels";
 import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
 import { bandOf, evidenceComplete } from "./helpers";
 import type { ApprovalGate, StageKey, Task, TaskQuestion } from "./types";
@@ -24,10 +24,12 @@ export function isClosedStage(stage: StageKey): boolean {
   return TERMINAL_STAGES.includes(stage);
 }
 
-/** Stage-derived progress: cancelled closes work without counting as delivered. */
+/** Stage-derived progress: cancelled and unconfirmed close work without counting as delivered. */
 export interface TaskProgressCounts {
   done: number;
   cancelled: number;
+  /** Closed as STALE (TASK-4200): a re-test nobody answered. Closed, never done, never open. */
+  unconfirmed: number;
   closedTasks: number;
   inProgress: number;
   notStarted: number;
@@ -37,20 +39,24 @@ export interface TaskProgressCounts {
   pctDone: number | null;
 }
 
-export function taskProgressTotals(done: number, inProgress: number, notStarted: number, cancelled: number): TaskProgressCounts {
-  const closedTasks = done + cancelled;
+export function taskProgressTotals(
+  done: number, inProgress: number, notStarted: number, cancelled: number, unconfirmed: number
+): TaskProgressCounts {
+  const closedTasks = done + cancelled + unconfirmed;
   const remaining = inProgress + notStarted;
   const total = closedTasks + remaining;
-  return { done, cancelled, closedTasks, inProgress, notStarted, remaining, total, pctDone: total > 0 ? closedTasks / total : null };
+  return { done, cancelled, unconfirmed, closedTasks, inProgress, notStarted, remaining, total, pctDone: total > 0 ? closedTasks / total : null };
 }
 
 type RollupTask = Pick<Task, "stage"> & { labels?: readonly string[] };
 
 // A UAT ticket fix is done when its submitter verifies it, not when its PR
 // merges (TASK-3697): until the portal sets verified, a merged UAT ticket task
-// is in progress, awaiting re-test. Every other task is done at merged.
+// is in progress, awaiting re-test. Every other task is done at merged. A
+// re-test nobody answered closes as STALE (uat:stale, TASK-4200): closed and
+// unconfirmed, no longer awaiting anything.
 export function awaitsRetest(task: RollupTask): boolean {
-  return task.stage === "merged" && isUatTicketTask(task);
+  return task.stage === "merged" && isUatTicketTask(task) && !isStaleClosed(task);
 }
 
 /** Open in progress rollups and their task lists: not closed, or awaiting re-test. */
@@ -61,16 +67,18 @@ export function isOpenInRollup(task: RollupTask): boolean {
 export function countTaskProgress(tasks: readonly RollupTask[]): TaskProgressCounts {
   let done = 0;
   let cancelled = 0;
+  let unconfirmed = 0;
   let inProgress = 0;
   let notStarted = 0;
   for (const task of tasks) {
     if (!isOpenInRollup(task)) {
       if (task.stage === "cancelled") cancelled += 1;
+      else if (isStaleClosed(task)) unconfirmed += 1;
       else done += 1;
     } else if (bandOf(task.stage) === "doing" || awaitsRetest(task)) inProgress += 1;
     else notStarted += 1;
   }
-  return taskProgressTotals(done, inProgress, notStarted, cancelled);
+  return taskProgressTotals(done, inProgress, notStarted, cancelled, unconfirmed);
 }
 
 // Stages that mean "done" for the completion contract.

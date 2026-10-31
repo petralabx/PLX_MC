@@ -15,6 +15,7 @@ import { patchTask } from "@/lib/sync";
 import { cancelTask, reopenTask } from "@/lib/sync/cancel";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import { assertMoveTargetProjectOpen } from "@/lib/sync/bucket-move";
+import { staleLabelPatchViolation, UAT_STALE_LABEL } from "@/lib/tasks/uat-labels";
 
 const STAGES = ["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"] as const;
 
@@ -130,6 +131,18 @@ export const PATCH = route(async (req, ctx) => {
         }
         throw err;
       }
+      // The reopen ends the STALE close and drops uat:stale (TASK-4200), so the
+      // label echoed back from the client's read of the cancelled task is no add.
+      // The rest of the patch commits with the reopen (TASK-4292), so a uat:stale
+      // add is refused before that write.
+      const prior = (current.data.labels as string[] | undefined) ?? [];
+      if (rest.labels && prior.includes(UAT_STALE_LABEL)) {
+        rest.labels = rest.labels.filter((label) => label !== UAT_STALE_LABEL);
+      }
+      const staleViolation = rest.labels
+        ? staleLabelPatchViolation(prior.filter((label) => label !== UAT_STALE_LABEL), rest.labels, false)
+        : null;
+      if (staleViolation) throw new ApiError("forbidden", `Task ${id}: ${staleViolation}`, 403);
       const { task } = await reopenTask(id, { stage }, {
         actor: reopener.auditLabel,
         actorId: reopener.actorId,

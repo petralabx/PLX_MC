@@ -2,7 +2,8 @@
 // (TASK-2529). The data rules and the single transaction live in
 // lib/sync/cancel.ts; this file adds the capability check for closing or reopening a task, the input
 // schemas, and the MCP identity -> audit context mapping. mc_update_task's
-// verify (TASK-3697) shares the capability check and the audit context.
+// verify (TASK-3697) and closeStale (TASK-4200) share the capability check and
+// the audit context.
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import * as complianceRepo from "@/lib/compliance/repo";
@@ -30,18 +31,27 @@ export const verifyPatchSchema = z.object({
   note: z.string().trim().max(2000).optional(),
 }).strict();
 
-type CloseAction = "cancel" | "reopen" | "verify";
+// The portal's STALE close of a UAT ticket task: nobody answered its re-test
+// (TASK-4200). It only adds uat:stale to the merged task. staleClosedAt is when
+// the portal closed the ticket as STALE; the audited event records it.
+export const staleClosePatchSchema = z.object({
+  note: z.string().trim().max(2000).optional(),
+  staleClosedAt: z.iso.datetime({ offset: true }).optional(),
+}).strict();
+
+type CloseAction = "cancel" | "reopen" | "verify" | "close_stale";
 
 const CLOSE_CAPABILITY = {
-  cancel: "task.cancel", reopen: "task.reopen", verify: "task.uat_sync",
+  cancel: "task.cancel", reopen: "task.reopen", verify: "task.uat_sync", close_stale: "task.uat_sync",
 } as const satisfies Record<CloseAction, Capability>;
 
 /**
- * Cancel needs `task.cancel`, reopen `task.reopen` and verify `task.uat_sync`,
- * evaluated on the authenticated service principal (reviewed registry,
- * src/lib/permissions/grants.ts).
+ * Cancel needs `task.cancel`, reopen `task.reopen`, and verify and closeStale
+ * `task.uat_sync`, evaluated on the authenticated service principal (reviewed
+ * registry, src/lib/permissions/grants.ts).
  * The caller-supplied operator email is audit context only and grants nothing.
- * A denial is also recorded as `task.cancel_denied` / `task.reopen_denied` / `task.verify_denied`.
+ * A denial is also recorded as `task.cancel_denied` / `task.reopen_denied` /
+ * `task.verify_denied` / `task.close_stale_denied`.
  */
 export async function assertMayCloseOrReopen(
   identity: McpIdentity,

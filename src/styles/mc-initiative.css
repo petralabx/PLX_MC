@@ -315,6 +315,7 @@
 }
 
 .mc .uat-row.uat-head,
+.mc .uat-row.g-stale,
 .mc .uat-row.g-verified,
 .mc .uat-row.g-cancelled,
 .mc .uat-note {

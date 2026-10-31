@@ -11,6 +11,7 @@ import {
   TASKS,
 } from "./data";
 import type { ApprovalEvidenceRef, Band, Confidence, Evidence, Health, ProjectStatus, StageKey, Task } from "./types";
+import { isStaleClosed } from "@/lib/tasks/uat-labels";
 
 const PETRA_EMAIL = /^[^@\s]+@(petralabx|petrasoap)\.com$/i;
 
@@ -83,6 +84,8 @@ export function tasksForUser(userId: string, tasks: Task[] = TASKS): Task[] {
 // One quiet read per task: ready / building / gap / blocked.
 export function confidenceOf(task: Task): Confidence {
   if (task.stage === "cancelled") return { state: "gap", label: "Cancelled", pct: 0 };
+  // Closed as STALE (TASK-4200): the fix merged, but nobody confirmed it.
+  if (isStaleClosed(task)) return { state: "gap", label: "STALE", pct: 0 };
   if (task.blocked) return { state: "blocked", label: "Blocked", pct: 0 };
   if (task.stage === "verified" || task.stage === "merged") {
     return { state: "ready", label: task.stage === "verified" ? "Verified" : "Merged", pct: 100 };

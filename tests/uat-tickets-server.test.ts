@@ -158,6 +158,20 @@ describe("readPortalTickets", () => {
     expect(init.method ?? "GET").toBe("GET");
   });
 
+  // TASK-4200: the portal closes an unanswered re-test as gold STALE. One
+  // STALE row must not fail the whole read; an unknown status still does.
+  it("accepts a STALE ticket, and still fails visibly on a status it does not know", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    h.portalReadEnabled.mockReturnValue(true);
+    const stale: PortalTicket = { ...portalTicket, status: "STALE", step: "STALE, no re-test result", expectsTask: false };
+    const read = (tickets: unknown[]) => readPortalTickets(NOW, vi.fn(async () => jsonResponse({ tickets })));
+    expect(await read([portalTicket, stale])).toEqual({ status: "ok", at: NOW.toISOString(), tickets: [portalTicket, stale] });
+    expect(await read([portalTicket, { ...stale, status: "ARCHIVED" }])).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("expected shape"),
+    });
+  });
+
   it("turns every failure into a visible error, never an empty snapshot", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     h.portalReadEnabled.mockReturnValue(true);

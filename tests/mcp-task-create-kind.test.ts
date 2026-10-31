@@ -4,18 +4,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpIdentity } from "@/lib/mcp/auth";
 import { taskCreatePayloadHash } from "@/lib/mcp/task-create-idempotency";
 
-const db = vi.hoisted(() => ({ tasks: [] as { labels: string[] }[] }));
+// Transactions opened: a refused create must open none, or it would burn a TASK id (nextval).
+const db = vi.hoisted(() => ({ tasks: [] as { labels: string[] }[], transactions: 0 }));
 
 vi.mock("@/lib/db", () => ({
-  withTransaction: async <T>(fn: (q: unknown) => Promise<T>) =>
-    fn(async (sql: string, params: unknown[] = []) => {
+  withTransaction: async <T>(fn: (q: unknown) => Promise<T>) => {
+    db.transactions += 1;
+    return fn(async (sql: string, params: unknown[] = []) => {
       if (sql.includes("nextval")) return [{ next_id: 700 + db.tasks.length }];
       if (sql.includes("INSERT INTO entities")) {
         db.tasks.push(JSON.parse(String(params[1])));
         return [{ id: params[0] }];
       }
       return [];
-    }),
+    });
+  },
 }));
 vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
@@ -40,6 +43,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 }));
 
 import { actionCreateTask } from "@/lib/mcp/actions";
+import { createTask } from "@/lib/sync";
 
 const identity: McpIdentity = {
   operatorEmail: "vince@petrasoap.com", runtime: "cursor", workerId: "kind-test",
@@ -49,7 +53,7 @@ const identity: McpIdentity = {
 const create = (extra: Record<string, unknown> = {}) =>
   actionCreateTask(identity, { title: "T", bucket: "BKT-OPS", reporter: "x", ...extra });
 
-beforeEach(() => { db.tasks.length = 0; });
+beforeEach(() => { db.tasks.length = 0; db.transactions = 0; });
 
 describe("actionCreateTask kind", () => {
   it("defaults a task with no labels to kind:needs-review and never rejects a missing kind", async () => {
@@ -73,6 +77,46 @@ describe("actionCreateTask kind", () => {
     await expect(create({ labels: ["kind:code", "kind:decision"] })).rejects.toMatchObject({ status: 400 });
     await expect(create({ labels: ["kind:banana"] })).rejects.toMatchObject({ status: 400 });
     expect(db.tasks).toEqual([]);
+  });
+
+  // TASK-4200: uat:stale comes only from the portal's closeStale on a merged
+  // UAT ticket task, so no task is ever created with it.
+  it("refuses a uat:stale label with 403, in any case and with spaces", async () => {
+    for (const labels of [["kind:code", "uat:cmfb7q2xk0001", "uat:stale"], ["UAT:Stale"], [" uat:stale "]]) {
+      await expect(create({ labels, kind: "code" })).rejects.toMatchObject({
+        code: "forbidden",
+        status: 403,
+        message: expect.stringContaining("closeStale"),
+      });
+    }
+    expect(db.tasks).toEqual([]);
+  });
+
+  // TASK-4286: a UAT ticket task starts before merged (the portal creates it in
+  // backlog), and only the portal's verify moves it to verified. No create starts
+  // there: not the REST door (POST /api/cursor/tasks, actionCreateTask), nor the web door
+  // (createTask). mc_create_task has no stage field.
+  it("refuses a UAT ticket task created at merged or verified with 403 and writes nothing", async () => {
+    const cases: [{ labels: string[]; kind?: "code" }, "merged" | "verified"][] = [
+      [{ labels: ["uat:cmfb7q2xk0001"], kind: "code" }, "verified"],
+      [{ labels: ["kind:code", "uat:cmfb7q2xk0001"] }, "merged"],
+    ];
+    for (const [extra, stage] of cases) {
+      // A verified create is refused first by the person-only rule (W02). Merged
+      // still hits the UAT ticket rule. The web door keeps the UAT message.
+      const mcpCode = stage === "verified" ? "verified_needs_person" : "forbidden";
+      await expect(create({ ...extra, stage })).rejects.toMatchObject({ code: mcpCode, status: 403 });
+      await expect(createTask({ title: "T", bucket: "BKT-OPS", reporter: "vince@petrasoap.com", ...extra, stage }))
+        .rejects.toMatchObject({ code: "forbidden", status: 403, message: expect.stringContaining("UAT ticket task") });
+    }
+    expect(db.tasks).toEqual([]);
+    expect(db.transactions).toBe(0);
+  });
+
+  it("still creates a UAT ticket task at a working stage, and refuses any task born Verified", async () => {
+    expect((await create({ labels: ["uat:cmfb7q2xk0001"], kind: "code", stage: "progress" })).task.stage).toBe("progress");
+    await expect(create({ kind: "code", stage: "verified" })).rejects.toMatchObject({ code: "verified_needs_person", status: 403 });
+    expect(db.tasks).toHaveLength(1);
   });
 });
 

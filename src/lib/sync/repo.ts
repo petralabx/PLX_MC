@@ -24,6 +24,7 @@ import type {
 import { creatorApprovalViolation, TERMINAL_STAGES } from "@/lib/mc-data/policy";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { ApiError } from "@/lib/api/route";
+import { endsStaleClose, UAT_STALE_LABEL, uatVerifyViolation } from "@/lib/tasks/uat-labels";
 import type {
   EntityData,
   EntityType,
@@ -267,6 +268,9 @@ export async function updateEntity(
     // Set only by the reopen service: the one caller allowed to move a cancelled
     // task to another stage.
     reopen?: boolean;
+    // Set only by the portal's UAT verify (through patchTask): the one caller
+    // allowed to move a UAT ticket task to verified (TASK-3963, TASK-4286).
+    uatVerify?: boolean;
   },
   q: TxQuery = query
 ): Promise<void> {
@@ -302,6 +306,12 @@ export async function updateEntity(
   const dirtyFields = firstCompletion
     ? [...new Set([...(opts.dirtyFields ?? row.dirty_fields), "completedAt"])]
     : opts.dirtyFields;
+  // A move that ends a STALE close drops uat:stale in this same UPDATE (TASK-4200),
+  // so a reworked fix that merges again awaits re-test on every door.
+  const labels = (data as Partial<Task>).labels;
+  if (type === "task" && labels?.includes(UAT_STALE_LABEL) && endsStaleClose(row.data.stage as string | undefined, nextStage)) {
+    data.labels = labels.filter((label) => label !== UAT_STALE_LABEL);
+  }
   // cancellation <=> stage cancelled. This is the one write path (UI, MCP,
   // SharePoint inbound, conflict keep-SP), so the invariant is held here: entering
   // cancelled needs a validated object, leaving it clears the column, and a
@@ -317,6 +327,13 @@ export async function updateEntity(
   if (type === "task" && nextStage !== undefined && nextStage !== row.data.stage) {
     const violation = creatorApprovalViolation({ id, creatorApproval: (data as Partial<Task>).creatorApproval }, nextStage);
     if (violation) throw new ApiError("creator_approval_pending", violation, 409);
+  }
+  // The portal's verify alone moves a UAT ticket task to verified (TASK-3963),
+  // held here too so a SharePoint inbound pull or a conflict keep-SP cannot
+  // skip it (TASK-4286). The engine turns the refusal into a Sync conflict.
+  if (type === "task") {
+    const violation = uatVerifyViolation(id, row.data as Partial<Task>, data as Partial<Task>, nextStage, !!opts.uatVerify);
+    if (violation) throw new ApiError("uat_verify_required", violation, 403);
   }
   if (entersCancelled && !opts.cancellation) {
     throw new ApiError(

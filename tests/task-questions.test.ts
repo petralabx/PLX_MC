@@ -330,17 +330,17 @@ describe("answerQuestion", () => {
     expect(comment.body.endsWith("A: ask Sam")).toBe(true);
   });
 
-  it("refuses anyone but the addressee, an owner included, and audits the attempt", async () => {
+  it("refuses anyone but the addressee (non-owner) and audits the attempt", async () => {
     seedTask("TASK-1", { questions: [question()] });
     await expect(
-      answerQuestion({ taskId: "TASK-1", questionId: "q_1", choice: 0, answeredBy: "vince" })
+      answerQuestion({ taskId: "TASK-1", questionId: "q_1", choice: 0, answeredBy: "stephen" })
     ).rejects.toMatchObject({ code: "not_addressee", status: 403 });
     expect(stored("TASK-1").questions?.[0]?.status).toBe("open");
     expect(stored("TASK-1").comments).toEqual([]);
     expect(h.patches).toHaveLength(0);
     expect(h.txEvents).toHaveLength(0);
     expect(h.events).toEqual([
-      expect.objectContaining({ kind: "question.denied", actor: "vince", payload: { questionId: "q_1", addressee: "ricardo" } }),
+      expect.objectContaining({ kind: "question.denied", actor: "stephen", payload: { questionId: "q_1", addressee: "ricardo" } }),
     ]);
   });
 
@@ -348,8 +348,37 @@ describe("answerQuestion", () => {
     seedTask("TASK-1", { questions: [question()] });
     h.auditFails = true;
     await expect(
-      answerQuestion({ taskId: "TASK-1", questionId: "q_1", choice: 0, answeredBy: "vince" })
+      answerQuestion({ taskId: "TASK-1", questionId: "q_1", choice: 0, answeredBy: "stephen" })
     ).rejects.toMatchObject({ code: "not_addressee", status: 403 });
+  });
+
+  it("owner override (TASK-4308): the owner answers a question addressed to someone else, logged", async () => {
+    seedTask("TASK-1", { questions: [question()] });
+    const { question: q } = await answerQuestion({ taskId: "TASK-1", questionId: "q_1", choice: 0, answeredBy: "vince" });
+    expect(q).toMatchObject({ status: "answered", addressee: "ricardo", answer: { choice: 0, answeredBy: "vince" } });
+    expect(h.events).toHaveLength(0);
+    expect(h.txEvents).toEqual([
+      expect.objectContaining({
+        kind: "question.owner_override",
+        actor: "vince",
+        taskId: "TASK-1",
+        payload: { questionId: "q_1", reasonCode: "not_addressee", addressee: "ricardo", at: q.answer!.answeredAt },
+      }),
+      expect.objectContaining({ kind: "question.answered", actor: "vince" }),
+    ]);
+  });
+
+  it("routing is unchanged by the owner override: a question for ricardo stays addressed to ricardo", async () => {
+    seedTask("TASK-1", {});
+    const { question: q } = await askQuestion({ ...ask, addressee: "ricardo@petrasoap.com" });
+    expect(q.addressee).toBe("ricardo");
+    expect(JSON.stringify([...h.events, ...h.txEvents])).not.toContain("owner_override");
+  });
+
+  it("owner override accepts the owner's email form too", async () => {
+    seedTask("TASK-1", { questions: [question()] });
+    await expect(answerQuestion({ taskId: "TASK-1", questionId: "q_1", choice: 0, answeredBy: "vince@petrasoap.com" }))
+      .resolves.toMatchObject({ question: { status: "answered" } });
   });
 
   it("answers once: a second answer is a conflict", async () => {

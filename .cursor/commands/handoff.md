@@ -9,6 +9,8 @@ pick it up.
 2. Rewrite every section from this session: Status (with date), Done (PR links), Next steps,
    Decisions and why (dated), Open questions, Files / areas touched, How to run the tests,
    Blockers or dependencies on other workstreams, Last updated (YYYY-MM-DD). Replace stale text.
+   Name each TASK id, but never type a PR's or task's state: Mission Control holds it, and the
+   SessionStart hook prints it live.
 3. Update the index row only if the status changed or the workstream opened or closed.
 4. Run `node scripts/workstream-note.mjs check`, then commit the note with the work.
 5. SharePoint `Agent Handoffs/` is the system of record for durable handoffs; file there too when

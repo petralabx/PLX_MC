@@ -3,7 +3,7 @@
 - Slug: `<slug>` (this file is `docs/workstreams/<slug>.md`)
 - Owner: <accountable person> · agents: <runtime/lane, …>
 - Branches: `<branch>`
-- MC tasks: TASK-<n>
+- MC tasks: TASK-<n>, TASK-<n> (name each one; the SessionStart hook prints its live stage and PRs)
 - SharePoint handoff: <link, or n/a>
 
 ## Goal
@@ -12,11 +12,12 @@
 
 ## Status
 
-<active | blocked | paused | done>, as of <YYYY-MM-DD>. <One line on where it stands.>
+<active | blocked | paused | done>, as of <YYYY-MM-DD>. <One line on what the work is doing. Never type a PR's
+or task's state (open, in review, waiting, merged): it goes stale at the next merge. Mission Control holds it.>
 
 ## Done
 
-- <What has landed, with PR links.>
+- <What has landed, with PR links and merge commits.>
 
 ## Next steps
 

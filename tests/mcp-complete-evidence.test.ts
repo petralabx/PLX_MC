@@ -17,6 +17,8 @@ const db = vi.hoisted(() => ({
   taskEvidence: undefined as unknown,
   taskStage: undefined as string | undefined,
   taskPrs: undefined as unknown[] | undefined,
+  taskOwner: "vince" as string | undefined,
+  taskGates: undefined as unknown[] | undefined,
   openTx: 0,
   events: [] as { kind: string; inTx: boolean; actor?: string; repo?: string | null; taskId?: string; payload?: Record<string, unknown> }[],
 }));
@@ -55,7 +57,7 @@ vi.mock("@/lib/sync", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
-  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: db.taskBucket, labels: db.taskLabels, evidence: db.taskEvidence, stage: db.taskStage, prs: db.taskPrs } })),
+  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: db.taskBucket, labels: db.taskLabels, evidence: db.taskEvidence, stage: db.taskStage, prs: db.taskPrs, accountableOwner: db.taskOwner, approvalGates: db.taskGates } })),
   getBuckets: vi.fn(async () => [{ id: "BKT-OPEN", project: null }]),
   getProjects: vi.fn(async () => []),
 }));
@@ -75,7 +77,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 }));
 
 import { CreatorApprovalRefusal } from "@/lib/compliance/creator-approval";
-import { actionComplete, shouldPromotePrlessCompletion } from "@/lib/mcp/actions";
+import { actionComplete, completionReview, shouldPromotePrlessCompletion } from "@/lib/mcp/actions";
 import { patchTask } from "@/lib/sync";
 import type { McpIdentity } from "@/lib/mcp/auth";
 
@@ -97,6 +99,8 @@ beforeEach(() => {
   db.taskEvidence = undefined;
   db.taskStage = undefined;
   db.taskPrs = undefined;
+  db.taskOwner = "vince";
+  db.taskGates = undefined;
   vi.mocked(complete).mockClear();
   db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 });
@@ -392,5 +396,83 @@ describe("PR-less completion moves the task to the done stage", () => {
       { stage: "backlog", prs: [], labels: ["kind:code", "uat:feedback-123"] },
       {},
     )).toBe(false);
+  });
+});
+
+// TASK-4378 (zero-drift item 4): completing with an open, ready PR moves the
+// task to In Review, so the agent makes no second call. The merge moves it on.
+describe("completion with an open, ready PR moves the task to In Review", () => {
+  const PR = "https://github.com/petralabx/agentic-swarm/pull/1811";
+  const handIn = (over: Partial<Parameters<typeof actionComplete>[1]> = {}) =>
+    actionComplete(identity, { checkoutId: "dsp_test", summary: "done", verificationCommands: ["npm test"], rollback: "revert", prUrl: PR, ...over });
+  beforeEach(() => {
+    db.taskStage = "progress";
+    db.taskPrs = [{ repo: "agentic-swarm", num: 1811, status: "open", title: "t" }];
+  });
+
+  it("moves an In Progress task to In Review and says so", async () => {
+    const res = await handIn();
+    const patch = db.patched.at(-1)?.patch;
+    expect(patch?.stage).toBe("review");
+    expect(patch?.activityLine).toMatchObject({ kind: "move", what: expect.stringContaining("agentic-swarm#1811") });
+    expect(res.review).toEqual({ moved: true });
+  });
+
+  it("matches the PR row whatever the URL's letter case", async () => {
+    await handIn({ prUrl: "https://github.com/petralabx/Agentic-Swarm/pull/1811" });
+    expect(db.patched.at(-1)?.patch.stage).toBe("review");
+  });
+
+  it.each(["draft", "merged", "closed"])("leaves the stage alone when the PR is %s, and says what to do", async (status) => {
+    db.taskPrs = [{ repo: "agentic-swarm", num: 1811, status, title: "t" }];
+    const res = await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+    expect(res.review).toEqual({ moved: false, reason: expect.stringContaining(`agentic-swarm#1811 is ${status}`) });
+    expect(res.review?.reason).toContain("mc_report_progress");
+  });
+
+  it("leaves the stage alone when the task does not hold that PR yet", async () => {
+    const res = await handIn({ prUrl: "https://github.com/petralabx/agentic-swarm/pull/1812" });
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+    expect(res.review?.reason).toContain("agentic-swarm#1812 is not linked to this task yet");
+  });
+
+  it("says nothing about In Review when the hand-in has no PR link", async () => {
+    const res = await handIn({ prUrl: undefined });
+    expect(res.review).toBeUndefined();
+  });
+
+  it("never moves a blocked or failed hand-in", async () => {
+    await handIn({ outcome: "blocked" });
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it.each(["review", "merged", "verified", "cancelled"])("never moves a task that is already %s", async (stage) => {
+    db.taskStage = stage;
+    await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("keeps the stage under a pending approval gate, still records the hand-in, and says why", async () => {
+    db.taskGates = [{ id: "apg_1", status: "pending", reason: "workflow change" }];
+    const res = await handIn();
+    const patch = db.patched.at(-1)?.patch;
+    expect(patch?.stage).toBeUndefined();
+    expect(patch?.evidence).toBeDefined();
+    expect(res.review).toEqual({ moved: false, reason: expect.stringContaining("pending approval gate") });
+  });
+
+  it("keeps the stage when the task has no human accountable owner", async () => {
+    db.taskOwner = undefined;
+    const res = await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+    expect(res.review?.moved).toBe(false);
+  });
+
+  it("reads only github.com pull URLs", () => {
+    const task = { stage: "progress" as const, prs: [{ repo: "agentic-swarm", num: 1811, status: "open" as const, title: "t" }] };
+    expect(completionReview(task, { prUrl: PR })).toMatchObject({ pr: { num: 1811 } });
+    expect(completionReview(task, { prUrl: "agentic-swarm#1811" })).toBeNull();
+    expect(completionReview(task, {})).toBeNull();
   });
 });

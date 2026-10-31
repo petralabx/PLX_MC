@@ -379,7 +379,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_complete_task",
-    "Mark agent work complete for a checkout credential. verificationCommands and rollback are required. Evidence saved earlier with mc_save_evidence is kept where this call sends nothing: testRun, shots and uploaded artifacts; the fields this call sends win. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout.",
+    "Mark agent work complete for a checkout credential. verificationCommands and rollback are required. Evidence saved earlier with mc_save_evidence is kept where this call sends nothing: testRun, shots and uploaded artifacts; the fields this call sends win. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout. When prUrl names an open, ready PR on the task, the task moves to In Review (result.review). A draft PR, a PR not linked yet, a pending gate or a missing accountable owner keeps the stage, and result.review.reason says what to do.",
     completeTaskInputShape,
     async (body) => jsonResult(await actionComplete(identity, body))
   );

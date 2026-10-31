@@ -571,6 +571,14 @@ evidence on the caller's own live checkout while the PR is open, so the gate can
 pass before merge. It patches only `evidence` (artifacts kept), never stage,
 completedAt or the checkout, and skips the autonomy approval check. Fields a later
 save or `mc_complete_task` omits keep their saved values; sent fields win.
+When `prUrl` names an open, ready PR the task holds, a completed `mc_complete_task`
+moves the task to In Review in the same write, so no `mc_report_progress` call is
+needed (TASK-4378). A task already at In Review or later keeps its stage, with no
+`result.review`. A draft, merged or closed PR, a PR the task does not hold yet, or a
+stage gate (a pending approval gate, a pending creator approval, no human accountable
+owner) keeps the stage too: the hand-in still lands, and `result.review` is
+`{moved: false, reason}`. After a draft is marked ready, the agent moves the task with
+`mc_report_progress`; `ready_for_review` never moves a task already in the doing band.
 Every HTTP MCP tool call is audited as `mcp.tool.invoked`, like the REST wrapper. The verify
 gate matches `repo` on the **bare** GitHub name (`github.event.repository.name`), so
 a checkout minted with either `MC_REPO=PLX_MC` or `MC_REPO=petralabx/PLX_MC`

@@ -142,6 +142,36 @@ agent_workflow:
     - "Hard stops (Vince, 2026-10-28 and 29, bot rules list): nothing ever writes to FileMaker. Stop on the first error and report it."
     - "These rules apply to every agent runtime (Cursor, Claude Code, ChatGPT/Codex, Grok, the swarm). This contract is the single source — change it here, regenerate, and every runtime's rule file updates."
 
+# The handshake every agent follows before the first edit or PR in a tracked
+# repo (TASK-4348). The generator renders it into both MCP servers'
+# instructions, filled in with the session's repo, so every MCP-connected agent
+# gets the current steps at session start. `--fleet DIR` also writes it into a
+# marked block in each tracked repo's AGENTS.md and CLAUDE.md. {repo},
+# {default_bucket} and {integration_branch} come from
+# config/tracked-repos-registry.json. Each step restates a rule above in one
+# sentence or three; change the rule above and the step together.
+handshake:
+  title: Mission Control handshake
+  steps:
+    - "Search projects, buckets and TASK-* first (mc_search_tasks: branch, title, runId). Create a task only on a real miss, with mc_create_task in {default_bucket}. Never create a task to escape incomplete evidence on a live checkout."
+    - "Check out with mc_checkout_task, passing repo `{repo}`, your own `runtime/lane` as agent, and your branch. Confirm the returned taskId and that actor.repo is `{repo}`. Copy prBodyLine exactly."
+    - "Never invent a dsp_* id, never write `MC-Checkout: pending`, and never push with --no-verify. If the MC tools fail, stop and ask CoS or CIP to paste the prBodyLine."
+    - "End every commit with Agent, On-Behalf-Of and MC-Checkout as its last three lines. Name the TASK id in the PR title or branch."
+    - "Save evidence with mc_save_evidence before you open the PR, and put the MC-Checkout line in the PR body when you open it."
+    - "After you fix a PR body, re-run the failed compliance job. Never push an empty commit, and never close and reopen a PR, to restart a check."
+    - "After the last commit, call mc_complete_task with verificationCommands, rollback and the PR link. Then move the task's stage, or say why you cannot."
+    - "Mark a green PR ready and stop: only CIP's merge-queue session arms auto-merge or merges, with a merge commit into `{integration_branch}`. A PR that touches money, migrations or workflows, or reverts merged work, needs a signed MC merge approval of its exact head (mc_request_approval, merge scope)."
+  notes:
+    - "A plan that adds a project, or two or more buckets, goes through a draft: mc_save_draft, then mc_submit_draft. Its author accepts it in Mission Control."
+  full_rules: https://github.com/petralabx/PLX_MC/blob/main/config/governance-contract.yaml
+  surfaces:
+    mcp_modules:
+      - src/lib/mcp/handshake.generated.ts
+      - tools/plx-mc-mcp/lib/handshake.generated.mjs
+    fleet_files:
+      - AGENTS.md
+      - CLAUDE.md
+
 repo_hygiene:
   forbidden_root_patterns:
     - "FINAL_*"

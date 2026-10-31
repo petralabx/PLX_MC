@@ -24,6 +24,14 @@ for human review. Undialed scopes remain autonomous. Successful completions appe
 existing completion event. Invalid/unreadable config or scope refuses completion.
 Routing behavior is unchanged; owner: Vince. No migration is needed.
 
+Both servers send the governance contract's handshake as their instructions,
+filled in with the session's repo, its default bucket and its integration branch
+(TASK-4348). `scripts/generate-governance-surfaces.py` writes
+`src/lib/mcp/handshake.generated.ts` and the stdio wrapper's copy,
+`tools/plx-mc-mcp/lib/handshake.generated.mjs`, from the `handshake` section of
+`config/governance-contract.yaml` and `config/tracked-repos-registry.json`. Its
+`--check` fails when either copy drifts. Change the contract, never the modules.
+
 | Surface | Path |
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |

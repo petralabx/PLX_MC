@@ -19,6 +19,7 @@ import { z } from "zod";
 import { TASK_KINDS } from "./task-kind-schema";
 import { callSwarmTool } from "./lib/swarm-client.mjs";
 import { installToolErrorEnvelope, restErrorFromResponse } from "./lib/tool-errors.mjs";
+import { renderHandshake } from "./lib/handshake.generated.mjs";
 import { registerRoutingTools } from "./routing-suggest-tools";
 
 const DEFAULT_MC_BASE = "https://mc.plxcustomer.io";
@@ -89,10 +90,12 @@ function printResult(result: unknown) {
 const server = new McpServer(
   { name: "PLX-MC", version: "1.0.0" },
   {
+    // The rules come from the governance contract, filled in with MC_REPO
+    // (TASK-4348); only the tool overview is written here.
     instructions:
       "PLX Mission Control — create projects/buckets, checkout tasks (mc_checkout_task), suggest work (mc_suggest_work), report progress, complete with evidence, " +
-      "manage the PLX skills directory, and optionally dispatch_to_swarm. Prefer mc_suggest_work when Task ID is unknown. Append MC-Checkout lines from checkout responses to PR bodies. " +
-      "A plan that adds a project, or two or more buckets, goes through a draft: mc_save_draft, then mc_submit_draft; its author accepts it in Mission Control.",
+      "manage the PLX skills directory, and optionally dispatch_to_swarm. Prefer mc_suggest_work when Task ID is unknown.\n\n" +
+      renderHandshake(MC_REPO),
   }
 );
 // Before any registration: failed tools return { error: { code, message } } JSON.

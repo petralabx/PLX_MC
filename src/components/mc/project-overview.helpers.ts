@@ -99,6 +99,46 @@ export function filterCounts(tasks: readonly Task[]): Record<TaskFilterKey, numb
   return { open: tasks.filter(isOutstanding).length, human: tasks.filter(needsHuman).length, all: tasks.length };
 }
 
+// ─── Due filter (TASK-4392) ─────────────────────────────────────────────────
+// The project overview filters by due date as well as status. Overdue is an
+// unfinished task past its due date; "week" is Monday to Sunday around today;
+// "next14" is today and the 13 days after; "none" has no readable due date.
+
+export type DueFilterKey = "any" | "overdue" | "week" | "next14" | "none";
+
+export const DUE_FILTERS: ReadonlyArray<{ key: DueFilterKey; label: string }> = [
+  { key: "any", label: "Any date" },
+  { key: "overdue", label: "Overdue" },
+  { key: "week", label: "This week" },
+  { key: "next14", label: "Next 14 days" },
+  { key: "none", label: "No due date" },
+];
+
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDaysTo = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+
+export function matchesDue(task: Pick<Task, "due" | "stage" | "labels">, key: DueFilterKey, now: Date): boolean {
+  if (key === "any") return true;
+  const today = dayStart(now);
+  const due = parseMcDate(task.due, today.getFullYear());
+  if (key === "none") return due === null;
+  if (due === null) return false;
+  if (key === "overdue") return due < today && isOutstanding(task);
+  if (key === "next14") return due >= today && due < addDaysTo(today, 14);
+  const monday = addDaysTo(today, -((today.getDay() + 6) % 7));
+  return due >= monday && due < addDaysTo(monday, 7);
+}
+
+export function filterDue<T extends Pick<Task, "due" | "stage" | "labels">>(tasks: readonly T[], key: DueFilterKey, now: Date): T[] {
+  return key === "any" ? [...tasks] : tasks.filter((t) => matchesDue(t, key, now));
+}
+
+export function dueCounts(tasks: readonly Pick<Task, "due" | "stage" | "labels">[], now: Date): Record<DueFilterKey, number> {
+  const out = { any: 0, overdue: 0, week: 0, next14: 0, none: 0 } as Record<DueFilterKey, number>;
+  for (const f of DUE_FILTERS) out[f.key] = filterDue(tasks, f.key, now).length;
+  return out;
+}
+
 // The rows a capped TaskTable shows: the cap applies to the outstanding rows
 // and the revealed closed rows separately, so "Show closed" always shows some.
 export function cappedRows<T>(tasks: readonly T[], closed: readonly T[], cap: number): T[] {

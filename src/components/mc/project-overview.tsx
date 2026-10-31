@@ -9,15 +9,18 @@ import { docLinkFromPrd, docLinkKind } from "@/lib/mc-data/doc-links";
 import { HealthPill } from "./atoms";
 import { PrdLinkField } from "./bucket-detail";
 import {
+  dueCounts,
   filterCounts,
+  filterDue,
   filterTasks,
   isOutstanding,
   needsHuman,
+  type DueFilterKey,
   type InitiativeRollup,
   type TaskFilterKey,
 } from "./project-overview.helpers";
 import type { Nav } from "./route";
-import { TaskFilter } from "./task-filter";
+import { DueFilter, TaskFilter } from "./task-filter";
 import { TaskTable } from "./task-table";
 
 // Project Overview lens — the whole project tree on one page: every initiative
@@ -35,6 +38,7 @@ export function ProjectOverview({
   nav: Nav;
 }) {
   const [filter, setFilter] = useState<TaskFilterKey>("open");
+  const [due, setDue] = useState<DueFilterKey>("any");
   // Explicit per-section choices; a section without one starts collapsed only
   // when the filter leaves it nothing to show.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -43,7 +47,11 @@ export function ProjectOverview({
     return <p className="sub">No initiatives under this project yet.</p>;
   }
 
-  const counts = filterCounts(rollups.flatMap((r) => r.tasks));
+  const allTasks = rollups.flatMap((r) => r.tasks);
+  const counts = filterCounts(allTasks);
+  const now = new Date();
+  // The Due counts are within the status filter, so each one is what choosing it shows.
+  const dueCountsNow = dueCounts(filterTasks(allTasks, filter), now);
   const setAll = (value: boolean) =>
     setCollapsed(Object.fromEntries(rollups.map((r) => [r.bucket.id, value])));
 
@@ -61,6 +69,14 @@ export function ProjectOverview({
             setCollapsed({});
           }}
         />
+        <DueFilter
+          value={due}
+          counts={dueCountsNow}
+          onChange={(next) => {
+            setDue(next);
+            setCollapsed({});
+          }}
+        />
         <span className="pv-ovh-acts">
           <button type="button" className="pv-textbtn" onClick={() => setAll(false)}>
             Expand all
@@ -72,13 +88,15 @@ export function ProjectOverview({
       </div>
       <div className="pv-roll">
         {rollups.map((rollup) => {
-          const pool = filterTasks(rollup.tasks, filter);
+          const pool = filterDue(filterTasks(rollup.tasks, filter), due, now);
           const isCollapsed = collapsed[rollup.bucket.id] ?? pool.length === 0;
           return (
             <InitiativeSection
               key={rollup.bucket.id}
               rollup={rollup}
               filter={filter}
+              due={due}
+              now={now}
               pool={pool}
               collapsed={isCollapsed}
               onToggle={() => setCollapsed((prev) => ({ ...prev, [rollup.bucket.id]: !isCollapsed }))}
@@ -92,8 +110,9 @@ export function ProjectOverview({
   );
 }
 
-function emptyText(filter: TaskFilterKey, total: number): string {
+function emptyText(filter: TaskFilterKey, due: DueFilterKey, total: number): string {
   if (total === 0) return "No tasks in this initiative yet.";
+  if (due !== "any") return due === "none" ? "Every task here has a due date." : "Nothing here is due in these dates.";
   if (filter === "human") return "Nothing waiting on a human.";
   return `Nothing outstanding · all ${total} tasks closed.`;
 }
@@ -101,6 +120,8 @@ function emptyText(filter: TaskFilterKey, total: number): string {
 function InitiativeSection({
   rollup,
   filter,
+  due,
+  now,
   pool,
   collapsed,
   onToggle,
@@ -109,6 +130,8 @@ function InitiativeSection({
 }: {
   rollup: InitiativeRollup;
   filter: TaskFilterKey;
+  due: DueFilterKey;
+  now: Date;
   pool: InitiativeRollup["tasks"];
   collapsed: boolean;
   onToggle: () => void;
@@ -178,10 +201,10 @@ function InitiativeSection({
       {!collapsed && (
         <TaskTable
           // A filter switch starts each table fresh (row cap + closed reveal).
-          key={filter}
+          key={`${filter}-${due}`}
           tasks={pool}
-          closed={filter === "open" ? tasks.filter((t) => !isOutstanding(t)) : undefined}
-          emptyText={emptyText(filter, total)}
+          closed={filter === "open" ? filterDue(tasks.filter((t) => !isOutstanding(t)), due, now) : undefined}
+          emptyText={emptyText(filter, due, total)}
           nav={nav}
         />
       )}

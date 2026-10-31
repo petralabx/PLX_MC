@@ -967,6 +967,42 @@
   display: none;
 }
 
+/* Due filter beside the task filter (TASK-4392): a labelled native select. */
+.mc .pv-duefilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 0 11px;
+  border: 1px solid var(--p-grid);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .pv-duefilter select {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-left: 1px solid var(--p-grid);
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.mc .pv-duefilter.on select {
+  background: var(--p-ink);
+  color: var(--p-paper);
+}
+
+.mc .pv-duefilter select:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+
 /* Initiative sections */
 .mc .pv-sec {
   container: pv-sec / inline-size;

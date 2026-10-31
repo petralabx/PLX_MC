@@ -5,21 +5,33 @@
 # your test runner — everything must pass here first.
 #
 # Usage: scripts/preflight.sh [--mode <pre-commit|pre-push|ci>]
+#        scripts/preflight.sh --only <python-tests|node-tests|build|e2e> [-- <playwright args>]
 #
 # Modes:
 #   pre-commit  Fast checks suitable for every commit (~seconds).
 #   pre-push    Full local CI before any push (lint + all tests + build).
 #   ci          Fast policy checks re-run in CI (same code path as pre-commit).
+#
+# --only runs one step of the pre-push full suite. CI runs each step in its own
+# parallel job, so CI and pre-push run the same commands.
 set -euo pipefail
 
 MODE="pre-commit"
+ONLY=""
+PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode) MODE="$2"; shift 2 ;;
+    --only) ONLY="$2"; shift 2 ;;
+    --) shift; PASSTHROUGH=("$@"); break ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
+if [[ ${#PASSTHROUGH[@]} -gt 0 && "$ONLY" != "e2e" ]]; then
+  echo "Arguments after -- go to Playwright and need --only e2e" >&2
+  exit 1
+fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -188,23 +200,62 @@ run_quick() {
 # ---------------------------------------------------------------------------
 # Full checks — the complete test suite and build. Mirror CI exactly.
 # ---------------------------------------------------------------------------
-run_full() {
+run_python_tests() {
   if [[ -f pyproject.toml || -f requirements.txt ]]; then
     step "Python tests (full suite)"
     run_pytest -q
   fi
+}
 
+run_node_tests() {
   if [[ -f package.json ]]; then
     step "Node tests"
     npm run test
+  fi
+}
+
+run_build() {
+  if [[ -f package.json ]]; then
     step "Production build"
     npm run build
+  fi
+}
+
+# Extra arguments go to Playwright (CI passes --shard=N/M).
+run_e2e() {
+  if [[ -f package.json ]]; then
     step "Playwright browser runtime"
     npx playwright install chromium
     step "Playwright E2E (Cycle-1 Planner)"
-    npm run test:e2e
+    npm run test:e2e -- "$@"
   fi
 }
+
+run_full() {
+  run_python_tests
+  run_node_tests
+  run_build
+  run_e2e
+}
+
+# --only runs one full-suite step. CI runs each in its own parallel job; the
+# steps are the same functions pre-push runs in order.
+if [[ -n "$ONLY" ]]; then
+  case "$ONLY" in
+    python-tests) run_python_tests ;;
+    node-tests) run_node_tests ;;
+    build) run_build ;;
+    # The ${x+...} form keeps an empty array safe under set -u in bash 3.2.
+    e2e) run_e2e ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"} ;;
+    *)
+      echo "Unsupported --only step: $ONLY (python-tests, node-tests, build, e2e)" >&2
+      exit 1
+      ;;
+  esac
+  echo ""
+  echo "=== [preflight] $ONLY passed ==="
+  exit 0
+fi
 
 case "$MODE" in
   pre-commit|commit|quick)

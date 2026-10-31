@@ -13,7 +13,7 @@
 // and the export are asked for at it (`?fx=sage`), so every figure agrees.
 // Sections other than the goal cards open from a tab bar (TASK-4094). The
 // cards stay pinned under the top bar. The open section is `tab=` (absent =
-// Revenue → By class), kept alongside `fx`, `scope` and `sales`.
+// Revenue → How it adds up, TASK-4373), kept alongside `fx`, `scope` and `sales`.
 // The salesperson filter (TASK-4277) works the same way (`sales=GGC,SM`).
 // Module contract: docs/modules/reporting-goals/README.md.
 
@@ -49,6 +49,7 @@ import {
   when,
   type ReadyPage,
 } from "./helpers";
+import { RevenueBreakdown } from "./revenue-breakdown";
 import { watchRun } from "./run-watch";
 import { SalespeopleNote, SalespeoplePicker } from "./salespeople";
 import { Section, type SectionState } from "./section";
@@ -643,14 +644,23 @@ function Body({
         <div className="gp-sticky-kpis" tabIndex={0} role="region" aria-label="Goal summary">
           <Section id="goals" title="This month’s goals" state={state} onRetry={onRetry} resetKey={page} size="lg" bare>
             {ready((p) => (
-              <GoalCards page={p} scope={scope} />
+              <GoalCards page={p} scope={scope} onBreakdown={tab === "breakdown" ? undefined : () => onTab("breakdown")} />
             ))}
           </Section>
         </div>
         <SectionNav active={tab} onSelect={onTab} />
       </div>
       <div role="tabpanel" id="goals-panel" aria-labelledby={`goals-tab-${tab}`} data-testid="goals-panel">
-        <ReportPanel tab={tab} page={page} state={state} onRetry={onRetry} entryActions={entryActions} src={src} ready={ready} />
+        <ReportPanel
+          tab={tab}
+          page={page}
+          state={state}
+          onRetry={onRetry}
+          entryActions={entryActions}
+          src={src}
+          ready={ready}
+          scope={scope}
+        />
       </div>
     </>
   );
@@ -664,6 +674,7 @@ function ReportPanel({
   entryActions,
   src,
   ready,
+  scope,
 }: {
   tab: GoalsTab;
   page: ReadyPage | null;
@@ -672,8 +683,25 @@ function ReportPanel({
   entryActions?: EntryActions;
   src: (key: string) => string | null;
   ready: (render: (p: ReadyPage) => ReactNode) => ReactNode;
+  scope: RevenueScope;
 }) {
   switch (tab) {
+    case "breakdown":
+      return (
+        <Section
+          id="breakdown"
+          title="How the Revenue headline adds up"
+          note="The Revenue card taken apart, to the cent. It follows the Customers switch, the salespeople and the rate."
+          source={src("revenue")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+        >
+          {ready((p) => (
+            <RevenueBreakdown page={p} scope={scope} />
+          ))}
+        </Section>
+      );
     case "classes":
       return (
         <Section

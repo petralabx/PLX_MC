@@ -71,7 +71,7 @@ export interface Route {
   fx?: "sage";
   /** Goals & Production revenue for manufacturing customers only (every class but Exclusive Distribution): `/?screen=goals&scope=mfg`; absent = all customers. */
   scope?: "mfg";
-  /** Goals report section (TASK-4094): `/?screen=goals&tab=shipments`. Absent = Revenue → By class. */
+  /** Goals report section (TASK-4094): `/?screen=goals&tab=shipments`. Absent = Revenue → How it adds up (TASK-4373). */
   tab?: GoalsTab;
   /**
    * Goals & Production narrowed to some salespeople's customers (TASK-4277):

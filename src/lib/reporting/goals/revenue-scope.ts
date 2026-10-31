@@ -40,7 +40,7 @@ export interface RevenueScopeView {
   pendingCadCents: number;
   /** The scope's shipments behind pendingCadCents. */
   pendingShipments: number;
-  /** goalCadCents less pendingCadCents, before returns: invoiced product (the side line's $A). */
+  /** goalCadCents less pendingCadCents, before returns: invoiced product ("Invoiced product" in How it adds up, TASK-4373). */
   invoicedProductCadCents: number;
   /** Of goalCadCents, shipments entered by hand (their product value; freight is in chargesCadCents). */
   byHandGoalCadCents: number;

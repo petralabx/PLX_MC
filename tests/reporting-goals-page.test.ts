@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { niceMax, ticksFor } from "@/components/mc/charts";
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "@/components/mc/goals/charts";
 import { GoalCards } from "@/components/mc/goals/goal-cards";
+import { RevenueBreakdown } from "@/components/mc/goals/revenue-breakdown";
 import {
   barParts,
   cents,
@@ -35,6 +36,7 @@ import { RUN_POLL_FAILURES, RUN_POLL_MS, watchRun } from "@/components/mc/goals/
 import { Section } from "@/components/mc/goals/section";
 import { BatchList, CompletedTiles, EntriesTable, RulesText, ScheduledTiles, TruckloadTable } from "@/components/mc/goals/tables";
 import type { RefreshRun } from "@/lib/reporting/goals";
+import { sumClassTotals } from "@/lib/reporting/goals/class-totals";
 
 import { RUN, goalsPage } from "./reporting-goals-helpers";
 
@@ -218,16 +220,60 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
     expect(out).toContain("Last month: 7 full, 5 partial, US$215,066 of product");
   });
 
-  it("shows revenue: $390,827 of $1,000,000 with charges left out, the split, the rate and what's needed", () => {
+  it("shows revenue: $390,827 of $1,000,000, the split and what's needed, and links to how it adds up", () => {
     expect(out).toContain("Revenue Behind");
     expect(out).toContain("$390,827 of $1,000,000");
     expect(out).toContain("$350,990 in Sage + $39,837 entered by hand");
-    expect(out).toContain("+ $17,801 freight & other charges left out = $408,628 invoiced");
     expect(out).toContain("Due so far: $428,571 by Oct 14");
     expect(out).toContain("Needed per working day: $46,859");
-    expect(out).toContain(
-      "CAD $121,838 (57 invoices) + USD US$172,429 (13 invoices, $245,176 at 1.4219 (Bank of Canada, Oct 13)) + $41,614 entered by hand = $408,628, charges included"
-    );
+    // How it adds up is its own tab (TASK-4373): the card only links to it, and not while that tab is open.
+    expect(out).not.toContain("freight & other charges");
+    expect(out).not.toContain("How this adds up");
+    const linked = html(GoalCards, { page: READY, onBreakdown: () => {} });
+    expect(linked).toContain('data-testid="goals-revenue-breakdown-link"');
+    expect(text(linked)).toContain("How this adds up");
+  });
+
+  it("takes the revenue headline apart to the cent: invoiced, charges out, by currency (TASK-4373)", () => {
+    const bd = text(html(RevenueBreakdown, { page: READY }));
+    // How this adds up: $408,628.08 invoiced − $17,801.15 charges = $390,826.93, the headline.
+    expect(bd).toContain("Sage invoices 70 invoices, charges included $367,014.16");
+    expect(bd).toContain("+ Entered by hand 2 entries, freight included $41,613.92");
+    expect(bd).toContain("= Invoiced, charges included $408,628.08");
+    expect(bd).toContain("− Freight & other charges left out of revenue $17,801.15");
+    expect(bd).toContain("= Invoiced product $390,826.93");
+    expect(bd).toContain("= Revenue the card’s headline $390,826.93");
+    // No credit notes or shipped-not-invoiced in this run: no rows for them.
+    expect(bd).not.toContain("Returns");
+    expect(bd).not.toContain("Shipped, not yet invoiced");
+    // By currency adds to the same invoiced total.
+    expect(bd).toContain("CAD invoices 57 invoices $121,837.71");
+    expect(bd).toContain("+ USD invoices 13 invoices, US$172,428.76 at 1.4219 (Bank of Canada, Oct 13) $245,176.45");
+    expect(bd).toContain("+ Entered by hand 2 entries $41,613.92");
+    expect(121_837_71 + 245_176_45 + 41_613_92).toBe(408_628_08);
+    expect(367_014_16 + 41_613_92 - 1_780_115).toBe(39_082_693);
+  });
+
+  it("adds the classes the way the class table does, so scope=mfg's currencies add to its invoiced total", () => {
+    const byClass = READY.revenueByClass!;
+    // One summing for both: every class gives byClass.total exactly.
+    expect(sumClassTotals(byClass.rows)).toEqual(byClass.total);
+    const scoped = READY.revenueScope!;
+    const mfgTotals = sumClassTotals(byClass.rows.filter((row) => !scoped.excluded.includes(row.customerClass)));
+    expect(mfgTotals.totalCadCents).toBe(scoped.totalCadCents);
+    const bd = text(html(RevenueBreakdown, { page: READY, scope: "mfg" }));
+    const line = `= Manufacturing customers, charges included ${cents(scoped.totalCadCents)}`;
+    // Once in How this adds up (after Exclusive Distribution comes off), once as By currency's total.
+    expect(bd.split(line)).toHaveLength(3);
+    expect(bd).toContain(`= Revenue the card’s headline ${cents(scoped.goalCadCents)}`);
+  });
+
+  it("flips the sign of a negative amount, so a row never reads minus a negative", () => {
+    const goal = READY.revenueGoal!;
+    const page = { ...READY, revenueGoal: { ...goal, chargesCadCents: -12_000 } };
+    const bd = text(html(RevenueBreakdown, { page }));
+    expect(bd).toContain("+ Freight & other charges left out of revenue $120.00");
+    expect(bd).not.toContain("-$");
   });
 
   it("marks the by-hand figures amber and names query and run in the tooltips", () => {
@@ -244,7 +290,7 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
     const markup = html(GoalCards, { page: stale });
     expect(markup).not.toContain("entered by hand</span>");
     expect(text(markup)).toContain("72,652 kg in FileMaker Due so far");
-    expect(text(markup)).toContain("stored rate from Oct 13; the Bank of Canada rate couldn't be fetched");
+    expect(text(html(RevenueBreakdown, { page: stale }))).toContain("stored rate from Oct 13; the Bank of Canada rate couldn't be fetched");
   });
 });
 
@@ -375,12 +421,13 @@ describe("page shell", () => {
   it("renders skeletons, not spinners, before the page model arrives", () => {
     const markup = html(GoalsView, { route: { screen: "goals" }, nav: () => {} });
     expect(text(markup)).toContain("Loading the latest refresh…");
-    // The pinned goal cards plus the default section (Revenue → By class).
+    // The pinned goal cards plus the default section (Revenue → How it adds up, TASK-4373).
     // Every other section is one tab, mounted when that tab is the route.
-    expect(markup).toContain('data-testid="goals-classes"');
+    expect(markup).toContain('data-testid="goals-breakdown"');
+    expect(markup).not.toContain('data-testid="goals-classes"');
     expect(markup).not.toContain('data-testid="goals-shipments"');
     expect(markup).not.toContain('data-testid="goals-forecast"');
-    expect(markup.match(/role="tab"/g)).toHaveLength(11);
+    expect(markup.match(/role="tab"/g)).toHaveLength(12);
     expect(markup.match(/aria-selected="true"/g)).toHaveLength(1);
     expect(markup.match(/class="gp-skel"/g)).toHaveLength(markup.match(/<section /g)?.length ?? -1);
     expect(text(markup)).toContain("Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.");

@@ -2,15 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 
 import type { Datasets } from "../src/lib/reporting/goals";
 import { XLSX_CONTENT_TYPE } from "../src/lib/reporting/goals/excel/export";
+import { formatDollars } from "../src/lib/reporting/goals/money";
 import { DATASETS, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY } from "../tests/reporting-goals-helpers";
 import { waitForHydration } from "./helpers";
-import { goalsPage, gotoGoals, mockGoalsApi, openGoalsTab } from "./helpers/goals";
+import { goalsPage, gotoGoals, mockGoalsApi, openGoalsTab, sageGoalsPage } from "./helpers/goals";
 
 // The revenue rate switch on Goals & Production (TASK-3780) and revenue by
 // customer class (TASK-3781), against the 2026-10-14 fixture with M1–M7
 // entered: the run's Bank of Canada rate 1.4219 by default, the fixed Sage
-// rate 1.25 on the switch, kept in the URL, followed by the Revenue card, the
-// class table and the export. The fixture's run is from Oct 14, an earlier day
+// rate 1.25 on the switch, kept in the URL, followed by the Revenue card, How
+// it adds up (TASK-4373), the class table and the export. The fixture's run is from Oct 14, an earlier day
 // than any test run, so the Bank of Canada choice reads "Bank of Canada", not
 // "Today's rate" (tests/reporting-goals-revenue-rate.test.ts covers both).
 
@@ -19,6 +20,9 @@ const boc = (page: Page) => rateGroup(page).getByRole("button", { name: /^Bank o
 const sage = (page: Page) => rateGroup(page).getByRole("button", { name: /^Sage rate/ });
 const rateStatus = (page: Page) => page.getByTestId("goals-rate-status");
 const revenueCard = (page: Page) => page.getByTestId("goals-card-revenue");
+const headline = (page: Page) => revenueCard(page).locator(".gp-big .v");
+// How it adds up → By currency (the default tab, TASK-4373): the USD row names the rate.
+const currency = (page: Page) => page.getByTestId("goals-revenue-currency");
 const classes = (page: Page) => page.getByRole("region", { name: "Revenue by customer class" });
 const CONFIG_ERROR = {
   status: 500,
@@ -33,7 +37,9 @@ test.describe("goals revenue rate", () => {
     await expect(boc(page)).toHaveAttribute("aria-pressed", "true");
     await expect(boc(page)).toContainText("1.4219");
     await expect(sage(page)).toHaveAttribute("aria-pressed", "false");
-    await expect(revenueCard(page)).toContainText("$245,176 at 1.4219 (Bank of Canada, Oct 13))");
+    await expect(currency(page)).toContainText("US$172,428.76 at 1.4219 (Bank of Canada, Oct 13)");
+    await expect(currency(page)).toContainText("$245,176.45");
+    await openGoalsTab(page, "Revenue: By class");
     await expect(classes(page).locator("tfoot")).toContainText("408,628.08");
     await expect(classes(page).locator("tbody tr").first().locator("th, td")).toHaveText([
       "Exclusive Manufacturing",
@@ -49,8 +55,7 @@ test.describe("goals revenue rate", () => {
     await sage(page).click();
     await expect(page).toHaveURL(/[?&]fx=sage\b/);
     await expect(sage(page)).toHaveAttribute("aria-pressed", "true");
-    await expect(revenueCard(page)).toContainText("$374,561");
-    await expect(revenueCard(page)).toContainText("$215,536 at 1.25 (Sage rate))");
+    await expect(headline(page)).toHaveText(formatDollars(sageGoalsPage().revenueGoal!.goalCadCents));
     await expect(classes(page).locator("tfoot")).toContainText("374,561.16");
     await expect(page.getByTestId("goals-classes").getByText("US dollars at the Sage rate 1.25")).toBeVisible();
     await openGoalsTab(page, "Revenue: Forecast");
@@ -60,7 +65,7 @@ test.describe("goals revenue rate", () => {
     await expect(page.getByTestId("goals-classes").getByText("US dollars at the Sage rate 1.25")).toBeVisible();
     await page.goBack();
     await expect(boc(page)).toHaveAttribute("aria-pressed", "true");
-    await expect(revenueCard(page)).toContainText("$245,176 at 1.4219 (Bank of Canada, Oct 13))");
+    await expect(headline(page)).toHaveText(formatDollars(goalsPage().revenueGoal!.goalCadCents));
   });
 
   test("the full truckload test stays on the Bank of Canada rate at the Sage rate", async ({ page }) => {
@@ -82,7 +87,7 @@ test.describe("goals revenue rate", () => {
     await expect(card).toContainText(`Partial loads: ${atBoc.model!.truckloads.partial.total}`);
     const before = await card.innerText();
     await sage(page).click();
-    await expect(revenueCard(page)).toContainText("at 1.25 (Sage rate)");
+    await expect(currency(page)).toContainText("at 1.25 (Sage rate)");
     expect(await card.innerText()).toBe(before);
   });
 
@@ -103,7 +108,8 @@ test.describe("goals revenue rate", () => {
     await page.goto("/?screen=goals&fx=sage");
     await waitForHydration(page);
     await expect(sage(page)).toHaveAttribute("aria-pressed", "true");
-    await expect(revenueCard(page)).toContainText("$215,536 at 1.25 (Sage rate))");
+    await expect(currency(page)).toContainText("US$172,428.76 at 1.25 (Sage rate)");
+    await expect(currency(page)).toContainText("$215,535.95");
     const downloading = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export to Excel" }).click();
     expect((await downloading).suggestedFilename()).toBe("PLX goals and production 2026-10-14 (Sage rate).xlsx");
@@ -117,7 +123,7 @@ test.describe("goals revenue rate", () => {
     await expect(rateStatus(page)).toHaveText(
       "Couldn’t load revenue at the Sage rate 1.25. The figures below are still at the Bank of Canada rate 1.4219 (Oct 13)."
     );
-    await expect(revenueCard(page)).toContainText("$245,176 at 1.4219 (Bank of Canada, Oct 13))");
+    await expect(currency(page)).toContainText("at 1.4219 (Bank of Canada, Oct 13)");
     let retried = 0;
     page.on("request", (request) => {
       if (request.url().endsWith("/api/reporting/goals?fx=sage")) retried += 1;
@@ -137,7 +143,7 @@ test.describe("goals revenue rate", () => {
     await expect(page.getByTestId("goals-rate")).toContainText("Couldn’t load revenue at the Sage rate.");
     await page.getByRole("button", { name: "Show the Bank of Canada rate" }).click();
     await expect(boc(page)).toHaveAttribute("aria-pressed", "true");
-    await expect(revenueCard(page)).toContainText("$245,176 at 1.4219 (Bank of Canada, Oct 13))");
+    await expect(currency(page)).toContainText("at 1.4219 (Bank of Canada, Oct 13)");
     await expect(page).not.toHaveURL(/fx=sage/);
   });
 

@@ -13,8 +13,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import pendingJson from "./fixtures/reporting-goals/2026-10-14/pending-shipments.json";
-import { GoalCards } from "@/components/mc/goals/goal-cards";
-import { dollars, isReady } from "@/components/mc/goals/helpers";
+import { cents, isReady } from "@/components/mc/goals/helpers";
+import { RevenueBreakdown } from "@/components/mc/goals/revenue-breakdown";
 import { buildGoalsWorkbook } from "@/lib/reporting/goals/excel/export";
 import { WORKBOOK_SHEETS } from "@/lib/reporting/goals/excel/layout";
 import { convertCents } from "@/lib/reporting/goals/money";
@@ -223,36 +223,43 @@ describe("shipped, not yet invoiced on the Revenue goal", () => {
   });
 });
 
-describe("shipped, not yet invoiced in the card's equations", () => {
+describe("shipped, not yet invoiced in How it adds up (TASK-4373)", () => {
   const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
-  const card = (scope: "all" | "mfg") => {
+  const breakdown = (scope: "all" | "mfg") => {
     const p = page(PENDING);
     if (!isReady(p)) throw new Error("ready");
-    return text(renderToStaticMarkup(createElement(GoalCards, { page: p, scope })));
+    return text(renderToStaticMarkup(createElement(RevenueBreakdown, { page: p, scope })));
   };
 
-  it("all customers: headline + charges + returns - estimate = invoiced", () => {
+  it("all customers: invoiced - charges = invoiced product; + estimate - returns = headline", () => {
     const g = page(PENDING).revenueGoal!;
     expect(g.pendingCadCents).toBeGreaterThan(0);
-    expect(g.goalCadCents + g.chargesCadCents + g.returnsCadCents - g.pendingCadCents).toBe(g.totalCadCents);
-    expect(card("all")).toContain(
-      `+ ${dollars(g.chargesCadCents)} freight & other charges left out − ${dollars(g.pendingCadCents)} shipped, not yet invoiced = ${dollars(g.totalCadCents)} invoiced`
-    );
+    expect(g.totalCadCents - g.chargesCadCents).toBe(g.invoicedProductCadCents);
+    expect(g.invoicedProductCadCents + g.pendingCadCents - g.returnsCadCents).toBe(g.goalCadCents);
+    const out = breakdown("all");
+    expect(out).toContain(`= Invoiced, charges included ${cents(g.totalCadCents)}`);
+    expect(out).toContain(`− Freight & other charges left out of revenue ${cents(g.chargesCadCents)}`);
+    expect(out).toContain(`= Invoiced product ${cents(g.invoicedProductCadCents)}`);
+    expect(out).toContain(`+ Shipped, not yet invoiced estimate, ${g.pendingShipments} shipments ${cents(g.pendingCadCents)}`);
+    expect(out).toContain(`= Revenue the card’s headline ${cents(g.goalCadCents)}`);
   });
 
-  it("manufacturing: headline + charges + returns - estimate + Exclusive Distribution = all customers", () => {
+  it("manufacturing: all customers - Exclusive Distribution - charges + estimate - returns = headline", () => {
     const m = page(PENDING).revenueScope!;
     expect(m.pendingCadCents).toBeGreaterThan(0);
-    expect(m.goalCadCents + m.chargesCadCents + m.returnsCadCents - m.pendingCadCents + m.excludedCadCents).toBe(m.totalCadCents + m.excludedCadCents);
-    expect(card("mfg")).toContain(
-      `+ ${dollars(m.chargesCadCents)} freight & other charges − ${dollars(m.pendingCadCents)} shipped, not yet invoiced + ${dollars(m.excludedCadCents)} Exclusive Distribution left out = ${dollars(m.totalCadCents + m.excludedCadCents)} all customers`
-    );
+    expect(m.totalCadCents + m.excludedCadCents - m.excludedCadCents - m.chargesCadCents + m.pendingCadCents - m.returnsCadCents).toBe(m.goalCadCents);
+    const out = breakdown("mfg");
+    expect(out).toContain(`All customers, charges included ${cents(m.totalCadCents + m.excludedCadCents)}`);
+    expect(out).toContain(`− Exclusive Distribution left out: manufacturing customers only ${cents(m.excludedCadCents)}`);
+    expect(out).toContain(`= Manufacturing customers, charges included ${cents(m.totalCadCents)}`);
+    expect(out).toContain(`+ Shipped, not yet invoiced estimate, ${m.pendingShipments} shipments ${cents(m.pendingCadCents)}`);
+    expect(out).toContain(`= Revenue the card’s headline ${cents(m.goalCadCents)}`);
   });
 
-  it("leaves the equations unchanged without the estimate", () => {
+  it("shows no estimate row without the estimate", () => {
     const p = page();
     if (!isReady(p)) throw new Error("ready");
-    expect(text(renderToStaticMarkup(createElement(GoalCards, { page: p, scope: "all" })))).not.toContain("shipped, not yet invoiced");
+    expect(text(renderToStaticMarkup(createElement(RevenueBreakdown, { page: p, scope: "all" })))).not.toContain("Shipped, not yet invoiced");
   });
 });
 

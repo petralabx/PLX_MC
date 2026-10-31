@@ -132,10 +132,19 @@ traceable to a refresh run and a named query.
      batch list (search, filters, "Line 1 only" toggle, sortable columns) and
      the rules in plain words.
    - Section tabs (TASK-4094): the goal cards stay pinned under the top bar.
-     Every other section is one tab, grouped as Revenue (by class, shipments,
-     by customer, forecast), Batches (day by day, by size, scheduled, batch
-     list), Truckloads, Entries and Rules. The choice is `tab=` on
-     `/?screen=goals` (absent means Revenue → By class). `fx` and `scope` stay.
+     Every other section is one tab, grouped as Revenue (how it adds up, by
+     class, shipments, by customer, forecast), Batches (day by day, by size,
+     scheduled, batch list), Truckloads, Entries and Rules. The choice is
+     `tab=` on `/?screen=goals` (absent means Revenue → How it adds up,
+     TASK-4373). `fx` and `scope` stay.
+   - How it adds up (TASK-4373, `src/components/mc/goals/revenue-breakdown.tsx`):
+     the Revenue card's "side lines" below are rows here, to the cent. Three
+     tables: invoiced (Sage and by hand, charges included) less charges is the
+     invoiced product, plus the shipped-not-invoiced estimate, less returns, is
+     the headline; the three product lines; the currencies. Then the notes on
+     the data. It reads only the page model and follows `scope`, `sales` and
+     `fx`. The card keeps the headline, the Sage / by-hand split, the bar, due
+     so far and needed per day, and links to the tab.
    - Charts: `StackedColumns` and `RunningLines` in
      `src/components/mc/charts/column-chart.tsx` (native SVG; HTML labels).
      Each has a one-sentence summary and its numbers in a table under it.
@@ -563,12 +572,12 @@ Exclusive Distribution (Exclusive Manufacturing, Mixed and Unclassified stay).
   page, so switching it makes no new read.
 - **What it shows.** The Revenue card's headline becomes the manufacturing
   customers' month (`revenueScope` on the page model, from
-  `src/lib/reporting/goals/revenue-scope.ts`). In place of the Sage / by-hand
-  split, a side line shows the Exclusive Distribution amount left out and the
-  all-customers total, so the two add back to it. Both are read from revenue
+  `src/lib/reporting/goals/revenue-scope.ts`), with its own Sage / by-hand
+  split. How it adds up starts from the all-customers total and takes the
+  Exclusive Distribution amount off, so the two add back to it (TASK-4373). Both are read from revenue
   by customer class, so they add up with that table to the cent, at whichever
   rate the page is at; when the class split and the card are a refresh apart
-  the line says so.
+  a note in How it adds up says so.
 - **Status and pace.** The status chip, the bar and "Needed per working day"
   follow the headline: the manufacturing total against the same due-so-far
   and target. The bar shows it as one segment (the class split has no

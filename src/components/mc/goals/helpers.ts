@@ -45,6 +45,8 @@ export const amount = formatAmount;
 /** A Sage unit price as entered, at least to the cent ("48.00", "0.85", "1.6638"). */
 export const price = (p: string) => Number(p).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 export const usd = (c: number) => `US${formatDollars(c)}`;
+/** Exact US dollars and cents ("US$172,428.76"). */
+export const usdCents = (c: number) => `US${cents(c)}`;
 /** Whole kg ("91,702"); kg sums carry up to 3 decimal places. */
 export const wholeKg = (kg: number) => count(Math.round(kg));
 const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });

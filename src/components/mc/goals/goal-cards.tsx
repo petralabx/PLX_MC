@@ -6,25 +6,15 @@
 // and run; the bars are decorative (the text carries every value). Narrowed to
 // some salespeople's customers (TASK-4277), revenue is set against every
 // customer's instead of the month's goal, and Line 1 stays every customer's.
+// How the Revenue headline adds up (charges, returns, the shipped-not-invoiced
+// estimate, product lines, currencies) is the "How it adds up" tab
+// (./revenue-breakdown.tsx, TASK-4373); the card links to it.
 
 import type { ReactNode } from "react";
 
 import type { GoalStatus, RevenueScope } from "@/lib/reporting/goals";
 
-import {
-  barParts,
-  count,
-  day,
-  cents,
-  dollars,
-  pct,
-  rate,
-  sourceText,
-  usd,
-  wholeKg,
-  type BarParts,
-  type ReadyPage,
-} from "./helpers";
+import { barParts, count, day, dollars, pct, sourceText, usd, wholeKg, type BarParts, type ReadyPage } from "./helpers";
 
 function StatusChip({ status }: { status: GoalStatus }) {
   return status === "behind" ? <span className="pv-chip hot">Behind</span> : <span className="pv-chip ok">On track</span>;
@@ -37,86 +27,6 @@ function Bar({ parts, tickLabel }: { parts: BarParts; tickLabel: string }) {
       <span className="hand" style={{ width: pct(parts.byHand) }} />
       <span className="sched" style={{ width: pct(parts.schedule) }} />
       {parts.tick !== null ? <span className="tick" style={{ left: pct(parts.tick) }} title={tickLabel} /> : null}
-    </div>
-  );
-}
-
-type LineAmounts = {
-  manufacturingCadCents: number;
-  distributionCadCents: number;
-  servicesCadCents: number;
-};
-
-function plusLines(a: LineAmounts, b: LineAmounts): LineAmounts {
-  return {
-    manufacturingCadCents: a.manufacturingCadCents + b.manufacturingCadCents,
-    distributionCadCents: a.distributionCadCents + b.distributionCadCents,
-    servicesCadCents: a.servicesCadCents + b.servicesCadCents,
-  };
-}
-
-const LINE_RULE =
-  "Manufacturing: the item code is a finished good in the MRP. Services: a 3PL service, including a Sage miscellaneous charge whose code or description is 3PL. Distribution: every other product. Freight, lab and other accessorial charges stay on the charges line.";
-
-function lineText(amounts: LineAmounts): string {
-  return `Manufacturing ${cents(amounts.manufacturingCadCents)} · Distribution ${cents(amounts.distributionCadCents)} · Services (3PL) ${cents(amounts.servicesCadCents)}`;
-}
-
-/** The headline's three product lines. They add to the headline to the cent. */
-function RevenueByLine({ page, scope, title }: { page: ReadyPage; scope: RevenueScope; title: string }) {
-  const split = page.revenueByBusinessLine;
-  if (!split) return null;
-  if (split.state === "waiting") {
-    return (
-      <p className="gp-split gp-amber" title={title} data-testid="goals-revenue-lines">
-        Business lines: {split.waiting}
-      </p>
-    );
-  }
-  const block = scope === "mfg" ? split.mfg : split.all;
-  const goal = scope === "mfg" ? page.revenueScope : page.revenueGoal;
-  // When a later headline includes shipped-not-invoiced, fold that estimate into the three totals.
-  const includePending = !!goal && "pendingCadCents" in goal;
-  const shown = includePending ? plusLines(block.amounts, block.pending) : block.amounts;
-  const pendingSum =
-    block.pending.manufacturingCadCents + block.pending.distributionCadCents + block.pending.servicesCadCents;
-  return (
-    <div data-testid="goals-revenue-lines" title={LINE_RULE}>
-      <p className="gp-split" title={LINE_RULE}>
-        Product lines: {lineText(shown)}. These add to the headline.
-      </p>
-      {!includePending && pendingSum !== 0 ? (
-        <p className="gp-split" title={LINE_RULE}>
-          Shipped, not invoiced (not in this headline): {lineText(block.pending)}.
-        </p>
-      ) : null}
-      {split.finishedGoodsUnavailable ? (
-        <p className="gp-split gp-amber" data-testid="goals-finished-goods-unavailable" title={LINE_RULE}>
-          The MRP finished-good list can’t be read, so nothing is counted as Manufacturing. 3PL charges still count as Services.
-        </p>
-      ) : null}
-      {split.ambiguousCodes.length > 0 ? (
-        <p className="gp-split gp-amber" title={LINE_RULE}>
-          Counted as Manufacturing (also a 3PL code): {split.ambiguousCodes.join(", ")}.
-        </p>
-      ) : null}
-      {split.unitemizedInvoices > 0 ? (
-        <p className="gp-split" title={LINE_RULE}>
-          {split.unitemizedInvoices} {split.unitemizedInvoices === 1 ? "invoice has" : "invoices have"} product and no item lines, so that product counts as Distribution.
-        </p>
-      ) : null}
-      {split.returnsShared > 0 ? (
-        <p className="gp-split" title={LINE_RULE}>
-          {split.returnsShared} {split.returnsShared === 1 ? "credit note has" : "credit notes have"} no item lines this month, so{" "}
-          {split.returnsShared === 1 ? "it follows" : "they follow"} the class&apos;s product mix.
-        </p>
-      ) : null}
-      {split.pendingWithoutLines > 0 && (includePending || pendingSum !== 0) ? (
-        <p className="gp-split" title={LINE_RULE}>
-          {split.pendingWithoutLines} shipped-not-invoiced {split.pendingWithoutLines === 1 ? "shipment has" : "shipments have"} no item lines, so{" "}
-          {split.pendingWithoutLines === 1 ? "it counts" : "they count"} as Distribution.
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -170,8 +80,17 @@ function Card({
   );
 }
 
-export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: RevenueScope }) {
-  const { model, settings, run, fx, sections } = page;
+export function GoalCards({
+  page,
+  scope = "all",
+  onBreakdown,
+}: {
+  page: ReadyPage;
+  scope?: RevenueScope;
+  /** Opens the "How it adds up" tab; absent while that tab is open. */
+  onBreakdown?: () => void;
+}) {
+  const { model, settings, run, sections } = page;
   const mfg = scope === "mfg" ? page.revenueScope : null;
   // Some salespeople's customers (TASK-4277): no status or pace against the goal, which is every customer's.
   const narrowed = page.salespeople?.applied ? page.salespeople : null;
@@ -180,7 +99,6 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
       ? narrowed.everyCustomer.revenueScopeGoalCadCents
       : narrowed.everyCustomer.revenueGoalCadCents
     : null;
-  const allWord = narrowed ? "all their customers" : "all customers";
   const l1 = model.line1;
   const tl = model.truckloads;
   const rev = model.revenue;
@@ -195,20 +113,10 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
   const revNeeded = goal ? (goal.neededPerDayCents ?? rev.neededPerDayCents) : rev.neededPerDayCents;
   // Returns (TASK-3987): the run's credit notes, subtracted from the headline; null for a run stored before them.
   const creditNotes = page.creditNotes;
-  const returned = page.revenueByClass?.total.returns ?? null;
   // INTERIM (TASK-3992): shipped, not yet invoiced, inside goal.goalCadCents as an estimate; null when not read.
   const pending = page.pendingShipments;
-  const returnsPlus = (s: { returnsCadCents: number }) => (s.returnsCadCents !== 0 ? ` + ${dollars(s.returnsCadCents)} returns` : "");
-  // The estimate is in the headline but not invoiced, so the equations back to the invoiced totals take it off (TASK-3992).
-  const pendingMinus = (s: { pendingCadCents: number }) =>
-    s.pendingCadCents !== 0 ? ` − ${dollars(s.pendingCadCents)} shipped, not yet invoiced` : "";
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
-  // The rate the figures are at: the run's Bank of Canada rate, or the fixed Sage rate (TASK-3780).
-  const rateText =
-    rev.basis === "sage"
-      ? `${rate(rev.rate)} (Sage rate)`
-      : `${rate(fx.rate)} (${fx.stale ? `stored rate from ${day(fx.date)}; the Bank of Canada rate couldn't be fetched` : `Bank of Canada, ${day(fx.date)}`})`;
 
   return (
     <div className="gp-cards" tabIndex={0} role="group" aria-label="The three goals">
@@ -291,25 +199,13 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         of={narrowed ? (every === null ? "" : `of ${dollars(every)} for every ${mfg ? "manufacturing " : ""}customer`) : `of ${dollars(rev.targetCents)}`}
         source={revSource}
       >
-        {mfg ? (
-          <p className="gp-split" title={revSource} data-testid="goals-revenue-mfg">
-            + {dollars(mfg.chargesCadCents)} freight &amp; other charges{returnsPlus(mfg)}{pendingMinus(mfg)} + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
-            {dollars(mfg.totalCadCents + mfg.excludedCadCents)} {allWord}, charges included
-            {mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the class table until the next one"}
-          </p>
-        ) : goal ? (
-          <>
-            <Split
-              system={`${dollars(goal.goalCadCents - goal.byHandGoalCadCents)} in Sage`}
-              byHand={`${dollars(goal.byHandGoalCadCents)} entered by hand`}
-              hasHand={goal.byHandGoalCadCents !== 0}
-              title={revSource}
-            />
-            <p className="gp-split" title={revSource} data-testid="goals-revenue-charges">
-              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out{returnsPlus(goal)}{pendingMinus(goal)} = {dollars(goal.totalCadCents)} invoiced
-              {goal.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the card until the next one"}
-            </p>
-          </>
+        {goal ? (
+          <Split
+            system={`${dollars(goal.goalCadCents - goal.byHandGoalCadCents)} in Sage`}
+            byHand={`${dollars(goal.byHandGoalCadCents)} entered by hand`}
+            hasHand={goal.byHandGoalCadCents !== 0}
+            title={revSource}
+          />
         ) : (
           <Split
             system={`${dollars(rev.inSystemCents)} in Sage`}
@@ -318,40 +214,10 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
             title={revSource}
           />
         )}
-        {goal && creditNotes ? (
-          creditNotes.access === "read" ? (
-            <p className="gp-split" title={revSource} data-testid="goals-revenue-returns">
-              − {dollars(goal.returnsCadCents)} returns ({count(goal.returnsNotes)} {goal.returnsNotes === 1 ? "credit note" : "credit notes"})
-              {goal.returnsChargesCadCents !== 0
-                ? `; ${dollars(goal.returnsChargesCadCents)} of credited freight & other charges left out, as charges are`
-                : ""}
-            </p>
-          ) : (
-            <p className="gp-split gp-amber" title={revSource} data-testid="goals-revenue-returns">
-              Returns not deducted: Sage&apos;s credit notes can&apos;t be read yet (needs {creditNotes.missing.join(", ")})
-            </p>
-          )
-        ) : null}
-        {goal && pending ? (
-          pending.access === "read" ? (
-            <p className="gp-split" title={revSource} data-testid="goals-revenue-pending">
-              {dollars(goal.invoicedProductCadCents)} invoiced + {dollars(goal.pendingCadCents)} shipped, not yet invoiced (estimate,{" "}
-              {count(goal.pendingShipments)} {goal.pendingShipments === 1 ? "shipment" : "shipments"})
-              {goal.returnsCadCents !== 0 ? ` − ${dollars(goal.returnsCadCents)} returns` : ""} = {dollars(goal.goalCadCents)}
-            </p>
-          ) : (
-            <p className="gp-split gp-amber" title={revSource} data-testid="goals-revenue-pending">
-              Shipped, not invoiced: not included (needs access)
-            </p>
-          )
-        ) : null}
-        <RevenueByLine page={page} scope={scope} title={revSource} />
         <Bar
           parts={
             narrowed
               ? barParts({ inSystem: revTotal, byHand: 0, scale: every ?? rev.targetCents, tickAt: null })
-              : mfg
-              ? barParts({ inSystem: mfg.goalCadCents, byHand: 0, scale: rev.targetCents, tickAt: rev.dueSoFarCents })
               : goal
               ? barParts({
                   inSystem: goal.goalCadCents - goal.byHandGoalCadCents,
@@ -379,31 +245,12 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
               </li>
             </>
           )}
-          <li data-testid="goals-revenue-currency">
-            {/* Adds up to the all-in total (TASK-3952): before, the figure after "=" was only the USD converted. */}
-            CAD {dollars(rev.cad.cents)} ({count(rev.cad.invoices)} invoices) + USD {usd(rev.usd.cents)} ({count(rev.usd.invoices)}{" "}
-            invoices, {dollars(rev.usd.cadCents)} at {rateText})
-            {rev.byHandCents !== 0 ? ` + ${dollars(rev.byHandCents)} entered by hand` : ""} = {dollars(rev.totalCents)}, charges included
-          </li>
-          {returned && returned.notes > 0 ? (
-            <li data-testid="goals-revenue-currency-returns">
-              Credit notes: CAD {dollars(returned.cad.cents)} ({count(returned.cad.notes)}) + USD {usd(returned.usd.cents)} (
-              {count(returned.usd.notes)}, {dollars(returned.usd.cadCents)} at {rateText}) = {dollars(returned.totalCadCents)}{" "}
-              returned, charges included
-              {returned.otherCurrencies.length > 0
-                ? `; not converted: ${returned.otherCurrencies.map((c) => `${c.currency} ${(c.cents / 100).toLocaleString("en-US")} (${count(c.notes)})`).join(", ")}`
-                : ""}
-            </li>
-          ) : null}
-          {rev.otherCurrencies.length > 0 ? (
-            <li>
-              Not converted:{" "}
-              {rev.otherCurrencies
-                .map((c) => `${c.currency} ${(c.cents / 100).toLocaleString("en-US")} (${count(c.invoices)} invoices)`)
-                .join(", ")}
-            </li>
-          ) : null}
         </ul>
+        {onBreakdown ? (
+          <button type="button" className="tl-link gp-card-link" onClick={onBreakdown} data-testid="goals-revenue-breakdown-link">
+            How this adds up
+          </button>
+        ) : null}
       </Card>
     </div>
   );

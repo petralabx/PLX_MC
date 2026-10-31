@@ -139,7 +139,11 @@ ruleset):
 
 Hub `PLX_MC` local equivalent is `./scripts/preflight.sh` (pre-commit / pre-push /
 CI) — that is **this repo’s** product gate, not an org-wide Next/Playwright
-requirement.
+requirement. CI runs each pre-push step as its own parallel job
+(`preflight.sh --mode ci` once, then `--only python-tests`, `node-tests`, `build`
+and four `e2e` shards), and `Preflight + full suite` passes only when every job
+passes (TASK-4346). `tests/ci-parallel-jobs.test.ts` fails if a pre-push step
+has no CI job.
 
 ### AI review verdict (`ai-review/verdict`)
 

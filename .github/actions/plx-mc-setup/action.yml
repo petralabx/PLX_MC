@@ -1,0 +1,38 @@
+name: PLX_MC CI setup
+description: >-
+  Python and Node with cached dependencies. Every CI job uses this one setup,
+  so the parallel jobs cannot drift apart (TASK-4346).
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+        cache: pip
+        cache-dependency-path: requirements.txt
+
+    # Node tests also run python3 with PyYAML, so every job installs these.
+    - name: Install Python dependencies (governance tooling)
+      shell: bash
+      run: pip install -r requirements.txt
+
+    - name: Set up Node
+      id: node
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: .nvmrc
+
+    # A push to main saves this cache, so a new PR branch restores it instead
+    # of starting cold. The key changes with the lockfile or the Node version.
+    - name: Restore node_modules
+      id: node-modules
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: plx-mc-node-modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+
+    - name: Install Node dependencies
+      if: steps.node-modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci

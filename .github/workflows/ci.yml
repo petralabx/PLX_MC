@@ -8,39 +8,80 @@ on:
   merge_group:
     types: [checks_requested]
 
+# Each job runs one step of scripts/preflight.sh, the command agents run before
+# they push, and the jobs run in parallel (TASK-4346). "Preflight + full suite"
+# keeps its name and passes only when every one of them passes, so the
+# required checks and the rulesets do not change.
 jobs:
-  test:
-    name: Preflight + full suite
+  policy:
+    name: Policy, typecheck and lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements.txt
-
-      - name: Install Python dependencies (governance tooling)
-        run: pip install -r requirements.txt
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install Node dependencies
-        run: |
-          if [ -f package.json ]; then npm ci; fi
-
+      - uses: ./.github/actions/plx-mc-setup
       - name: Policy gate (same command agents run locally)
         run: ./scripts/preflight.sh --mode ci
 
-      - name: Full suite (same command as pre-push)
-        run: ./scripts/preflight.sh --mode pre-push
+  python-tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/plx-mc-setup
+      - name: Python tests (pre-push step)
+        run: ./scripts/preflight.sh --only python-tests
+
+  node-tests:
+    name: Node tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/plx-mc-setup
+      - name: Node tests (pre-push step)
+        run: ./scripts/preflight.sh --only node-tests
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/plx-mc-setup
+      - name: Production build (pre-push step)
+        run: ./scripts/preflight.sh --only build
+
+  # Playwright ran 482 tests on one worker in about 20 minutes. Each shard
+  # starts its own server, as the single run did, and runs a quarter of them.
+  e2e:
+    name: Playwright E2E (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/plx-mc-setup
+      - name: Restore Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Playwright E2E shard (pre-push step)
+        run: ./scripts/preflight.sh --only e2e -- --shard=${{ matrix.shard }}/4
+
+  test:
+    name: Preflight + full suite
+    if: always()
+    needs: [policy, python-tests, node-tests, build, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every full-suite job passed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          echo "$RESULTS" | jq -e 'all(.[]; . == "success")' > /dev/null
 
   # Full 6-job Windows/Ubuntu matrix runs on push to main only (PR-drain 8).
   # PRs get the single lightweight job below. None of these are required checks.

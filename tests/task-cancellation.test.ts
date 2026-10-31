@@ -16,7 +16,7 @@ type Row = {
   completed_at: Date | null;
   cancellation: Record<string, unknown> | null;
 };
-type Ev = { kind: string; actor: string; taskId: string; payload: Record<string, unknown> };
+type Ev = { kind: string; actor: string; repo: string | null; taskId: string; payload: Record<string, unknown> };
 
 const h = vi.hoisted(() => ({
   rows: new Map<string, unknown>(),
@@ -109,8 +109,8 @@ vi.mock("@/lib/db", () => {
     if (sql.startsWith("INSERT INTO sync_audit_log")) return [];
     if (sql.startsWith("INSERT INTO mc_events")) {
       events().push({
-        kind: String(params[0]), actor: String(params[1]), taskId: String(params[3]),
-        payload: JSON.parse(String(params[5])),
+        kind: String(params[0]), actor: String(params[1]), repo: params[2] == null ? null : String(params[2]),
+        taskId: String(params[3]), payload: JSON.parse(String(params[5])),
       });
       return [{ seq: String(events().length) }];
     }
@@ -415,6 +415,58 @@ describe("web PATCH that reopens a cancelled task (TASK-4292)", () => {
     await cancelled("TASK-1544", { reason: "obsolete" });
     await expect(webPatch("TASK-1544", { stage: "backlog" })).resolves.toMatchObject({ id: "TASK-1544", stage: "backlog" });
     expect(row("TASK-1544").cancellation).toBeNull();
+  });
+});
+
+// TASK-4293: the creator gate (TASK-3530) refuses a reopen into progress or
+// later while a creator approval is pending. Each door that owns the
+// transaction records that refusal once, after its rollback.
+describe("a creator-gate refusal on a reopen is recorded (TASK-4293)", () => {
+  const pending = { principal: "sp_mcp_workbench_intake", status: "pending", requestedAt: "2026-10-21T12:00:00.000Z" };
+  const webPatch = (id: string, body: Record<string, unknown>) =>
+    (PATCH as unknown as (req: Request, ctx: unknown) => Promise<unknown>)(
+      new Request(`http://localhost/api/tasks/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id }) }
+    );
+  const blocked = () => events().filter((e) => e.kind === "creator_approval.blocked");
+
+  beforeEach(async () => {
+    seed("TASK-3001", "planned", { creatorApproval: pending });
+    await cancelled("TASK-3001", { reason: "obsolete" });
+    // Not cancelled: the plain stage-move doors.
+    seed("TASK-3002", "planned", { creatorApproval: pending });
+  });
+
+  // An MCP door records the MCP audit actor (its runtime and operator headers),
+  // its repo and door "mcp"; payload.actorId names the authenticated principal.
+  // The web records the session's audit label, as the plain web PATCH does.
+  const mcp = { actor: "codex:cos@petrasoap.com", repo: "petralabx/PLX_MC", payload: { door: "mcp", actorId: "sp_mcp_codex" } };
+  const web = { actor: "vince@petrasoap.com", payload: { door: null, actorId: "oid-admin" } };
+  const doors: [string, string, () => Promise<unknown>, Record<string, unknown>][] = [
+    ["mc_update_task reopen", "TASK-3001", () => actionUpdateTask(steward, { taskId: "TASK-3001", patch: { reopen: { stage: "progress" } } }), mcp],
+    ["the web PATCH reopen", "TASK-3001", () => webPatch("TASK-3001", { stage: "progress" }), web],
+    ["the web PATCH reopen with more fields", "TASK-3001", () => webPatch("TASK-3001", { stage: "progress", priority: "high" }), web],
+    ["the web PATCH stage move", "TASK-3002", () => webPatch("TASK-3002", { stage: "progress" }), web],
+    ["mc_report_progress", "TASK-3002", () => actionProgress(steward, { taskId: "TASK-3002", stage: "progress" }), mcp],
+  ];
+  it.each(doors)("%s: 409, the task unchanged, and one blocked event after the rollback", async (_n, id, move, who) => {
+    const before = structuredClone(row(id));
+    const written = events().length;
+    await expect(move()).rejects.toMatchObject({ code: "creator_approval_pending", status: 409 });
+    expect(row(id)).toEqual(before);
+    expect(events().slice(written).map((e) => e.kind)).toEqual(["creator_approval.blocked"]);
+    expect(blocked().at(-1)).toMatchObject({
+      taskId: id,
+      payload: { action: "stage", requestedStage: "progress", creatorPrincipal: "sp_mcp_workbench_intake" },
+    });
+    expect(blocked().at(-1)).toMatchObject(who);
+    expect(h.poolQueriesInTx).toEqual([]);
+  });
+
+  it("a reopen the gate allows records nothing", async () => {
+    await actionUpdateTask(steward, { taskId: "TASK-3001", patch: { reopen: { stage: "planned" } } });
+    expect(row("TASK-3001").data.stage).toBe("planned");
+    expect(blocked()).toEqual([]);
   });
 });
 

@@ -4,7 +4,7 @@
 // type — avoids base64 + the Contents 1MB inline cap.
 //
 // Auth goes through resolveGithubToken (src/lib/github-app): a short-lived App
-// installation token when the App is configured, else the static GITHUB_TOKEN,
+// installation token when the App is configured (App-only, TASK-4361),
 // else null → honest degraded (never throws, never fabricates).
 //   - Bearer auth header, accept vnd.github+json, x-github-api-version
 //
@@ -294,7 +294,7 @@ export class GithubApiSource implements LedgerSource {
             ok: false as const,
             repo: entry.repo,
             reason: "token_missing" as SourceDegradedReason,
-            note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledgers cannot be fetched",
+            note: "no GitHub auth configured (GitHub App installation token) — ledgers cannot be fetched",
           };
         }
         return discoverRepo(entry, token);
@@ -320,7 +320,7 @@ export class GithubApiSource implements LedgerSource {
         ok: false,
         ref,
         reason: "token_missing",
-        note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledger cannot be fetched",
+        note: "no GitHub auth configured (GitHub App installation token) — ledger cannot be fetched",
       };
     }
 

@@ -18,6 +18,12 @@ const s = vi.hoisted(() => ({
   table: new Map<string, Row>(),
   items: [] as Record<string, unknown>[],
   conflict: null as Record<string, unknown> | null,
+  // Conflicts the engine raised, and keep-SP resolutions it recorded.
+  raised: [] as Record<string, unknown>[],
+  resolved: [] as string[],
+  audits: [] as string[],
+  // Runs while the pull awaits Graph for an item, after its snapshot of the tasks.
+  onLookup: null as null | (() => Promise<unknown>),
 }));
 
 vi.mock("@/lib/db", () => {
@@ -51,7 +57,7 @@ vi.mock("@/lib/compliance/repo", () => ({ appendEventTx: async () => "1", append
 vi.mock("@/lib/sync/graph", () => ({
   siteContext: async () => ({ siteId: "s", listIds: { todos: "L", risks: "L2", roadmap: "L3", projects: "L4", reporegistry: "L5" } }),
   listDelta: async () => ({ items: s.items, deltaLink: "d" }),
-  resolveEmailByLookupId: async () => null,
+  resolveEmailByLookupId: async () => { await s.onLookup?.(); return null; },
   patchListItemFields: async () => undefined,
   createListItem: async () => "new",
   findItemByField: async () => null,
@@ -70,11 +76,11 @@ vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   getDeltaLink: async () => "stored-todos",
   saveDeltaLink: async () => undefined,
   markRegisterInboundComplete: async () => undefined,
-  insertConflict: async () => undefined,
-  appendAudit: async () => undefined,
+  insertConflict: async (conflict: Record<string, unknown>) => { s.raised.push(conflict); },
+  appendAudit: async (_actor: string, message: string) => { s.audits.push(message); },
   getBucketBySpItemId: async () => null,
   getConflict: async (id: string) => (s.conflict && s.conflict.id === id ? s.conflict : null),
-  resolveConflictRow: async () => undefined,
+  resolveConflictRow: async (id: string) => { s.resolved.push(id); },
 }));
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireSessionActor: async () => ({ actor: {}, actorId: "oid-1", auditLabel: "vince@example.com" }),
@@ -95,7 +101,7 @@ import { FILES, TASKS } from "@/lib/mc-data/data";
 import { awaitsRetest, countTaskProgress } from "@/lib/mc-data/policy";
 import type { Task } from "@/lib/mc-data/types";
 import { resolveConflict, runScopedListDelta } from "@/lib/sync/engine";
-import { getEntity } from "@/lib/sync/repo";
+import { getEntity, updateEntity } from "@/lib/sync/repo";
 import { patchTask } from "@/lib/sync/state";
 import { isStaleClosed } from "@/lib/tasks/uat-labels";
 
@@ -111,6 +117,12 @@ const putTask = (stage: string, labels: string[]) =>
     id: ID, title: "t", bucket: "BKT-UAT", stage, priority: "medium", labels, accountableOwner: "vince",
     prs: [{ repo: "plx-customer-portal", num: 1, status: "merged", title: "fix", base: "staging" }],
   }, { sp_item_id: "7", completed_at: "2026-10-20T00:00:00.000Z" }));
+// The stage is dirty from an agent's write at 11:00; the ToDos edit is a person's at 12:00.
+const markStageServicePending = () => {
+  const r = s.table.get(`task:${ID}`)!;
+  r.dirty_fields = ["stage"];
+  r.field_attribution = { stage: { source: "service", at: "2026-10-30T11:00:00.000Z" } };
+};
 // What the compliance projection sends when the reworked fix's PR merges.
 const projectionMerge = async () => (await patchTask(ID, { stage: "merged" }, "compliance-projection", { complianceProjection: true }))!;
 const webPatch = (body: Record<string, unknown>) =>
@@ -128,7 +140,7 @@ async function expectReworkAwaitsRetest() {
 }
 
 beforeEach(() => {
-  s.table.clear(); s.items = []; s.conflict = null;
+  s.table.clear(); s.items = []; s.conflict = null; s.raised = []; s.resolved = []; s.audits = []; s.onLookup = null;
   // ensureSeeded's "already seeded" probe rows.
   const last = TASKS[TASKS.length - 1].id;
   s.table.set(`task:${last}`, row("task", last, { id: last, stage: "backlog", labels: [] }));
@@ -215,5 +227,147 @@ describe("a web PATCH that reopens with the labels it read (S1-08)", () => {
       await expect(webPatch({ stage: "backlog", labels: [...UAT, label] })).rejects.toMatchObject({ code: "forbidden", status: 403 });
       expect(await read()).toMatchObject({ stage: "cancelled", labels: UAT });
     }
+  });
+});
+
+// TASK-4286: a UAT ticket task is verified only when its submitter confirms the
+// fix, through the portal's mc_update_task verify (TASK-3697). patchTask held it
+// (TASK-3963); the doors that write a stage straight through repo.updateEntity
+// hold it too. Invariant: no SharePoint edit, and no keep-SP, verifies it.
+describe("only the portal's verify moves a UAT ticket task to verified (TASK-4286)", () => {
+  beforeEach(() => putTask("merged", UAT));
+
+  it("the ToDos pull: Status Verified is not applied; the row raises a Sync conflict and the other fields still apply", async () => {
+    s.items = [{ id: "7", fields: { TaskID: ID, Title: "t", Priority: "High", Status: "Verified" } }];
+    expect(await runScopedListDelta("todos")).toMatchObject({ conflicts: 1 });
+    expect(await read()).toMatchObject({ stage: "merged", priority: "high", labels: UAT });
+    expect(s.table.get(`task:${ID}`)!.sync_state).toBe("conflict");
+    expect(s.raised).toEqual([expect.objectContaining({ entityId: ID, field: "Status", mcVal: "merged", spVal: "verified", note: expect.stringContaining("only the portal verifies") })]);
+  });
+
+  it("conflict keep-SP refuses Verified before any write and leaves the conflict open", async () => {
+    s.conflict = { id: "cf-2", entityType: "task", entityId: ID, field: "Status", mcVal: "Merged", spVal: "Verified" };
+    await expect(resolveConflict("cf-2", "sp", "vince")).rejects.toMatchObject({ code: "uat_verify_required", status: 403 });
+    expect(await read()).toMatchObject({ stage: "merged", labels: UAT });
+    expect(s.resolved).toEqual([]);
+    expect(s.audits).toEqual([expect.stringContaining("left unresolved — SharePoint value refused: Task TASK-9100 is a UAT ticket task")]);
+  });
+
+  it("repo.updateEntity refuses the move without the portal's verify flag, and allows it with the flag", async () => {
+    await expect(updateEntity("task", ID, { patch: { stage: "verified" } })).rejects.toMatchObject({
+      code: "uat_verify_required", status: 403, message: expect.stringContaining("only the portal's mc_update_task verify"),
+    });
+    expect((await read()).stage).toBe("merged");
+    await updateEntity("task", ID, { patch: { stage: "verified" }, uatVerify: true });
+    expect((await read()).stage).toBe("verified");
+  });
+
+  it("the portal's verify through patchTask still moves it to verified", async () => {
+    await expect(patchTask(ID, { stage: "verified" }, "portal", { uatVerify: true })).resolves.toMatchObject({ stage: "verified" });
+  });
+
+  // The rule holds on the end state, not only on the move: a label edit must not
+  // turn a verified task into a UAT ticket task nobody verified.
+  it("a label edit cannot make a verified task a UAT ticket task, on patchTask or repo.updateEntity", async () => {
+    putTask("verified", ["kind:code"]);
+    await expect(patchTask(ID, { labels: ["kind:code", "uat:R5JD2K"] }, "agent")).rejects.toMatchObject({
+      code: "forbidden", status: 403, message: expect.stringContaining("cannot make it a UAT ticket task"),
+    });
+    await expect(updateEntity("task", ID, { patch: { labels: ["kind:code", "uat:R5JD2K"] } })).rejects.toMatchObject({
+      code: "uat_verify_required", status: 403,
+    });
+    expect(await read()).toMatchObject({ stage: "verified", labels: ["kind:code"] });
+  });
+
+  // The portal finds a ticket's task by its uat:<feedbackId> label, so a verified
+  // task must not move to, or also answer to, another ticket.
+  it("a label edit cannot move a verified UAT ticket task to another ticket, or add one", async () => {
+    for (const labels of [["kind:code", "uat:OTHER", "uat-attempt:1"], [...UAT, "uat:OTHER"]]) {
+      putTask("verified", UAT);
+      await expect(patchTask(ID, { labels }, "agent")).rejects.toMatchObject({
+        code: "forbidden", status: 403, message: expect.stringContaining("change its ticket"),
+      });
+      await expect(updateEntity("task", ID, { patch: { labels } })).rejects.toMatchObject({ code: "uat_verify_required", status: 403 });
+      expect((await read()).labels).toEqual(UAT);
+    }
+  });
+
+  // Taking it out would drop it from the ticket's view and the done count, and
+  // no door could put it back while it stays verified.
+  it("a label edit cannot take a verified UAT ticket task out of being one", async () => {
+    for (const labels of [["uat:R5JD2K", "kind:needs-review"], ["kind:code"]]) {
+      putTask("verified", UAT);
+      await expect(patchTask(ID, { labels }, "agent")).rejects.toMatchObject({
+        code: "forbidden", status: 403, message: expect.stringContaining("take it out of being one"),
+      });
+      await expect(updateEntity("task", ID, { patch: { labels } })).rejects.toMatchObject({ code: "uat_verify_required", status: 403 });
+      expect((await read()).labels).toEqual(UAT);
+    }
+  });
+
+  // A raw web PATCH can store a ticket label twice; the MCP edit dedupes it.
+  it("a stored duplicate ticket label does not read as a ticket change", async () => {
+    putTask("verified", ["kind:code", "uat:R5JD2K", "uat:R5JD2K", "uat:hold"]);
+    await expect(patchTask(ID, { labels: ["kind:code", "uat:R5JD2K"] }, "agent")).resolves.toMatchObject({
+      labels: ["kind:code", "uat:R5JD2K"],
+    });
+  });
+
+  it("a verified UAT ticket task keeps taking label edits, and a verified task takes other labels", async () => {
+    putTask("verified", UAT);
+    await expect(patchTask(ID, { labels: [...UAT, "api"] }, "agent")).resolves.toMatchObject({ labels: [...UAT, "api"] });
+    putTask("verified", ["kind:code"]);
+    await expect(patchTask(ID, { labels: ["kind:code", "api"] }, "agent")).resolves.toMatchObject({ labels: ["kind:code", "api"] });
+    // Not a UAT ticket task (no kind:code), so its uat label is free to change.
+    putTask("verified", ["kind:needs-review", "uat:R5JD2K"]);
+    await expect(patchTask(ID, { labels: ["kind:needs-review", "uat:OTHER"] }, "agent")).resolves.toMatchObject({
+      labels: ["kind:needs-review", "uat:OTHER"],
+    });
+  });
+
+  it("keep-SP still resolves a Verified conflict once the portal has verified the task", async () => {
+    putTask("verified", UAT);
+    s.conflict = { id: "cf-4", entityType: "task", entityId: ID, field: "Status", mcVal: "Merged", spVal: "Verified" };
+    expect(await resolveConflict("cf-4", "sp", "vince")).toBe(true);
+    expect((await read()).stage).toBe("verified");
+    expect(s.resolved).toEqual(["cf-4"]);
+  });
+
+  // The pull reads the tasks once, then awaits Graph per item. A merge that lands in
+  // between is what the refusal found, so the conflict shows it, not the snapshot.
+  it("the ToDos conflict shows Mission Control's stage as the refusal found it, not the pull's snapshot", async () => {
+    putTask("review", UAT);
+    s.onLookup = projectionMerge;
+    s.items = [{ id: "7", fields: { TaskID: ID, Title: "t", Priority: "High", Status: "Verified", AssignedToLookupId: 5 } }];
+    expect(await runScopedListDelta("todos")).toMatchObject({ conflicts: 1 });
+    expect(await read()).toMatchObject({ stage: "merged", priority: "high" });
+    expect(s.raised).toEqual([expect.objectContaining({ field: "Status", mcVal: "merged", spVal: "verified" })]);
+  });
+
+  // An agent's stage write waits for the next sweep, and a person's newer ToDos edit
+  // says Verified. The guard refuses it, so the audit must not say SharePoint won.
+  it("audits no human-over-service win for a Status the guard refused", async () => {
+    markStageServicePending();
+    s.items = [{ id: "7", fields: { TaskID: ID, Title: "t2", Priority: "Medium", Status: "Verified" } }];
+    expect(await runScopedListDelta("todos")).toMatchObject({ conflicts: 1 });
+    expect(await read()).toMatchObject({ stage: "merged", title: "t2" });
+    expect(s.audits.filter((a) => a.includes("beat service pending"))).toEqual([]);
+    expect(s.audits).toContainEqual(expect.stringContaining(`Conflict detected on ${ID} · Status`));
+  });
+
+  it("still audits the human-over-service win when the Status applies", async () => {
+    putTask("merged", ["kind:code"]);
+    markStageServicePending();
+    s.items = [{ id: "7", fields: { TaskID: ID, Title: "t", Priority: "Medium", Status: "Verified" } }];
+    expect(await runScopedListDelta("todos")).toMatchObject({ pulled: 1, conflicts: 0 });
+    expect((await read()).stage).toBe("verified");
+    expect(s.audits).toContainEqual(expect.stringContaining(`Human SharePoint edit beat service pending on ${ID} · stage`));
+  });
+
+  it("a task that is not a UAT ticket task still moves to verified from SharePoint", async () => {
+    putTask("merged", ["kind:code"]);
+    s.items = [{ id: "7", fields: { TaskID: ID, Title: "t", Priority: "Medium", Status: "Verified" } }];
+    expect(await runScopedListDelta("todos")).toMatchObject({ pulled: 1, conflicts: 0 });
+    expect((await read()).stage).toBe("verified");
   });
 });

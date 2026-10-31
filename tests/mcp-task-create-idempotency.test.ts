@@ -473,6 +473,24 @@ describe("POST /api/cursor/tasks with an idempotency key", () => {
     expect(h.tasks).toHaveLength(1);
   });
 
+  // TASK-4286: no door creates a UAT ticket task at merged or verified; the MCP
+  // path refuses it before the claim, like uat:stale, so the key stays usable.
+  it("refuses a UAT ticket task at merged or verified with 403 before the claim, so the key is not used up", async () => {
+    const labels = ["kind:code", "uat:cmfb7q2xk0001"];
+    for (const ticket of [{ labels }, { labels: ["uat:cmfb7q2xk0001"], kind: "code" }]) {
+      for (const stage of ["merged", "verified"]) {
+        const refused = await restCreate({ ...TASK, ...ticket, stage, idempotencyKey: "k-landed" });
+        expect(refused.status).toBe(403);
+        expect(refused.json.error?.code).toBe("forbidden");
+      }
+    }
+    expect(h.rows).toEqual([]);
+    expect(h.createInputs).toEqual([]);
+    const allowed = await restCreate({ ...TASK, labels, idempotencyKey: "k-landed" });
+    expect(allowed.status).toBe(200);
+    expect(h.tasks).toHaveLength(1);
+  });
+
   const malformed: unknown[] = ["", "a:b", "has space", "x".repeat(129), 42, null];
   for (const idempotencyKey of malformed) {
     it(`gives 400 for idempotencyKey ${JSON.stringify(idempotencyKey)?.slice(0, 20)}`, async () => {

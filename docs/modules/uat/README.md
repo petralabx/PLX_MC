@@ -49,7 +49,7 @@ rollups count a fix as done only when the person who filed it confirmed it.
 | backlog → progress | Steward leased it; the PR is open or being written. |
 | merged | The fix is on `staging` and waits for the person's re-test. It stays open in rollups (`src/lib/mc-data/policy.ts`, `awaitsRetest`). |
 | merged + `uat:stale` | Closed as STALE: nobody answered the re-test (TASK-4200). Rollups count it **closed and unconfirmed**: in the closed share, never done and never open (`isStaleClosed`, `src/lib/tasks/uat-labels.ts`). Needs a human never lists it. |
-| verified | The portal recorded the person's pass. Only the portal's `mc_update_task { verify }` sets it, under `task.uat_sync`; MCP refuses `stage: verified` from anyone else (`src/lib/mcp/actions.ts`). |
+| verified | The portal recorded the person's pass. Only the portal's `mc_update_task { verify }` sets it, under `task.uat_sync`; `mc_update_task` has no stage field. The rule holds on every write path (TASK-3963, TASK-4286), and on the end state: a label edit cannot turn a verified task into a UAT ticket task, take one out of being a UAT ticket task, or move it to another ticket. `mc_report_progress` and the web PATCH answer 403 `forbidden`, and so does a create of a UAT ticket task at merged or verified. A ToDos Status of Verified is not applied and raises a Sync conflict. Keep-SP on that conflict answers 403 `uat_verify_required` and leaves it open. `patchTask` and `repo.updateEntity` hold the rule (`src/lib/tasks/uat-labels.ts`). |
 | cancelled | The portal cancels an obsolete, superseded or delivered-without-PR task. |
 
 A PR merge never moves a verified task back (`src/lib/compliance/projection.ts`).

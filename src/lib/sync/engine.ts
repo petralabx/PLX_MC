@@ -984,18 +984,26 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType, rec
       } catch (err) {
         // updateEntity re-reads the row under its lock: a cancel that committed after
         // this pull's snapshot refuses the inbound stage move (TASK-2529), and so does
-        // a pending creator approval (TASK-3530). Raise a Sync conflict (never a
-        // silent reopen or promotion) and still apply the remaining fields.
-        if (!(err instanceof ApiError) || (err.code !== "reopen_required" && err.code !== "creator_approval_pending")) throw err;
+        // a pending creator approval (TASK-3530). It alone holds the UAT verify rule
+        // (TASK-4286): a Status of Verified on a UAT ticket task. Raise a Sync
+        // conflict (never a silent reopen, promotion or verify) and still apply the
+        // remaining fields.
+        if (
+          !(err instanceof ApiError) ||
+          (err.code !== "reopen_required" && err.code !== "creator_approval_pending" && err.code !== "uat_verify_required")
+        ) throw err;
         const creatorGated = err.code === "creator_approval_pending";
+        const uatGated = err.code === "uat_verify_required";
         const requested = apply.stage;
         delete apply.stage;
         const idx = clearedDirty.indexOf("stage");
         if (idx >= 0) clearedDirty.splice(idx, 1);
         const note = creatorGated
           ? CREATOR_APPROVAL_INBOUND_NOTE
-          : "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.";
-        const mcVal = creatorGated ? displayValue(row.data.stage) : displayValue("cancelled");
+          : uatGated
+            ? UAT_VERIFY_INBOUND_NOTE
+            : "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.";
+        const mcVal = creatorGated || uatGated ? displayValue(row.data.stage) : displayValue("cancelled");
         await repo.insertConflict({
           id: `cf-${row.id.toLowerCase()}-stage-${Date.now()}`,
           entityType: type,
@@ -1862,6 +1870,19 @@ async function pushPlanningSingleField(
 const CREATOR_APPROVAL_INBOUND_NOTE =
   "Moved to a working stage in SharePoint while the task waits for creator approval (vince@ or cos@), so the Status was not applied.";
 
+const UAT_VERIFY_INBOUND_NOTE =
+  "Moved to Verified in SharePoint; only the portal verifies a UAT ticket task, when its submitter confirms the fix, so the Status was not applied.";
+
+// Keep-SP on a Status conflict cannot verify a UAT ticket task (TASK-4286).
+async function refuseKeepSpUatVerify(conflict: { entityId: string; field: string }, actor: string, message: string): Promise<never> {
+  await repo.appendAudit(
+    actor,
+    `Conflict on ${conflict.entityId} · ${conflict.field} left unresolved — SharePoint value refused: ${message}`,
+    "error"
+  );
+  throw new ApiError("uat_verify_required", message, 403);
+}
+
 // Keep-SP on a Status conflict cannot skip a pending creator approval (TASK-3530).
 async function refuseKeepSpCreatorGate(
   task: Task,
@@ -1956,6 +1977,8 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
         if (err instanceof ApiError && err.code === "creator_approval_pending") {
           await refuseKeepSpCreatorGate(entityRow.data as unknown as Task, value as StageKey, conflict, actor, err.message);
         }
+        // Nor verify a UAT ticket task (TASK-4286): leave the conflict open and audit why.
+        if (err instanceof ApiError && err.code === "uat_verify_required") await refuseKeepSpUatVerify(conflict, actor, err.message);
         throw err;
       }
     } else if (planningRow) {

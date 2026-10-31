@@ -49,7 +49,7 @@ rollups count a fix as done only when the person who filed it confirmed it.
 | backlog → progress | Steward leased it; the PR is open or being written. |
 | merged | The fix is on `staging` and waits for the person's re-test. It stays open in rollups (`src/lib/mc-data/policy.ts`, `awaitsRetest`). |
 | merged + `uat:stale` | Closed as STALE: nobody answered the re-test (TASK-4200). Rollups count it **closed and unconfirmed**: in the closed share, never done and never open (`isStaleClosed`, `src/lib/tasks/uat-labels.ts`). Needs a human never lists it. |
-| verified | The portal recorded the person's pass. Only the portal's `mc_update_task { verify }` sets it, under `task.uat_sync`; MCP refuses `stage: verified` from anyone else (`src/lib/mcp/actions.ts`). |
+| verified | The portal recorded the person's pass. Only the portal's `mc_update_task { verify }` sets it, under `task.uat_sync`. Every other door gets 403 (TASK-3963, TASK-4286). `mc_report_progress` refuses it first (`src/lib/mcp/actions.ts`). `patchTask` holds the rule for the web PATCH and `mc_update_task`, and `repo.updateEntity` for the SharePoint doors. A ToDos Status of Verified raises a Sync conflict, and keep-SP leaves the conflict open. No create starts a UAT ticket task at merged or verified (`src/lib/tasks/uat-labels.ts`). |
 | cancelled | The portal cancels an obsolete, superseded or delivered-without-PR task. |
 
 A PR merge never moves a verified task back (`src/lib/compliance/projection.ts`).

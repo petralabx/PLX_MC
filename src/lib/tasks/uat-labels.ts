@@ -59,6 +59,37 @@ export function endsStaleClose(from: string | undefined, to: string | undefined)
   return to !== "verified" && to !== "cancelled";
 }
 
+const UAT_VERIFY_DOOR = "only the portal's mc_update_task verify (task.uat_sync) moves it to verified";
+
+/**
+ * Why a write may not move a task to verified, or null (TASK-3963): a UAT
+ * ticket task is verified only when its submitter confirms the fix, through
+ * the portal's verify (`portalVerify`, TASK-3697). patchTask and
+ * repo.updateEntity both hold it, so every door that writes a stage does
+ * (TASK-4286). `after` is the task with the write applied.
+ */
+export function uatVerifyViolation(
+  id: string,
+  before: { stage?: string; labels?: readonly string[] },
+  after: { labels?: readonly string[] },
+  nextStage: string | undefined,
+  portalVerify: boolean
+): string | null {
+  if (nextStage !== "verified" || before.stage === "verified" || portalVerify) return null;
+  return isUatTicketTask(before) || isUatTicketTask(after) ? `Task ${id} is a UAT ticket task; ${UAT_VERIFY_DOOR}.` : null;
+}
+
+/**
+ * Why a new task may not start at this stage, or null (TASK-4286): a UAT
+ * ticket task starts before merged. Only its PR's merge moves it to merged
+ * (the compliance projection), and only the portal's verify to verified.
+ * Labels compare as createTask stores them.
+ */
+export function uatCreateStageViolation(labels: readonly string[], stage: string | undefined): string | null {
+  if ((stage !== "merged" && stage !== "verified") || !isUatTicketTask({ labels })) return null;
+  return `The new task is a UAT ticket task, so it cannot start at ${stage}: only its PR's merge moves it to merged, and ${UAT_VERIFY_DOOR}.`;
+}
+
 const STALE_LABEL_DOOR = `${UAT_STALE_LABEL} is set only by the portal's mc_update_task closeStale (task.uat_sync)`;
 
 /**

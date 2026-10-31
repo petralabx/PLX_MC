@@ -40,6 +40,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 }));
 
 import { actionCreateTask } from "@/lib/mcp/actions";
+import { createTask } from "@/lib/sync";
 
 const identity: McpIdentity = {
   operatorEmail: "vince@petrasoap.com", runtime: "cursor", workerId: "kind-test",
@@ -86,6 +87,28 @@ describe("actionCreateTask kind", () => {
       });
     }
     expect(db.tasks).toEqual([]);
+  });
+
+  // TASK-4286: a UAT ticket task starts before merged. Only its PR's merge moves it
+  // to merged, and only the portal's verify to verified, so no create starts there:
+  // not the MCP and REST door (actionCreateTask), nor the web door (createTask).
+  it("refuses a UAT ticket task created at merged or verified with 403 and writes nothing", async () => {
+    const cases: [{ labels: string[]; kind?: "code" }, "merged" | "verified"][] = [
+      [{ labels: ["uat:cmfb7q2xk0001"], kind: "code" }, "verified"],
+      [{ labels: ["kind:code", "uat:cmfb7q2xk0001"] }, "merged"],
+    ];
+    for (const [extra, stage] of cases) {
+      await expect(create({ ...extra, stage })).rejects.toMatchObject({ code: "forbidden", status: 403 });
+      await expect(createTask({ title: "T", bucket: "BKT-OPS", reporter: "vince@petrasoap.com", ...extra, stage }))
+        .rejects.toMatchObject({ code: "forbidden", status: 403, message: expect.stringContaining("UAT ticket task") });
+    }
+    expect(db.tasks).toEqual([]);
+  });
+
+  it("still creates a UAT ticket task at a working stage, and any other task at verified", async () => {
+    expect((await create({ labels: ["uat:cmfb7q2xk0001"], kind: "code", stage: "progress" })).task.stage).toBe("progress");
+    expect((await create({ kind: "code", stage: "verified" })).task.stage).toBe("verified");
+    expect(db.tasks).toHaveLength(2);
   });
 });
 

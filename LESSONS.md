@@ -292,6 +292,9 @@
 - **Recurred 2026-10-22 (TASK-3713, PR #400):**
   - **What happened:** a Claude Code session opened the PR, then called `mc_complete_task` with the PR URL. The gate verified 4 s before the evidence landed and blocked. `mc_verify_pr` then passed, and one re-run of the failed `compliance` job recovered it.
   - **Still open:** the contract promotion above has not landed, so the generated `CLAUDE.md` still does not state the order.
+- **Recurred 2026-10-30 (TASK-4201, PR #519):**
+  - **What happened:** a Claude Code session opened the PR, then called `mc_save_evidence`. The gate verified at open and blocked on missing evidence, and one re-run of the failed `compliance` job recovered it. The session had not read this entry before it opened the PR.
+  - **Promotion:** #520 (TASK-3928) puts the order in the contract's "Every PR" rule, so every generated rule file states it: save evidence with `mc_save_evidence` before you open the PR.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 

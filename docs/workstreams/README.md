@@ -59,3 +59,4 @@ after 30 days; git history keeps them.
 | [nav-v2-sidebar](nav-v2-sidebar.md) | Vince | `claude/nav-v2-sidebar-4` | active | — | TASK-3954 to TASK-3961, TASK-3996 |
 | [draft-projects](draft-projects.md) | Vince | `claude/brave-heisenberg-7t8mks` | done | — | TASK-4056, TASK-4059, TASK-4071, TASK-4109, TASK-4110, TASK-4129 to TASK-4132, TASK-4135 |
 | [goals-shipped-not-invoiced](goals-shipped-not-invoiced.md) | Vince | `feat/goals-shipped-not-invoiced` | active | — | TASK-3992 |
+| [agent-governance-consolidation](agent-governance-consolidation.md) | Vince | `claude/sleepy-cray-3x363i`, `claude/agent-governance-consolidation-2` to `-6` | active | — | TASK-4201, TASK-4204 to TASK-4207, TASK-3928 |

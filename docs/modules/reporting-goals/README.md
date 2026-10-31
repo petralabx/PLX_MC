@@ -88,7 +88,8 @@ traceable to a refresh run and a named query.
    running. It is built at a revenue rate (`?fx=`, **Revenue rate**) and
    carries revenue by customer class (**Revenue by customer class**) and the
    headline split into Manufacturing, Distribution and Services (**Revenue by
-   business line**).
+   business line**). Narrowed to some salespeople (`?sales=`, **Salesperson
+   filter**), it is built again from their customers' rows.
 6. **Access** — `access.ts`. Two Entra app roles on Mission Control's sign-in
    app, `Goals.Viewer` (see and export) and `Goals.Editor` (also refresh and
    manual entries), are assigned to the two Entra groups.
@@ -102,11 +103,11 @@ traceable to a refresh run and a named query.
 
    | Route | Who | Does |
    |---|---|---|
-   | `GET /api/reporting/goals` | Viewer | The page model, plus `viewer.editor` (whether this viewer may refresh). `?fx=sage` converts USD revenue at the fixed Sage rate (absent or `boc`: the run's Bank of Canada rate; anything else 400 `invalid_request`; 500 `config_error` when the Sage rate setting isn't usable). |
+   | `GET /api/reporting/goals` | Viewer | The page model, plus `viewer.editor` (whether this viewer may refresh). `?fx=sage` converts USD revenue at the fixed Sage rate (absent or `boc`: the run's Bank of Canada rate; anything else 400 `invalid_request`; 500 `config_error` when the Sage rate setting isn't usable). `?sales=GGC,SM,none` narrows it to those salespeople's customers (**Salesperson filter**; a code Sage can't hold, or more than 60, is 400 `invalid_request`). |
    | `POST /api/reporting/goals/refresh` | Editor | Claims a run and answers 202 with it; the run finishes in `after()`. 409 while one is running, 429 within 5 minutes of the last, 503 if the reporting database is not connected. |
    | `GET /api/reporting/goals/runs/[id]` | Viewer | One run's status, for polling |
    | `GET /api/reporting/goals/runs/[id]/shipment-lines` | Viewer | One good run's Sage invoice lines and whether the login could read them (`{ access, missing, lines }`), which the shipments list fetches once (TASK-3144). 404 when the run has none stored. |
-   | `GET /api/reporting/goals/export` | Viewer | The workbook (step 10) as `PLX goals and production YYYY-MM-DD.xlsx`, dated by the run's Toronto day; `?fx=sage` at the Sage rate, as `… YYYY-MM-DD (Sage rate).xlsx`. 404 `no_data` before the first good refresh. |
+   | `GET /api/reporting/goals/export` | Viewer | The workbook (step 10) as `PLX goals and production YYYY-MM-DD.xlsx`, dated by the run's Toronto day; `?fx=sage` at the Sage rate, as `… YYYY-MM-DD (Sage rate).xlsx`; `?sales=` for those salespeople's customers, as `… (GGC, SM).xlsx` (503 `salespeople_unavailable` when their salespeople can't be read). 404 `no_data` before the first good refresh. |
    | `GET /api/reporting/goals/entries` | Viewer | The live manual entries, oldest first |
    | `POST /api/reporting/goals/entries` | Editor | Adds an entry: 201 with it (next `M001`-style ID; entered by the signed-in Editor). 400 `invalid_entry` with the problems. |
    | `PATCH`, `DELETE /api/reporting/goals/entries/[id]` | Editor | Changes the fields sent (nothing is written when nothing changes), or soft-deletes the entry. 404 when there is no such live entry. |
@@ -148,7 +149,8 @@ traceable to a refresh run and a named query.
 9. **Audit**
    - `mc_events` records `reporting.goals.refresh.succeeded|failed` (run id,
      counts and error code, never values), `reporting.goals.export` (who, the
-     run id and the rate, `fx`) and `reporting.goals.denied`.
+     run id, the rate, `fx`, and the salespeople, `sales`, when narrowed) and
+     `reporting.goals.denied`.
    - It also records `reporting.goals.entry.created|updated|deleted` (the
      entry id and, for an edit, the names of the fields changed) and
      `reporting.goals.import.confirmed` (import id and counts). Never values.
@@ -512,6 +514,12 @@ disable `mc-goals-report` in the token map.
    Then check each "Lines don't add up" mark the first refreshes show: it
    should be a real difference (a line missing on the replica, a manual
    adjustment), not a rule.
+10. Salesperson filter (TASK-4277): no migration. A DBA runs
+    `readonly-grants-salespeople.sql` for the existing `mc_goals_ro` login, or
+    with `-v role=<role>` for the plx-reporting-mcp server's role (fresh installs
+    get the same grants from `readonly-grants.sql`). Until then the page says the
+    filter waits for read access and shows every customer. On 2026-10-30 the
+    reporting MCP's role could already read these columns.
 
 ### Revenue rate
 
@@ -571,6 +579,84 @@ Exclusive Distribution (Exclusive Manufacturing, Mixed and Unclassified stay).
 - **The workbook.** The Revenue by class sheet always carries a "Manufacturing
   customers (all but Exclusive Distribution)" row under the total, as a formula
   over the class rows.
+
+### Salesperson filter
+
+A "Salespeople" picker beside the Customers switch (Vince, 30 Oct 2026,
+TASK-4277): the page for the customers of one or more account managers, as Sage
+calls them, salespeople.
+
+- **Whose customers.** Each Sage customer's salespeople are the five slots on its
+  customer record (`sage.ar_customer` `codeslsp1`–`codeslsp5`), named from
+  `sage.ar_salesperson`. A customer belongs to every salesperson on it, so a
+  customer with two counts in full under each, and once when both are picked.
+  The split percents (`pctsasplt*`) are never read: this is a filter, not a
+  commission split. "No salesperson" picks the customers with none, the codes
+  Sage doesn't know, and the shipments entered by hand that name no Sage
+  customer. A hand shipment belongs to the Sage customer picked for it, else to
+  the truckload customer its name matches, as its class is found.
+- **Not the invoice's salesperson.** Sage also keeps a salesperson on each order
+  and invoice (`salesper1`–`5`). It can differ from the customer's: on
+  2026-10-30, 33 of October's invoices to customers listed as Venessa then Vince
+  carried Vince alone. The filter follows the customer record, which every row
+  of the report has (hand entries and truckloads included). Vince confirmed the
+  customer's salesperson on 30 Oct 2026.
+- **Read live.** The page asks the reporting replica, through the refresh's own
+  path, for the salespeople of the customers this run's figures name (its
+  invoices, truckloads, credit notes, shipments not yet invoiced, open orders,
+  hand entries and the truckload customers), as it asks for the finished-good
+  list (`salespeople.ts`, `queries/salespeople.ts`, cached five minutes).
+  Nothing is stored, so there is no migration, and a change on Sage shows within
+  five minutes. Without the grant the picker says it waits for read access and
+  names the columns (`SALESPERSON_COLUMNS`); a failed read says it can't filter
+  now. Either way every figure is every customer's.
+- **Where.** The picker lists the salespeople on this run's customers, by name,
+  with how many of its customers each has, and "No salesperson". Several can be
+  ticked. The choice lives in the URL (`/?screen=goals&sales=GGC,SM`, kept with
+  `fx` and `scope`), and each change reads the page model again for it, so every
+  figure comes from one build. "Show every customer" clears it.
+- **What follows.** The run is narrowed before the page model is built
+  (`filterRunBySalespeople`, `salesperson-filter.ts`), so the same rules make
+  every figure: the Revenue card (Sage, by hand, charges, returns, the
+  shipped-not-invoiced estimate, the business lines), revenue by customer
+  class, the daily revenue chart, truckloads (this month and last), entries by
+  hand, the shipments list, revenue by customer, the forecast's rows and four
+  numbers, the takeaway and the workbook. The card's month by currency and by
+  day are added up from the kept invoices as `revenue-by-currency` and `daily`
+  add them, to the cent.
+- **What stays whole.** Production has no customer: Line 1 bulk, the batch
+  list, sizes, the assembly orders and the unpriced production on Revenue by
+  customer are every customer's, and the page says so. The revenue
+  covered-through date, due so far and the hand-entry match for the estimate
+  are the whole page's, so a hand entry of a customer left out still says how
+  far the data reaches. The forecast's target and hit rate stay every
+  customer's, as with its class filter.
+- **Last month.** `revenue-by-currency` and `daily` store last month only as
+  totals, so a narrowed page leaves last month's revenue out (null): the daily
+  chart drops that line and the workbook leaves its column blank. Truckloads
+  keep last month: their rows carry the customer.
+- **No comparison with the goal.** The monthly goal is every customer's, so a
+  narrowed page never sets the picked customers against it. The Revenue card
+  has no On track or Behind and no pace: its headline is set against every
+  customer's headline instead ("of $X for every customer", the share, and the
+  bar). The daily revenue chart drops the target line, the forecast's four
+  numbers say the target and hit rate are for all customers, and the takeaway
+  gives the card's share. The Customers switch still applies on top.
+- **Adds up.** Every salesperson and "No salesperson" ticked gives back the
+  whole page to the cent, when the refresh read Sage at one moment. On the
+  reporting MCP path the card's and the invoice list's datasets are two reads
+  (**Revenue by customer class**); when they differ, a narrowed page follows
+  the invoice list and says Sage changed during the refresh. Salespeople with
+  no customer in common add up to the whole in native currency; each page
+  converts its own US dollars once, so headlines can differ by a few cents.
+- **The workbook.** `?sales=` narrows it the same way and names it
+  (`… (GGC, SM).xlsx`, or `(4 salespeople)` past three). The Read me and Goals
+  sheets say whose customers it covers, and the Goals sheet's revenue row has
+  no status or pace. "Manual entries" still lists every entry: it is the import
+  template, and an import removes any entry it doesn't list. The estimate
+  leaves out the Sage shipments every customer's hand entries stand for, as the
+  page does. It is refused rather than exported for every customer under their
+  names when the salespeople can't be read.
 
 ### Revenue by customer
 
@@ -895,12 +981,13 @@ Depended on by: nothing yet.
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, source-mcp, sql-literal, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - Revenue rate and revenue by class (TASK-3780, TASK-3781): `revenue-by-class.ts`, `money.ts` (`allocateConvertedCents`, `usableRate`), `excel/export.ts` (`usdToCadFormula`); `tests/reporting-goals-revenue-rate.test.ts` and the Sage-rate blocks of `tests/reporting-goals-export.test.ts`; `e2e/goals-rate.spec.ts`
 - Revenue by customer: `customer-revenue.ts`, `customer-search.ts`, `src/components/mc/goals/customers.tsx`, the Customers sheet in `excel/export.ts`; `tests/reporting-goals-customer-revenue.test.ts`; `e2e/goals-customers.spec.ts`
+- Salesperson filter (TASK-4277): `salesperson-filter.ts` (pure), `salespeople.ts` (the live lookup), `queries/salespeople.ts`, `buildGoalsViewAndRun` in `view.ts`; `src/components/mc/goals/salespeople.tsx`; `docs/modules/reporting-goals/readonly-grants-salespeople.sql`; `tests/reporting-goals-salespeople{,-lookup}.test.ts` and the salesperson block of `tests/reporting-goals-postgres.test.ts`; `e2e/goals-salespeople.spec.ts`
 - Reporting MCP path (TASK-3489): `source-mcp.ts`, `sql-literal.ts`; `tests/reporting-goals-source-mcp.test.ts` (a fake plx-reporting-mcp), `tests/reporting-goals-sql-literal.test.ts`, `tests/reporting-goals-source-select.test.ts`
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
 - `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings
 - `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
-- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login; `readonly-grants-shipment-lines.sql` — the invoice lines' grants for the existing login; `readonly-grants-credit-notes.sql` — the credit notes' grants for the existing login
+- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login; `readonly-grants-shipment-lines.sql` — the invoice lines' grants for the existing login; `readonly-grants-credit-notes.sql` — the credit notes' grants for the existing login; `readonly-grants-salespeople.sql` — the salesperson filter's grants for the existing login
 - What shipped (TASK-3144): `src/lib/reporting/goals/shipment-lines.ts` (pure), `queries/shipment-lines.ts`, `queries/read-access.ts` (the catalog check it shares with the forecast); `src/app/api/reporting/goals/runs/[id]/shipment-lines/route.ts`; `db/migrations/044_reporting_goals_shipment_lines.sql` (+ rollback); `tests/reporting-goals-shipment-lines{,-export}.test.ts` and the shipment lines block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-shipment-lines-replica.ts` loads `shipment-lines-source.json`); `e2e/goals-shipment-lines.spec.ts`
 - Revenue forecast (TASK-3151): `src/lib/reporting/goals/forecast.ts` (pure), `forecast-read.ts`, `forecast-store.ts`, `queries/forecast-{orders,assembly-orders,access}.ts`, `customer-classes.json` (written by `scripts/goals-customer-classes.mjs`, TASK-3177); `src/components/mc/goals/forecast.tsx`; `db/migrations/043_reporting_goals_forecast.sql` and `045_reporting_goals_forecast_category.sql` (+ rollbacks); `tests/reporting-goals-forecast*.test.ts` and the forecast block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-forecast-replica.ts` builds the source tables from `forecast-source.json`); `e2e/goals-forecast.spec.ts`
 - `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why); `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks); `tests/reporting-goals-roundtrip.test.ts` — the real export read back by the import (the round-trip guarantee)

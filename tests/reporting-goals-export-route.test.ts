@@ -35,7 +35,18 @@ import { appendEvent } from "@/lib/compliance/repo";
 import { WORKBOOK_SHEETS, XLSX_CONTENT_TYPE, type GoalsExportData } from "@/lib/reporting/goals";
 import { loadGoalsExport } from "@/lib/reporting/goals/loader";
 
-import { DATASETS, ENTRIES, FORECAST, RATE, SHIPMENT_LINES, SHIPMENT_LINES_SUMMARY, TODAY, goalsPage } from "./reporting-goals-helpers";
+import {
+  DATASETS,
+  ENTRIES,
+  FORECAST,
+  RATE,
+  SHIPMENT_LINES,
+  SHIPMENT_LINES_SUMMARY,
+  TODAY,
+  goalsPage,
+  goalsViewInput,
+  salesGoalsPage,
+} from "./reporting-goals-helpers";
 
 const ctx = { params: Promise.resolve({}) };
 const FILE = "PLX goals and production 2026-10-14.xlsx";
@@ -103,7 +114,7 @@ describe("GET /api/reporting/goals/export", () => {
     h.data = exportData(goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "sage"));
     const resp = await exportGet(new Request("http://localhost/api/reporting/goals/export?fx=sage"), ctx);
     expect(resp.status).toBe(200);
-    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("sage");
+    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("sage", []);
     expect(resp.headers.get("content-disposition")).toBe('attachment; filename="PLX goals and production 2026-10-14 (Sage rate).xlsx"');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await resp.arrayBuffer());
@@ -117,6 +128,30 @@ describe("GET /api/reporting/goals/export", () => {
     const bad = await exportGet(new Request("http://localhost/api/reporting/goals/export?fx=1.25"), ctx);
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ error: { code: "invalid_request" } });
+  });
+
+  it("narrows the workbook to ?sales= and names it, and never exports every customer under their names (TASK-4277)", async () => {
+    signedIn(["Goals.Viewer"]);
+    h.data = exportData(salesGoalsPage(["BB"]));
+    const resp = await exportGet(new Request("http://localhost/api/reporting/goals/export?sales=bb"), ctx);
+    expect(resp.status).toBe(200);
+    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("boc", ["BB"]);
+    expect(resp.headers.get("content-disposition")).toBe('attachment; filename="PLX goals and production 2026-10-14 (BB).xlsx"');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await resp.arrayBuffer());
+    expect(String(wb.getWorksheet("Read me")!.getCell("A3").value)).toContain("Only the customers of Bravo Rep (BB)");
+    expect(appendEvent).toHaveBeenLastCalledWith({
+      kind: "reporting.goals.export",
+      actor: "human:stephen@petrasoap.com",
+      payload: { runId: 41, fx: "boc", sales: ["BB"] },
+    });
+    // The salespeople couldn't be read: the figures are every customer's, so no workbook goes out under their names.
+    h.data = exportData(salesGoalsPage(["BB"], goalsViewInput(), { state: "unavailable" }));
+    const refused = await exportGet(new Request("http://localhost/api/reporting/goals/export?sales=BB"), ctx);
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toMatchObject({ error: { code: "salespeople_unavailable" } });
+    const bad = await exportGet(new Request("http://localhost/api/reporting/goals/export?sales=%3Cx%3E"), ctx);
+    expect(bad.status).toBe(400);
   });
 
   it("lets Editors and read-only break-glass sessions export too", async () => {

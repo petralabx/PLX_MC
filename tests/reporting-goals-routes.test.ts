@@ -129,7 +129,7 @@ describe("GET /api/reporting/goals", () => {
     vi.mocked(loadGoalsView).mockClear();
     for (const [query, basis] of [["", "boc"], ["?fx=boc", "boc"], ["?fx=sage", "sage"]] as const) {
       expect((await viewGet(new Request(`http://localhost/api/reporting/goals${query}`), ctx)).status).toBe(200);
-      expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith(basis);
+      expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith(basis, []);
     }
     const bad = await viewGet(new Request("http://localhost/api/reporting/goals?fx=usd"), ctx);
     expect(bad.status).toBe(400);
@@ -137,6 +137,17 @@ describe("GET /api/reporting/goals", () => {
     // The role check comes first: no session is still 401, whatever the query.
     h.session = null;
     expect((await viewGet(new Request("http://localhost/api/reporting/goals?fx=usd"), ctx)).status).toBe(401);
+  });
+
+  it("reads ?sales=: Sage salesperson codes and none, in one spelling; a code Sage can't hold is 400 (TASK-4277)", async () => {
+    signedIn(["Goals.Viewer"]);
+    vi.mocked(loadGoalsView).mockClear();
+    expect((await viewGet(new Request("http://localhost/api/reporting/goals?fx=sage&sales=sm,none,GGC"), ctx)).status).toBe(200);
+    expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith("sage", ["GGC", "SM", "none"]);
+    const bad = await viewGet(new Request("http://localhost/api/reporting/goals?sales=G%20C"), ctx);
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: { code: "invalid_request" } });
+    expect(vi.mocked(loadGoalsView)).toHaveBeenCalledTimes(1);
   });
 });
 

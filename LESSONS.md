@@ -1293,3 +1293,13 @@
 - **Rule going forward:** Run `cd portal && npm run audit:rbac` locally before marking a portal PR
   Ready, alongside lint and tsc. Prefer letting `evaluateCoarseAccess` decide over reading the role;
   classify a read only when it truly selects presentation, never when it grants access.
+
+## 2026-10-31 — PLX_MC #529: two agent commits pushed without their trailer block (TASK-4292)
+- **What went wrong:** Both commits of #529 ended with `Co-Authored-By` and `Claude-Session` but no
+  `Agent`, `On-Behalf-Of` and `MC-Checkout` trailers. `mc_verify_pr` blocked the PR on each commit.
+  No later commit can clear a bad one and a force-push is not allowed, so the PR was re-cut as #530.
+- **Root cause:** The session's commit template lost the trailer block after a context summary, and
+  the #466 check below was not run. PLX_MC has no pre-push hook, so nothing caught it before the push.
+- **Rule going forward:** Before the first push of any agent branch, run
+  `git log --format=%B origin/main..HEAD | grep -c '^MC-Checkout:'`; the count must equal the number
+  of commits. Run `mc_verify_pr` right after opening the PR, and fix every `commit …` reason before CI.

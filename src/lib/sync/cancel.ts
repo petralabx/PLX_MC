@@ -12,8 +12,9 @@ import {
 import { isClosedStage } from "@/lib/mc-data/policy";
 import type { StageKey, Task } from "@/lib/mc-data/types";
 import { buildCancellation } from "./cancel-validate";
+import { ensureReposSeeded, ensureSeeded } from "./engine";
 import * as repo from "./repo";
-import { patchTask, type MutationAttribution } from "./state";
+import { patchTask, type MutationAttribution, type PatchTaskInput, type PatchTaskOptions } from "./state";
 
 export interface CancelContext {
   /** Audit label for the activity/audit trail (operator email). */
@@ -123,6 +124,26 @@ export async function reopenTaskTx(q: TxQuery, taskId: string, input: ReopenInpu
   return { task, stage, eventSeq };
 }
 
-export function reopenTask(taskId: string, input: ReopenInput, ctx: CancelContext) {
-  return withTransaction((q) => reopenTaskTx(q, taskId, input, ctx));
+/** The rest of a web PATCH that leaves cancelled, applied after the reopen. */
+export interface ReopenRestPatch {
+  patch: PatchTaskInput;
+  actor: string;
+  opts?: Omit<PatchTaskOptions, "query">;
+}
+
+// With `rest`, the rest of the patch commits in the reopen's transaction, so a
+// refusal of it rolls the reopen back and the task stays cancelled (TASK-4292).
+export async function reopenTask(taskId: string, input: ReopenInput, ctx: CancelContext, rest?: ReopenRestPatch) {
+  // patchTask skips its pool bootstrap inside a transaction; seed first, as it does.
+  if (rest) {
+    await ensureSeeded();
+    if (rest.patch.repos) await ensureReposSeeded();
+  }
+  return withTransaction(async (q) => {
+    const reopened = await reopenTaskTx(q, taskId, input, ctx);
+    if (!rest) return reopened;
+    const task = await patchTask(taskId, rest.patch, rest.actor, { ...rest.opts, query: q });
+    if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
+    return { ...reopened, task };
+  });
 }

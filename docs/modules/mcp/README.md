@@ -143,6 +143,9 @@ stored in the jsonb payload.
   cancel (from the latest `task.cancelled` event, else `backlog`); terminal
   stages are refused. It sets `cancellation` to NULL, leaves `completed_at`
   untouched and appends `task.reopened`. Cancelling again writes a new object.
+  A web `PATCH /api/tasks/{id}` with a stage on a cancelled task reopens it
+  through the same service and commits its other fields in that transaction,
+  so a refusal of any field leaves the task cancelled (TASK-4292).
 - Who: cancel needs `task.cancel` and reopen `task.reopen`, evaluated on the
   authenticated principal (`requireMcpActor`; capabilities from
   `src/lib/permissions/grants.ts`). `X-MC-Operator-Email` is audit context only

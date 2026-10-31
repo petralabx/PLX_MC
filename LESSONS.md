@@ -292,6 +292,9 @@
 - **Recurred 2026-10-22 (TASK-3713, PR #400):**
   - **What happened:** a Claude Code session opened the PR, then called `mc_complete_task` with the PR URL. The gate verified 4 s before the evidence landed and blocked. `mc_verify_pr` then passed, and one re-run of the failed `compliance` job recovered it.
   - **Still open:** the contract promotion above has not landed, so the generated `CLAUDE.md` still does not state the order.
+- **Recurred 2026-10-30 (TASK-4201, PR #519):**
+  - **What happened:** a Claude Code session opened the PR, then called `mc_save_evidence`. The gate verified at open and blocked on missing evidence, and one re-run of the failed `compliance` job recovered it. The session had not read this entry before it opened the PR.
+  - **Promotion:** #520 (TASK-3928) puts the order in the contract's "Every PR" rule, so every generated rule file states it: save evidence with `mc_save_evidence` before you open the PR.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 
@@ -1290,3 +1293,13 @@
 - **Rule going forward:** Run `cd portal && npm run audit:rbac` locally before marking a portal PR
   Ready, alongside lint and tsc. Prefer letting `evaluateCoarseAccess` decide over reading the role;
   classify a read only when it truly selects presentation, never when it grants access.
+
+## 2026-10-31 — PLX_MC #529: two agent commits pushed without their trailer block (TASK-4292)
+- **What went wrong:** Both commits of #529 ended with `Co-Authored-By` and `Claude-Session` but no
+  `Agent`, `On-Behalf-Of` and `MC-Checkout` trailers. `mc_verify_pr` blocked the PR on each commit.
+  No later commit can clear a bad one and a force-push is not allowed, so the PR was re-cut as #530.
+- **Root cause:** The session's commit template lost the trailer block after a context summary, and
+  the #466 check below was not run. PLX_MC has no pre-push hook, so nothing caught it before the push.
+- **Rule going forward:** Before the first push of any agent branch, run
+  `git log --format=%B origin/main..HEAD | grep -c '^MC-Checkout:'`; the count must equal the number
+  of commits. Run `mc_verify_pr` right after opening the PR, and fix every `commit …` reason before CI.

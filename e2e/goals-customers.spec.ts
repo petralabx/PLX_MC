@@ -11,7 +11,7 @@ test.describe("goals revenue by customer", () => {
   test("shows both rankings, filters them by search and counts unpriced production", async ({ page }) => {
     const data = goalsPage().customerRevenue!;
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: By customer");
     const section = page.getByTestId("goals-customers");
     await section.scrollIntoViewIfNeeded();
     const realized = page.getByTestId("goals-realized");

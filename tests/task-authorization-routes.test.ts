@@ -66,7 +66,7 @@ describe("task authorization routes", () => {
       auditLabel: "vince@example.com",
     });
     mocks.getEntity.mockResolvedValue({ data: { stage: "progress" } });
-    mocks.reopenTask.mockResolvedValue({ stage: "backlog" });
+    mocks.reopenTask.mockResolvedValue({ task: { id: "TASK-1", stage: "backlog" }, stage: "backlog" });
     mocks.cancelTask.mockResolvedValue({ task: { id: "TASK-1", stage: "cancelled" } });
     mocks.createTask.mockResolvedValue({ id: "TASK-1", title: "t" });
     mocks.patchTask.mockResolvedValue({ id: "TASK-1", stage: "progress" });
@@ -145,16 +145,22 @@ describe("task authorization routes", () => {
       expect(mocks.patchTask).not.toHaveBeenCalled();
     });
 
-    it("lets a principal with task.reopen reopen through the reopen service (not a bare patch)", async () => {
+    it("lets a principal with task.reopen reopen through the reopen service, the rest of the patch in its transaction", async () => {
       mocks.getEntity.mockResolvedValue({ data: { stage: "cancelled" } });
-      await patchStage("backlog");
+      await expect(patchStage("backlog")).resolves.toEqual({ id: "TASK-1", stage: "backlog" });
       expect(mocks.requireSessionActor).toHaveBeenCalledWith("task.reopen", { type: "task", id: "TASK-1" });
       expect(mocks.reopenTask).toHaveBeenCalledWith(
         "TASK-1",
         { stage: "backlog" },
-        expect.objectContaining({ actorId: "oid-1", eventActor: "human:vince@example.com" })
+        expect.objectContaining({ actorId: "oid-1", eventActor: "human:vince@example.com" }),
+        {
+          patch: {},
+          actor: "vince@example.com",
+          opts: { attribution: { source: "human", actorId: "oid-1" }, enforceClosedProject: true },
+        }
       );
-      expect(mocks.patchTask).toHaveBeenCalledWith("TASK-1", {}, "vince@example.com", expect.anything());
+      // No separate patch: a refusal of the rest must roll the reopen back (TASK-4292).
+      expect(mocks.patchTask).not.toHaveBeenCalled();
     });
 
     it("does not require task.reopen for a stage change on a task that is not cancelled", async () => {

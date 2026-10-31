@@ -109,9 +109,10 @@ export const PATCH = route(async (req, ctx) => {
   }
   // Leaving cancelled is a reopen: it needs task.reopen on the session principal,
   // runs through the reopen service (clears cancellation, emits task.reopened) and
-  // is never a silent side effect of a generic stage change (TASK-2529).
+  // is never a silent side effect of a generic stage change (TASK-2529). The rest
+  // of the patch commits with the reopen, so a refusal of it leaves the task
+  // cancelled (TASK-4292).
   const { stage, ...rest } = patch;
-  let reopened = false;
   if (stage) {
     const current = await getEntity("task", id);
     if (current?.data.stage === "cancelled") {
@@ -129,16 +130,20 @@ export const PATCH = route(async (req, ctx) => {
         }
         throw err;
       }
-      await reopenTask(id, { stage }, {
+      const { task } = await reopenTask(id, { stage }, {
         actor: reopener.auditLabel,
         actorId: reopener.actorId,
         eventActor: `human:${reopener.auditLabel}`,
         attribution: { source: "human", actorId: reopener.actorId },
+      }, {
+        patch: rest,
+        actor: authorized.auditLabel,
+        opts: { attribution: { source: "human", actorId: authorized.actorId }, enforceClosedProject: true },
       });
-      reopened = true;
+      return task;
     }
   }
-  const task = await patchTask(id, reopened ? rest : patch, authorized.auditLabel, {
+  const task = await patchTask(id, patch, authorized.auditLabel, {
     attribution: { source: "human", actorId: authorized.actorId },
     enforceClosedProject: true,
   });

@@ -4,7 +4,7 @@ import type { Datasets } from "../src/lib/reporting/goals";
 import { XLSX_CONTENT_TYPE } from "../src/lib/reporting/goals/excel/export";
 import { DATASETS, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY } from "../tests/reporting-goals-helpers";
 import { waitForHydration } from "./helpers";
-import { goalsPage, gotoGoals, mockGoalsApi } from "./helpers/goals";
+import { goalsPage, gotoGoals, mockGoalsApi, openGoalsTab } from "./helpers/goals";
 
 // The revenue rate switch on Goals & Production (TASK-3780) and revenue by
 // customer class (TASK-3781), against the 2026-10-14 fixture with M1–M7
@@ -53,8 +53,11 @@ test.describe("goals revenue rate", () => {
     await expect(revenueCard(page)).toContainText("$215,536 at 1.25 (Sage rate))");
     await expect(classes(page).locator("tfoot")).toContainText("374,561.16");
     await expect(page.getByTestId("goals-classes").getByText("US dollars at the Sage rate 1.25")).toBeVisible();
+    await openGoalsTab(page, "Revenue: Forecast");
     await expect(page.getByTestId("goals-forecast").getByText("Amounts in CAD at the Sage rate 1.25.")).toBeVisible();
 
+    await page.goBack();
+    await expect(page.getByTestId("goals-classes").getByText("US dollars at the Sage rate 1.25")).toBeVisible();
     await page.goBack();
     await expect(boc(page)).toHaveAttribute("aria-pressed", "true");
     await expect(revenueCard(page)).toContainText("$245,176 at 1.4219 (Bank of Canada, Oct 13))");

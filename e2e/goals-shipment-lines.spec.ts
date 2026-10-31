@@ -31,7 +31,7 @@ const WAITING: GoalsPage = goalsPage({}, undefined, undefined, {
 test.describe("goals shipment lines", () => {
   test("an invoice opens to its items and charges, which add up to it, and the keyboard closes and opens it", async ({ page }) => {
     const api = await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Shipments");
     const button = toggle(page, "IN1000180398");
     await expect(button).toHaveAttribute("aria-expanded", "false");
     await button.click();
@@ -71,7 +71,7 @@ test.describe("goals shipment lines", () => {
 
   test("the invoices whose lines don't add up are marked, and opened they show both figures", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Shipments");
     await expect(section(page).getByTestId("goals-lines-note")).toHaveText(
       "3 invoices’ lines don’t add up to the invoice. They’re marked “Lines don’t add up”; open one to see both figures."
     );
@@ -96,7 +96,7 @@ test.describe("goals shipment lines", () => {
 
   test("the search finds item codes and descriptions in the lines", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Shipments");
     const search = section(page).getByLabel("Search shipments");
     const invoices = list(page).locator("tbody th[scope='row']");
     await search.fill("desert breeze");
@@ -112,7 +112,7 @@ test.describe("goals shipment lines", () => {
 
   test("while the login can't read the lines, an opened invoice says what it lacks, and none are fetched", async ({ page }) => {
     const api = await mockGoalsApi(page, WAITING);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Shipments");
     await expect(section(page).getByTestId("goals-lines-note")).toHaveText(
       "Item details are waiting for read access to Sage invoice lines. Open an invoice to see what the reporting login can’t read yet."
     );
@@ -130,7 +130,7 @@ test.describe("goals shipment lines", () => {
 
   test("a failed fetch says so in place, and Retry loads the lines", async ({ page }) => {
     await mockGoalsApi(page, goalsPage(), { status: 500, code: "internal", message: "Internal error." });
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Shipments");
     const note = section(page).getByTestId("goals-lines-note");
     await expect(note).toContainText("Couldn’t load the invoice lines: Internal error.");
     await toggle(page, "IN1000180398").click();
@@ -152,7 +152,7 @@ test.describe("goals shipment lines", () => {
         expect(results.violations).toEqual([]);
       };
       await mockGoalsApi(page);
-      await gotoGoals(page);
+      await gotoGoals(page, "Revenue: Shipments");
       for (const invoice of ["IN1000180398", "IN1000180368", "IN1000180353", "IN1000180417"]) await toggle(page, invoice).click();
       await expect(list(page).locator("tr.gp-lines-row")).toHaveCount(4);
       await scan();

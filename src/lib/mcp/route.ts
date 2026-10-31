@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { verifyMcpRequest, type McpIdentity } from "./auth";
-import { buildMeta, wrapMcpResponse, type McpResponseMeta } from "./envelope";
+import { apiErrorBody, buildMeta, wrapMcpResponse, type McpResponseMeta } from "./envelope";
 import { recordMcpToolCall } from "./audit";
 import { auditErrorText } from "./audit-error";
 import { assertMcpToolAllowed } from "./tool-allowlist";
@@ -73,7 +73,7 @@ export function cursorRoute(toolName: string, handler: CursorHandler) {
         }).catch(() => {});
       }
       if (err instanceof ApiError) {
-        return NextResponse.json({ error: { code: err.code, message: err.message } }, { status: err.status });
+        return NextResponse.json(apiErrorBody(err), { status: err.status });
       }
       console.error("[cursor] unhandled error:", err);
       return NextResponse.json({ error: { code: "internal", message: "Internal error." } }, { status: 500 });

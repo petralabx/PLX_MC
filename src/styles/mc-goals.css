@@ -87,6 +87,122 @@
   color: var(--p-warn-text);
 }
 
+/* ─── Pinned KPI header and section tabs (TASK-4094) ──────────────────────── */
+/* The cards and the tab bar stick together under the top bar. The cards pane
+   scrolls on its own when it is taller than the viewport slice, so the tabs
+   stay on screen and a section is never stuck under the header. */
+.mc .goals .gp-sticky {
+  position: sticky;
+  top: var(--p-chrome-h);
+  z-index: 20;
+  margin-bottom: 16px;
+  background: var(--p-paper);
+  border-bottom: 1px solid var(--p-grid);
+}
+
+.mc .goals .gp-sticky-kpis {
+  max-height: min(38vh, 22rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mc .goals .gp-nav {
+  min-width: 0;
+}
+
+.mc .goals .gp-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin: 0;
+}
+
+.mc .goals .gp-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  min-height: var(--p-touch);
+  min-width: 5.5rem;
+  margin: 0;
+  padding: 6px 12px 5px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--p-muted);
+  font-family: var(--sans);
+  font-size: var(--p-text-small);
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mc .goals .gp-tab-start:not(:first-child) {
+  margin-left: 12px;
+}
+
+.mc .goals .gp-tab-kicker {
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  letter-spacing: var(--p-track-tick);
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-tab[aria-selected="true"] {
+  color: var(--p-ink);
+  font-weight: 600;
+  border-bottom-color: var(--p-accent);
+}
+
+.mc .goals .gp-tab[aria-selected="true"] .gp-tab-kicker {
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-tab:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .mc .goals .gp-tab:hover {
+    color: var(--p-ink);
+  }
+}
+
+/* Phone: one card across, so the three cards swipe sideways inside the pinned
+   pane. The pane is short enough that the headline number stays on screen and
+   the tabs under it leave room to use the section (a full card plus every tab
+   row would cover the page). Card details scroll inside the pane. */
+@container main (max-width: 51.999rem) {
+  .mc .goals .gp-sticky-kpis {
+    max-height: 12.5rem;
+  }
+
+  .mc .goals .gp-sticky .gp-cards {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+  }
+
+  .mc .goals .gp-sticky .gp-card {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+  }
+
+  /* Scroll-into-view (a tap, a keyboard focus) lands in the gap under the
+     pinned cards and tabs and above the phone tab bar. */
+  .mc .goals #goals-panel :is(a, button, summary, input, select, textarea, label) {
+    scroll-margin-top: calc(var(--p-chrome-h) + 26rem);
+    scroll-margin-bottom: calc(var(--p-tabs-h) + 16px);
+  }
+}
+
 .mc .goals .gp-empty {
   margin: 0;
   padding: 12px 0;

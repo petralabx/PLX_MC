@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { gotoGoals, mockGoalsApi } from "./helpers/goals";
+import { gotoGoals, mockGoalsApi, openGoalsTab } from "./helpers/goals";
 import { expectSurfaceNoHorizontalOverflow } from "./helpers/ui-loop-surfaces";
 
 // G3 for Goals & Production (TASK-2896): no sideways scrolling at the desktop,
@@ -26,6 +26,7 @@ test.describe("goals responsive (G3)", () => {
   });
 
   test("goals: no horizontal overflow, light and dark", async ({ page }, testInfo) => {
+    await openGoalsTab(page, "Batches: Day by day");
     await page.getByText("Day-by-day numbers").click();
     await page.screenshot({ path: `${SHOT_DIR}/${testInfo.project.name}.png`, fullPage: true });
     await expectSurfaceNoHorizontalOverflow(page, "goals-screen", `goals/${testInfo.project.name}`);
@@ -36,6 +37,7 @@ test.describe("goals responsive (G3)", () => {
   });
 
   test("shipments list: the table scrolls inside its region, never the page, and the totals fit, light and dark", async ({ page }, testInfo) => {
+    await openGoalsTab(page, "Revenue: Shipments");
     const section = page.getByTestId("goals-shipments");
     await section.getByRole("button", { name: /^USD/ }).click();
     await expect(section.getByText("Showing 14 of 72 shipments")).toBeVisible();
@@ -52,6 +54,7 @@ test.describe("goals responsive (G3)", () => {
   });
 
   test("shipment lines: opened invoices stay inside the list's region, never widening the page, light and dark", async ({ page }, testInfo) => {
+    await openGoalsTab(page, "Revenue: Shipments");
     const list = page.getByTestId("goals-shipments").getByRole("region", { name: "Shipment list" });
     for (const invoice of ["IN1000180398", "IN1000180368", "IN1000180353"]) {
       await list.getByRole("button", { name: `Lines of invoice ${invoice}` }).click();

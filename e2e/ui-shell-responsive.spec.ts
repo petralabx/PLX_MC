@@ -782,6 +782,7 @@ test.describe("shell — zoned sidebar", () => {
       /^Goals & production/,
       /^AI spend/,
       /^CI scorecard/,
+      /^UAT scorecard/,
     ]);
     // Rows are 28px for a mouse (ADR-011).
     expect(Math.round((await nav.getByRole("link", { name: "All work", exact: true }).boundingBox())!.height)).toBe(28);

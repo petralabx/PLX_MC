@@ -75,9 +75,14 @@ blocked flag, no human owner) (`src/components/mc/project-overview.helpers.ts`).
   cases. It counts a ticket's task in any bucket, not only `BKT-UAT` (TASK-3973). A daily cron (`/api/cron/uat-drift`, 10:00 UTC) records one
   `uat.drift.checked` event and fixes nothing.
 - **Portal read:** the view and three of the five drift cases need the portal's
-  ticket snapshot, `GET /api/internal/uat-feedback/mc-snapshot`. That endpoint is
-  still to be built in the portal. Until it exists, only `duplicate_open_tasks` and
-  `expired_lease_no_pr` can fire.
+  ticket snapshot, `GET /api/internal/uat-feedback/mc-snapshot`, which the portal
+  serves since 28 Oct (TASK-3798, portal PR #3052). While the read is off, only
+  `duplicate_open_tasks` and `expired_lease_no_pr` can fire.
+- **UAT scorecard:** after the drift check, the same cron pulls last week and this
+  week from the portal's `GET /api/internal/uat-feedback/scorecard` for the UAT
+  scorecard (`/?screen=uat-scorecard`, TASK-4196), which grades the fix loop week
+  by week against the team's targets. Contract and targets:
+  `docs/modules/uat-scorecard/README.md`.
 - **Flags, both off by default** (`src/lib/secrets.ts`):
   `PLX_MC_UAT_PORTAL_READ_ENABLED` (needs `PLX_MC_PORTAL_READ_TOKEN`) and
   `PLX_MC_UAT_DRIFT_CRON_ENABLED`.
@@ -104,6 +109,7 @@ creates one "UAT agent run …" task per run.
 - `compliance` (MC): PR projection, merge promotion, the UAT tickets loader and drift check.
 - `mcp` (MC): `task.uat_sync`, the UAT ticket rules on `mc_update_task`, `mc_report_progress` and `mc_complete_task`.
 - `loop-ledgers` (MC): reads the portal `uat` quality ledger.
+- `uat-scorecard` (MC): grades the portal's weekly fix-loop numbers, pulled by the drift cron.
 - `plx-customer-portal`: owns the tickets, the re-test, the ticket-task sweep and the ledger.
 - PLX Steward: leases ticket tasks and sets `uat:blocked` / `uat:cause:*`.
 

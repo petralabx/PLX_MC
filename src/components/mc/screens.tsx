@@ -27,6 +27,7 @@ import { ApprovalsInboxView } from "./approvals-inbox";
 import { SyncConsole } from "./sync-console";
 import { TaskDetailView } from "./task-detail";
 import { TraceabilityMatrix } from "./traceability";
+import { UatScorecardView } from "./uat-scorecard";
 import { WorkViews } from "./work-views";
 
 export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
@@ -57,6 +58,7 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "brain-ask": BrainAskView,
   "ai-spend": AiSpendView,
   "ci-scorecard": CiScorecardView,
+  "uat-scorecard": UatScorecardView,
   "routing-inbox": RoutingInboxView,
   approvals: ApprovalsInboxView,
   drafts: DraftsView,

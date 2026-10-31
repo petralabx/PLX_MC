@@ -33,6 +33,7 @@ export const SCREEN_VALUES = [
   "brain-ask",
   "ai-spend",
   "ci-scorecard",
+  "uat-scorecard",
   "routing-inbox",
   "approvals",
   "drafts",

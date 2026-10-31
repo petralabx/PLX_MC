@@ -95,6 +95,7 @@ Staging fallback hostname `mc-staging.plxcustomer.io` may exist for preview/brea
 | vendor-spend | Vince | Medium |
 | reporting-goals | Vince | Medium |
 | compliance | Vince | Critical |
+| uat-scorecard | Vince | Medium |
 
 ## Canonical Operations Docs
 

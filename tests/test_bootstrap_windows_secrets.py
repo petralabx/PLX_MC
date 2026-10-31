@@ -427,43 +427,13 @@ def test_app_shell_fragment_references_the_key_and_clears_pats() -> None:
     assert "PRIVATE KEY" not in text
 
 
-def test_legacy_pat_precedence_and_flag() -> None:
+def test_legacy_pat_mode_is_removed() -> None:
     bootstrap = load_script()
-    assert bootstrap.personal_pat_from_secret(_pat_secret()) == SENTINEL_PAT
-    assert (
-        bootstrap.personal_pat_from_secret({"PETRALABX_GITHUB": "alias-pat"})
-        == "alias-pat"
-    )
-    assert (
-        bootstrap.personal_pat_from_secret(
-            {"PLX_GITHUB_PAT": "plx-pat", "GITHUB_TOKEN": "legacy-pat"}
+    with pytest.raises(SystemExit, match="TASK-4361") as exc:
+        bootstrap.github_auth_values(
+            _pat_secret(), mode="legacy-personal-pat", binding=None
         )
-        == "plx-pat"
-    )
-    assert (
-        bootstrap.personal_pat_from_secret({"GITHUB_TOKEN": "legacy-pat"})
-        == "legacy-pat"
-    )
-    legacy = bootstrap.github_auth_values(
-        _pat_secret(), mode="legacy-personal-pat", binding=None
-    )
-    assert legacy == {"PETRALABX_GITHUB_TOKEN": SENTINEL_PAT}
-    text = "\n".join(
-        bootstrap.staging_loader_lines(
-            {
-                **{
-                    k: v
-                    for k, v in FAKE_VALUES.items()
-                    if not k.startswith("PLX_GITHUB_APP")
-                },
-                **legacy,
-            },
-            "sp_mcp_cursor",
-            "legacy-personal-pat",
-        )
-    )
-    assert SENTINEL_PAT in text
-    assert "PLX_GITHUB_APP_ID" not in text
+    assert SENTINEL_PAT not in str(exc.value)
 
 
 def test_slug_rejects_path_traversal_and_defaults_to_writer(
@@ -509,7 +479,7 @@ def test_config_requires_numeric_ids_and_a_pem() -> None:
     assert "PRIVATE KEY" not in "".join(binding.values())
 
 
-def test_missing_app_secret_names_the_legacy_flag() -> None:
+def test_missing_app_secret_says_pat_mode_is_removed() -> None:
     from botocore.exceptions import ClientError
 
     bootstrap = load_script()
@@ -521,7 +491,7 @@ def test_missing_app_secret_names_the_legacy_flag() -> None:
                 "GetSecretValue",
             )
 
-    with pytest.raises(SystemExit, match="legacy-personal-pat") as exc:
+    with pytest.raises(SystemExit, match="TASK-4361") as exc:
         bootstrap.load_github_app_binding(Missing(), "plx-agents-writer")
     assert "PRIVATE KEY" not in str(exc.value)
     assert SENTINEL_PAT not in str(exc.value)
@@ -1085,50 +1055,19 @@ def test_app_mode_default_principal_reads_ec2_secrets_unless_compat_id_is_set(
     assert "plx/coding/compat-small" in client.calls
 
 
-def test_legacy_mode_still_reads_ec2_secrets(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    bootstrap = load_script()
-    client = _run_bootstrap_main(
-        bootstrap,
-        monkeypatch,
-        tmp_path / "home",
+@pytest.mark.parametrize(
+    "argv",
+    [
         ["--legacy-personal-pat", "--mcp-principal-id", "sp_mcp_codex"],
-    )
-    assert bootstrap.EC2_SECRETS_ID in client.calls
-    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID in client.calls
-    assert "plx/prod/mc/lane-codex-key/v1" not in client.calls
-    staging = (tmp_path / "home" / "staging-sp_mcp_codex.ps1").read_text(
-        encoding="utf-8"
-    )
-    assert SENTINEL_PAT in staging
-    assert "codex-mcp-key" in staging
-    assert _posix_mode(tmp_path / "home" / "staging-sp_mcp_codex.ps1") == 0o600
-
-
-def test_legacy_mode_accepts_compat_secret_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        ["--legacy-personal-pat", "--compat-secret-id", "plx/coding/legacy-compat"],
+    ],
+)
+def test_legacy_flag_exits_before_reading_any_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
 ) -> None:
     bootstrap = load_script()
-    client = _run_bootstrap_main(
-        bootstrap,
-        monkeypatch,
-        tmp_path / "home",
-        [
-            "--legacy-personal-pat",
-            "--mcp-principal-id",
-            "sp_mcp_codex",
-            "--compat-secret-id",
-            "plx/coding/legacy-compat",
-        ],
-    )
-    assert bootstrap.EC2_SECRETS_ID not in client.calls
-    assert "plx/coding/legacy-compat" in client.calls
-    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID in client.calls
-    staging = (tmp_path / "home" / "staging-sp_mcp_codex.ps1").read_text(
-        encoding="utf-8"
-    )
-    assert SENTINEL_PAT in staging
+    with pytest.raises(SystemExit, match="TASK-4361"):
+        _run_bootstrap_main(bootstrap, monkeypatch, tmp_path / "home", argv)
 
 
 def test_shell_launchers_have_lf_endings_when_writes_translate_newlines(
@@ -1371,56 +1310,6 @@ def test_app_mode_invalid_lane_payload_fails_closed(
         bootstrap.main()
     assert "secret-echo-sentinel" not in str(exc.value)
     assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in client.calls
-
-
-def test_legacy_denied_ec2_secret_names_compat_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from botocore.exceptions import ClientError
-
-    bootstrap = load_script()
-
-    class Denied(_RecordingSecrets):
-        def get_secret_value(self, SecretId: str) -> dict:
-            self.calls.append(SecretId)
-            if SecretId == bootstrap.EC2_SECRETS_ID:
-                raise ClientError(
-                    {
-                        "Error": {
-                            "Code": "AccessDeniedException",
-                            "Message": "secret-echo-sentinel",
-                        }
-                    },
-                    "GetSecretValue",
-                )
-            return super().get_secret_value(SecretId)
-
-    client = Denied()
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setattr(bootstrap.boto3, "client", lambda *_a, **_k: client)
-    monkeypatch.setattr(bootstrap, "HOME", home)
-    monkeypatch.setattr(
-        bootstrap, "OUTPUT_GITHUB_PS1", home / ".secrets-env.github.ps1"
-    )
-    monkeypatch.setattr(bootstrap, "OUTPUT_GITHUB_SH", home / ".secrets-env.github")
-    monkeypatch.setattr(
-        bootstrap,
-        "staging_output_path",
-        lambda principal_id, home_path=None: home / f"staging-{principal_id}.ps1",
-    )
-    monkeypatch.setattr(
-        bootstrap,
-        "staging_shell_output_path",
-        lambda principal_id, home_path=None: home / f"staging-{principal_id}.sh",
-    )
-    monkeypatch.setattr(sys, "argv", ["bootstrap", "--legacy-personal-pat"])
-    with pytest.raises(SystemExit, match="AccessDeniedException") as exc:
-        bootstrap.main()
-    message = str(exc.value)
-    assert "secret-echo-sentinel" not in message
-    assert "--compat-secret-id" in message
-    assert "prod/ec2-secrets" in message
 
 
 def test_write_private_text_is_mode_0600_under_a_loose_umask(tmp_path: Path) -> None:

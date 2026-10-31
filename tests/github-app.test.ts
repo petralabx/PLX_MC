@@ -202,14 +202,14 @@ describe("token exchange with an AbortSignal", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("without a signal sends the same request as before and still falls back to the PAT on a mint error", async () => {
+  it("without a signal sends the same request as before and degrades to null on a mint error", async () => {
     configureApp();
     process.env.GITHUB_TOKEN = "ghp_fallback";
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchImpl = vi.fn<(url: string | URL | Request, init?: RequestInit) => Promise<Response>>(
       async () => new Response("nope", { status: 500 })
     );
-    expect(await resolveGithubToken({ fetchImpl: fetchImpl as unknown as typeof fetch })).toBe("ghp_fallback");
+    expect(await resolveGithubToken({ fetchImpl: fetchImpl as unknown as typeof fetch })).toBeNull();
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
     const init = fetchImpl.mock.calls[0][1];
@@ -227,96 +227,47 @@ describe("resolveGithubToken fallback contract", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to the static GITHUB_TOKEN when the App is not configured", async () => {
+  it("ignores every static PAT when the App is not configured (TASK-4361)", async () => {
     process.env.GITHUB_TOKEN = "ghp_static";
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const token = await resolveGithubToken();
-    expect(token).toBe("ghp_static");
-    expect(error).not.toHaveBeenCalled();
-    error.mockRestore();
-  });
-
-  it("prefers PETRALABX_GITHUB_TOKEN over legacy GITHUB_TOKEN for petralabx PAT fallback", async () => {
-    process.env.GITHUB_TOKEN = "ghp_legacy";
     process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const token = await resolveGithubToken({ repoOwner: "petralabx" });
-    expect(token).toBe("github_pat_petra");
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("LOUD FALLBACK"), "PETRALABX_GITHUB_TOKEN");
-    expect(JSON.stringify(error.mock.calls)).not.toContain("github_pat_petra");
-    error.mockRestore();
-  });
-
-  it("logs loudly when the PETRALABX_GITHUB alias is the fallback", async () => {
     process.env.PETRALABX_GITHUB = "github_pat_alias";
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const token = await resolveGithubToken({ repoOwner: "petralabx" });
-    expect(token).toBe("github_pat_alias");
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("LOUD FALLBACK"), "PETRALABX_GITHUB");
-    expect(JSON.stringify(error.mock.calls)).not.toContain("github_pat_alias");
-    error.mockRestore();
-  });
-
-  it("does not loud-log a legacy GITHUB_TOKEN fallback", async () => {
-    process.env.GITHUB_TOKEN = "ghp_legacy_only";
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const token = await resolveGithubToken({ repoOwner: "petralabx" });
-    expect(token).toBe("ghp_legacy_only");
-    expect(error).not.toHaveBeenCalled();
-    error.mockRestore();
-  });
-
-  it("logs loudly when a failed App mint falls back to PETRALABX_GITHUB_TOKEN", async () => {
-    configureApp();
-    process.env.GITHUB_APP_INSTALLATION_ID_PLX = "143714328";
-    process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const fetchImpl = vi.fn(async () => new Response("nope", { status: 500 }));
-    const token = await resolveGithubToken({
-      repoOwner: "petralabx",
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-    expect(token).toBe("github_pat_petra");
-    expect(warn).toHaveBeenCalled();
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("LOUD FALLBACK"), "PETRALABX_GITHUB_TOKEN");
-    expect(JSON.stringify(error.mock.calls)).not.toContain("github_pat_petra");
-    warn.mockRestore();
-    error.mockRestore();
-  });
-
-  it("keeps legacy GITHUB_TOKEN for non-petralabx owners when both PATs are set", async () => {
-    process.env.GITHUB_TOKEN = "ghp_legacy";
-    process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
-    const token = await resolveGithubToken({ repoOwner: "taylorvalton" });
-    expect(token).toBe("ghp_legacy");
+    expect(await resolveGithubToken()).toBeNull();
+    expect(await resolveGithubToken({ repoOwner: "petralabx" })).toBeNull();
+    expect(await resolveGithubToken({ repoOwner: "taylorvalton" })).toBeNull();
   });
 
   it("returns null when neither the App nor a PAT is configured", async () => {
     expect(await resolveGithubToken()).toBeNull();
   });
 
-  it("falls back to the PAT when the App is configured but the token mint fails", async () => {
+  it("degrades to null, never a PAT, when the App is configured but the token mint fails", async () => {
     configureApp();
+    process.env.GITHUB_APP_INSTALLATION_ID_PLX = "143714328";
     process.env.GITHUB_TOKEN = "ghp_fallback";
+    process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchImpl = vi.fn(async () => new Response("nope", { status: 500 }));
-    const token = await resolveGithubToken({ fetchImpl: fetchImpl as unknown as typeof fetch });
-    expect(token).toBe("ghp_fallback");
+    for (const repoOwner of [undefined, "petralabx"]) {
+      const token = await resolveGithubToken({ repoOwner, fetchImpl: fetchImpl as unknown as typeof fetch });
+      expect(token).toBeNull();
+    }
     expect(warn).toHaveBeenCalled();
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("github_pat_petra");
     warn.mockRestore();
   });
 
-  it("uses the PAT for petralabx when the org App installation is not configured", async () => {
+  it("degrades petralabx reads to null when the org App installation is not configured", async () => {
     configureApp();
     process.env.GITHUB_TOKEN = "ghp_org_fallback";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchImpl = vi.fn(async () => tokenResponse("ghs_app", Date.now() + 3_600_000));
     const token = await resolveGithubToken({
       repoOwner: "petralabx",
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
-    expect(token).toBe("ghp_org_fallback");
+    expect(token).toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("mints against the PLX installation when repoOwner is petralabx and PLX id is set", async () => {

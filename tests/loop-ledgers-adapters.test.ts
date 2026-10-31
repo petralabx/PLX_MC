@@ -17,6 +17,11 @@ import type { RegistryConfig } from "@/lib/loop-ledgers/types";
 // node:fs/promises is mocked so LocalFsSource calls are intercepted.
 // Must be at module level (vi.mock is hoisted regardless of position).
 vi.mock("node:fs/promises");
+// GitHub auth is App-only (TASK-4361). Stub the resolver so these adapter tests
+// drive the "token present / absent" paths without minting a real App token.
+vi.mock("@/lib/github-app", () => ({
+  resolveGithubToken: vi.fn(async () => process.env.TEST_GITHUB_APP_TOKEN ?? null),
+}));
 
 // ─── Fixture helpers (use sync fs — not affected by the promises mock) ────────
 
@@ -64,9 +69,9 @@ function setupFetchThrow(message: string): void {
 
 function setToken(token: string | undefined): void {
   if (token === undefined) {
-    delete process.env.GITHUB_TOKEN;
+    delete process.env.TEST_GITHUB_APP_TOKEN;
   } else {
-    process.env.GITHUB_TOKEN = token;
+    process.env.TEST_GITHUB_APP_TOKEN = token;
   }
 }
 
@@ -234,14 +239,14 @@ describe("GithubApiSource", () => {
   });
 
   describe("listLedgers — token_missing", () => {
-    it("returns ok=false with reason=token_missing when GITHUB_TOKEN is not set", async () => {
+    it("returns ok=false with reason=token_missing when no App token resolves", async () => {
       setToken(undefined);
 
       const results = await new GithubApiSource().listLedgers(makeRegistry());
       expect(results[0].ok).toBe(false);
       if (results[0].ok) return;
       expect(results[0].reason).toBe("token_missing");
-      expect(results[0].note).toContain("GITHUB_TOKEN");
+      expect(results[0].note).toContain("GitHub App");
     });
   });
 

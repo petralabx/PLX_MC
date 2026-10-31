@@ -6,8 +6,8 @@
 // Server-side only. RS256 signing uses node:crypto (no extra dependency). The
 // App private key + ids come from the shared secrets accessor; nothing here is
 // ever logged. `resolveGithubToken()` is the one accessor every server-side
-// GitHub read goes through: App token when configured, else the static
-// GITHUB_TOKEN, else null (callers then emit an honest degraded result).
+// GitHub read goes through: App token when configured, else null
+// (callers then emit an honest degraded result). No PAT fallback.
 
 import { createSign } from "node:crypto";
 
@@ -68,13 +68,13 @@ interface TokenOpts {
   /**
    * Cancels the token exchange. Once it fires, the call rejects with
    * `signal.reason` (an AbortError by default): nothing is cached and
-   * `resolveGithubToken` does not fall back to the static PAT.
+   * `resolveGithubToken` rejects instead of degrading.
    */
   signal?: AbortSignal;
 }
 
-/** Until `GITHUB_APP_INSTALLATION_ID_PLX` exists, petralabx reads use `GITHUB_TOKEN`. */
-function plxOrgNeedsPatFallback(repoOwner?: string | null): boolean {
+/** petralabx reads need `GITHUB_APP_INSTALLATION_ID_PLX`; without it they degrade to null. */
+function plxOrgMissingInstallation(repoOwner?: string | null): boolean {
   const owner = (repoOwner ?? "").trim().toLowerCase();
   const plxOrg = (process.env.REPO_ORG_PLX ?? "petralabx").toLowerCase();
   if (owner !== plxOrg) return false;
@@ -150,86 +150,30 @@ export async function getInstallationToken(opts: TokenOpts = {}): Promise<string
 }
 
 /**
- * Static PAT fallback after App mint is skipped/fails.
- * petralabx owners prefer the org fine-grained PAT (covers every org repo,
- * including plx-customer-portal). Other owners keep legacy GITHUB_TOKEN so a
- * petralabx-only token cannot mask taylorvalton access.
- */
-type PetraPatSource = "PETRALABX_GITHUB_TOKEN" | "PETRALABX_GITHUB";
-
-interface StaticPat {
-  token: string | null;
-  source: PetraPatSource | "GITHUB_TOKEN" | null;
-}
-
-/**
- * Loud on purpose. Coding boxes must mint a GitHub App installation token.
- * A hit on the personal/org PAT means rollout compatibility is still in use.
- * The message names the variable only — never the token value.
- */
-function logPetraPatFallback(source: PetraPatSource): void {
-  console.error(
-    [
-      "[github-app] LOUD FALLBACK: resolved GitHub auth from %s.",
-      "Coding boxes must use a GitHub App installation token",
-      "(prefer plx-agents-writer, or plx/github/apps/<app>/private-key for a per-bot app).",
-      "This personal PAT is rollout compatibility only.",
-      "Remove it from prod/ec2-secrets after gh auth status shows the app.",
-      "CIP owns merges.",
-    ].join(" "),
-    source
-  );
-}
-
-function resolveStaticPat(repoOwner?: string | null): StaticPat {
-  const owner = (repoOwner ?? "").trim().toLowerCase();
-  const plxOrg = (process.env.REPO_ORG_PLX ?? "petralabx").toLowerCase();
-  const petraToken = process.env.PETRALABX_GITHUB_TOKEN?.trim() || "";
-  const petraAlias = process.env.PETRALABX_GITHUB?.trim() || "";
-  const legacy = process.env.GITHUB_TOKEN?.trim() || "";
-  const none: StaticPat = { token: null, source: null };
-  const fromPetra = (): StaticPat | null => {
-    if (petraToken) return { token: petraToken, source: "PETRALABX_GITHUB_TOKEN" };
-    if (petraAlias) return { token: petraAlias, source: "PETRALABX_GITHUB" };
-    return null;
-  };
-  const fromLegacy = (): StaticPat | null =>
-    legacy ? { token: legacy, source: "GITHUB_TOKEN" } : null;
-  if (owner === plxOrg) return fromPetra() ?? fromLegacy() ?? none;
-  if (owner) return fromLegacy() ?? none;
-  // No owner hint: prefer petralabx PAT (PLX control-plane default), else legacy.
-  return fromPetra() ?? fromLegacy() ?? none;
-}
-
-/**
  * The one shared GitHub auth resolver every server-side GitHub read goes through.
- * Prefers a short-lived App installation token; falls back to the static
- * PETRALABX_GITHUB_TOKEN (petralabx) / GITHUB_TOKEN (legacy) so the surface
- * keeps working before the App is provisioned or if a token mint transiently
- * fails; returns null when neither is configured, so callers emit an honest
- * degraded result instead of throwing. Falling back to `PETRALABX_GITHUB_TOKEN`
- * or its `PETRALABX_GITHUB` alias logs a loud `console.error` — coding boxes
- * should be on a GitHub App installation token, and that PAT is rollout
- * compatibility only. The one exception: once `opts.signal` aborts, the call
- * rejects with `signal.reason` (no warning, no PAT fallback), because the
- * caller's deadline has already passed.
+ * App-only (TASK-4361): returns a short-lived GitHub App installation token, or
+ * null when the App is not configured for the owner or the mint fails, so callers
+ * emit an honest degraded result instead of throwing. There is no static PAT
+ * fallback any more: PETRALABX_GITHUB_TOKEN, PETRALABX_GITHUB and GITHUB_TOKEN
+ * are ignored (the taylorvalton PAT is being retired). Once `opts.signal`
+ * aborts, the call rejects with `signal.reason`, because the caller's deadline
+ * has already passed.
  */
 export async function resolveGithubToken(opts: TokenOpts = {}): Promise<string | null> {
-  if (githubAppConfigured() && !plxOrgNeedsPatFallback(opts.repoOwner)) {
-    try {
-      return await getInstallationToken(opts);
-    } catch (err) {
-      opts.signal?.throwIfAborted();
-      // Never mask the failure silently, but stay up: fall back to the PAT/null.
-      console.warn(
-        "[github-app] installation token mint failed; falling back to static PAT: %s",
-        err instanceof Error ? err.message : "unknown error"
-      );
-    }
+  if (!githubAppConfigured()) return null;
+  if (plxOrgMissingInstallation(opts.repoOwner)) {
+    console.warn("[github-app] GITHUB_APP_INSTALLATION_ID_PLX is unset; petralabx GitHub reads are degraded");
+    return null;
   }
-  const pat = resolveStaticPat(opts.repoOwner);
-  if (pat.source === "PETRALABX_GITHUB_TOKEN" || pat.source === "PETRALABX_GITHUB") {
-    logPetraPatFallback(pat.source);
+  try {
+    return await getInstallationToken(opts);
+  } catch (err) {
+    opts.signal?.throwIfAborted();
+    // Never mask the failure silently, but stay up: degrade to null.
+    console.warn(
+      "[github-app] installation token mint failed; GitHub reads degraded: %s",
+      err instanceof Error ? err.message : "unknown error"
+    );
+    return null;
   }
-  return pat.token;
 }

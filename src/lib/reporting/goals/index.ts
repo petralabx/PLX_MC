@@ -209,6 +209,7 @@ export type {
   GoalsViewInput,
   GoalsViewState,
   GoalsViewer,
+  DatesView,
   SalespeopleView,
   SalespersonOption,
 } from "./view";
@@ -226,6 +227,16 @@ export {
   salespersonLookupFromRows,
 } from "./salesperson-filter";
 export type { SalespeopleRun, SalespersonLookup, SalespersonLookupRow } from "./salesperson-filter";
+export {
+  DATES_PARAM_MESSAGE,
+  WHOLE_MONTH,
+  datesKey,
+  datesParam,
+  datesTitle,
+  filterRunByDates,
+  resolveDates,
+} from "./date-filter";
+export type { DatesChoice, DatesPreset, DatesRange } from "./date-filter";
 export { CUSTOMER_SALESPEOPLE_SQL, SALESPERSON_COLUMNS } from "./queries/salespeople";
 export { lookupSalespeople } from "./salespeople";
 

@@ -4,10 +4,12 @@ import { waitForHydration } from "./helpers";
 import { gotoGoals, mockGoalsApi, openGoalsTab } from "./helpers/goals";
 
 // Section tabs (TASK-4094): every report section is one click, the goal cards
-// stay on screen, and the URL keeps the section. `/?screen=goals` still opens.
+// stay on screen, and the URL keeps the section. `/?screen=goals` still opens,
+// on Revenue → How it adds up (TASK-4373).
 
 const SECTIONS: { name: string; testId: string; heading: string; tab: string }[] = [
-  { name: "Revenue: By class", testId: "goals-classes", heading: "Revenue by customer class", tab: "" },
+  { name: "Revenue: How it adds up", testId: "goals-breakdown", heading: "How the Revenue headline adds up", tab: "" },
+  { name: "Revenue: By class", testId: "goals-classes", heading: "Revenue by customer class", tab: "classes" },
   { name: "Revenue: Shipments", testId: "goals-shipments", heading: "Shipments this month", tab: "shipments" },
   { name: "Revenue: By customer", testId: "goals-customers", heading: "Revenue by customer", tab: "customers" },
   { name: "Revenue: Forecast", testId: "goals-forecast", heading: "Revenue forecast", tab: "forecast" },
@@ -24,15 +26,15 @@ test.describe("goals section navigation", () => {
   test("every section opens in one click and the URL follows; the plain goals link stays", async ({ page }) => {
     await mockGoalsApi(page);
     await gotoGoals(page);
-    await expect(page.getByRole("tab", { name: "Revenue: By class" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Revenue: How it adds up" })).toHaveAttribute("aria-selected", "true");
     await expect(page).toHaveURL(/\?screen=goals$/);
-    await expect(page.getByTestId("goals-classes")).toBeVisible();
-    await page.getByRole("tab", { name: "Revenue: By class" }).focus();
+    await expect(page.getByTestId("goals-breakdown")).toBeVisible();
+    await page.getByRole("tab", { name: "Revenue: How it adds up" }).focus();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tab", { name: "Revenue: Shipments" })).toBeFocused();
-    await expect(page).toHaveURL(/[?&]tab=shipments\b/);
-    await page.keyboard.press("ArrowLeft");
     await expect(page.getByRole("tab", { name: "Revenue: By class" })).toBeFocused();
+    await expect(page).toHaveURL(/[?&]tab=classes\b/);
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByRole("tab", { name: "Revenue: How it adds up" })).toBeFocused();
     await expect(page).toHaveURL(/\?screen=goals$/);
 
     for (const section of SECTIONS) {
@@ -58,8 +60,8 @@ test.describe("goals section navigation", () => {
 
     await page.goto("/?screen=goals&tab=nope");
     await waitForHydration(page);
-    await expect(page.getByTestId("goals-classes")).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Revenue: By class" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("goals-breakdown")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Revenue: How it adds up" })).toHaveAttribute("aria-selected", "true");
   });
 
   test("the goal cards stay on screen while a long section scrolls and when the tab changes", async ({ page }) => {

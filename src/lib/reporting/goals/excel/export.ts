@@ -88,6 +88,11 @@ export interface GoalsWorkbookInput {
   /** The salespeople the figures are narrowed to, in words (TASK-4277); absent or "": every customer. */
   salespeople?: string;
   /**
+   * Some days of the month the figures are narrowed to (TASK-4391); absent or null: the whole month. The model's
+   * daily rows are those days; the goal-only cells (target, due so far, status, pace, last month) are left out.
+   */
+  range?: { from: IsoDate; to: IsoDate; label: string } | null;
+  /**
    * Every live entry, evaluated, whatever the salesperson filter (TASK-4277); absent, the model's. "Manual entries" is
    * the import template and an import removes any entry it doesn't list, so the sheet always lists them all; and the
    * estimate leaves out the Sage shipments they stand for, as the page does.
@@ -253,6 +258,14 @@ function salespeopleNote(who: string): string {
   );
 }
 
+/** What a workbook narrowed to some days of the month covers (TASK-4391). */
+function datesNote(range: NonNullable<GoalsWorkbookInput["range"]>): string {
+  return (
+    `Only ${range.label} (${range.from} to ${range.to}): revenue, returns, the estimate, shipments, truckloads, batches and entries by hand follow these dates. ` +
+    "The goals are the whole month’s, so there’s no status, due so far, pace or last month. The forecast and potential revenue are the whole month’s."
+  );
+}
+
 function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const { model, run, settings } = input;
   columns(ws, [16, 12, 12, 16, 22, 30, 10, 14, 10, 10, 34, 14]);
@@ -272,6 +285,7 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
         `shipment’s own day’s, else ${rateText(model.truckloads.rate)}.`
       : "",
     input.salespeople ? salespeopleNote(input.salespeople) : "",
+    input.range ? datesNote(input.range) : "",
   ].filter(Boolean);
   if (notes.length > 0) put(ws, 3, 1, notes.join(" "), { note: true });
   put(ws, 4, 1, "Colour", { bold: true });
@@ -308,6 +322,7 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
 
 function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { total: number }, trucks: { total: number }): void {
   const { model, settings, run } = input;
+  const partial = input.range ?? null;
   const R = GOAL_ROW;
   const I = INPUT_ROW;
   columns(ws, [40, 16, 14, 12, 14, 14, 14, 12, 22]);
@@ -317,7 +332,8 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
     2,
     1,
     "In system = FileMaker (batches) or Sage (shipments and revenue). By hand = entries made by your team that the system doesn’t have yet (amber)." +
-      (input.salespeople ? ` ${salespeopleNote(input.salespeople)} The targets are the whole month’s, so revenue has no status or pace.` : ""),
+      (input.salespeople ? ` ${salespeopleNote(input.salespeople)} The targets are the whole month’s, so revenue has no status or pace.` : "") +
+      (partial ? ` ${datesNote(partial)}` : ""),
     { note: true }
   );
   headerRow(ws, R.header, [
@@ -338,19 +354,21 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   const needed = (row: number) => ({ formula: `IF($B$${I.workingDaysLeft}>0,MAX(0,B${row}-G${row})/$B$${I.workingDaysLeft},0)` });
 
   put(ws, R.line1, 1, `Line 1 bulk, kg (batches of ${count(settings.line1MinKg)} kg or more)`);
-  put(ws, R.line1, 2, { formula: `B${I.perDay}*B${I.workingDays}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.line1, 3, { formula: `B${I.perDay}*B${I.productionCovered}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.line1, 4, excelDate(model.line1.dueBy), { numFmt: DATE_FORMAT });
+  // Some days of the month (TASK-4391): the goal is the whole month's, so no target, due so far, status or pace, as on the page.
+  put(ws, R.line1, 2, partial ? "—" : { formula: `B${I.perDay}*B${I.workingDays}` }, { numFmt: COUNT_FORMAT });
+  put(ws, R.line1, 3, partial ? "—" : { formula: `B${I.perDay}*B${I.productionCovered}` }, { numFmt: COUNT_FORMAT });
+  put(ws, R.line1, 4, partial ? "—" : excelDate(model.line1.dueBy), { numFmt: DATE_FORMAT });
   put(ws, R.line1, 5, { formula: `Daily!C${daily.total}` }, { numFmt: COUNT_FORMAT });
   put(ws, R.line1, 6, { formula: `Daily!D${daily.total}` }, { numFmt: COUNT_FORMAT, amber: true });
   put(ws, R.line1, 7, total(R.line1), { numFmt: COUNT_FORMAT, bold: true });
-  put(ws, R.line1, 8, status(R.line1));
-  put(ws, R.line1, 9, needed(R.line1), { numFmt: COUNT_FORMAT });
+  put(ws, R.line1, 8, partial ? "—" : status(R.line1));
+  put(ws, R.line1, 9, partial ? "—" : needed(R.line1), { numFmt: COUNT_FORMAT });
 
   // No status or due-so-far for truckloads, as on the page; the target is a setting (none yet).
   const target = settings.fullTruckloadsPerMonth;
   put(ws, R.full, 1, `Full truckloads (US$${count(settings.fullTruckloadMinUsdCents / 100)} or more before tax and freight)`);
-  if (target === null) put(ws, R.full, 2, "No target set", { note: true });
+  if (partial) put(ws, R.full, 2, "—");
+  else if (target === null) put(ws, R.full, 2, "No target set", { note: true });
   else put(ws, R.full, 2, target, { numFmt: COUNT_FORMAT });
   put(ws, R.full, 5, { formula: `Truckloads!B${trucks.total}` }, { numFmt: COUNT_FORMAT });
   put(ws, R.full, 6, { formula: `Truckloads!E${trucks.total}` }, { numFmt: COUNT_FORMAT, amber: true });
@@ -363,15 +381,15 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
 
   // Revenue in the system: CAD plus USD at the rate, rounded to the cent half to even like the model.
   put(ws, R.revenue, 1, "Revenue, CAD (shipped, net before tax)");
-  put(ws, R.revenue, 2, { formula: `B${I.revenueTarget}` }, { numFmt: DOLLAR_FORMAT });
-  put(ws, R.revenue, 3, { formula: `ROUND(B${I.revenueTarget}*B${I.revenueCovered}/B${I.workingDays},2)` }, { numFmt: DOLLAR_FORMAT });
-  put(ws, R.revenue, 4, excelDate(model.revenue.dueBy), { numFmt: DATE_FORMAT });
+  put(ws, R.revenue, 2, partial ? "—" : { formula: `B${I.revenueTarget}` }, { numFmt: DOLLAR_FORMAT });
+  put(ws, R.revenue, 3, partial ? "—" : { formula: `ROUND(B${I.revenueTarget}*B${I.revenueCovered}/B${I.workingDays},2)` }, { numFmt: DOLLAR_FORMAT });
+  put(ws, R.revenue, 4, partial ? "—" : excelDate(model.revenue.dueBy), { numFmt: DATE_FORMAT });
   put(ws, R.revenue, 5, { formula: `Daily!F${daily.total}+${usdToCadFormula(`Daily!G${daily.total}`)}` }, { numFmt: DOLLAR_FORMAT });
   put(ws, R.revenue, 6, { formula: `Daily!H${daily.total}` }, { numFmt: DOLLAR_FORMAT, amber: true });
   put(ws, R.revenue, 7, total(R.revenue), { numFmt: DOLLAR_FORMAT, bold: true });
   // Narrowed to some salespeople (TASK-4277): the goal is every customer's, so no status or pace, as on the page.
-  put(ws, R.revenue, 8, input.salespeople ? "—" : status(R.revenue));
-  put(ws, R.revenue, 9, input.salespeople ? "—" : needed(R.revenue), { numFmt: DOLLAR_FORMAT });
+  put(ws, R.revenue, 8, input.salespeople || partial ? "—" : status(R.revenue));
+  put(ws, R.revenue, 9, input.salespeople || partial ? "—" : needed(R.revenue), { numFmt: DOLLAR_FORMAT });
 
   const rateNote =
     model.revenue.basis === "sage"
@@ -414,7 +432,7 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
 
 // ─── Daily ──────────────────────────────────────────────────────────────────
 
-/** One row per day of the month, then the totals row (returned). */
+/** One row per day of the month (of the range, TASK-4391), then the totals row (returned). */
 function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: number } {
   const I = INPUT_ROW;
   columns(ws, [12, 12, 16, 16, 16, 16, 16, 16, 18, 18, 18]);
@@ -428,8 +446,8 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
     { text: "USD invoiced (Sage)" },
     { text: "Revenue by hand, CAD", amber: true },
     { text: "Revenue to date, CAD" },
-    { text: "Target to date, CAD" },
-    { text: "Last month to date, CAD" },
+    { text: input.range ? "Target to date (whole month only)" : "Target to date, CAD" },
+    { text: input.range ? "Last month to date (whole month only)" : "Last month to date, CAD" },
   ]);
   freeze(ws, 1);
   input.model.daily.forEach((d, i) => {
@@ -443,11 +461,12 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
     put(ws, r, 7, dollars(d.usdCents), { numFmt: DOLLAR_FORMAT });
     put(ws, r, 8, dollars(d.byHandCadCents), { numFmt: DOLLAR_FORMAT, amber: true });
     put(ws, r, 9, { formula: `SUM($F$2:F${r})+${usdToCadFormula(`SUM($G$2:G${r})`)}+SUM($H$2:H${r})` }, { numFmt: DOLLAR_FORMAT });
+    // Blank for some days of the month: the target is the whole month's (TASK-4391).
     put(
       ws,
       r,
       10,
-      { formula: `ROUND(${goalsInput(I.revenueTarget)}*COUNTIF($B$2:B${r},"Yes")/${goalsInput(I.workingDays)},2)` },
+      input.range ? null : { formula: `ROUND(${goalsInput(I.revenueTarget)}*COUNTIF($B$2:B${r},"Yes")/${goalsInput(I.workingDays)},2)` },
       { numFmt: DOLLAR_FORMAT }
     );
     // Last month on the same day of the month, at the revenue rate (its daily figures aren't in the workbook).
@@ -485,9 +504,9 @@ function truckloadSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { tot
     { text: "Partial loads (by hand)", amber: true },
     { text: "Product US$ (by hand)", amber: true },
     { text: "Full loads, total" },
-    { text: "Full loads last month" },
-    { text: "Partial loads last month" },
-    { text: "Product US$ last month" },
+    { text: input.range ? "Full loads last month (whole month only)" : "Full loads last month" },
+    { text: input.range ? "Partial loads last month (whole month only)" : "Partial loads last month" },
+    { text: input.range ? "Product US$ last month (whole month only)" : "Product US$ last month" },
   ]);
   freeze(ws, 1);
   const tally = (r: number, col: number, t: LoadTally, amber: boolean) => {
@@ -501,11 +520,12 @@ function truckloadSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { tot
     tally(r, 2, c.thisMonth, false);
     tally(r, 5, c.byHand, true);
     put(ws, r, 8, { formula: `B${r}+E${r}` }, { numFmt: COUNT_FORMAT, bold: true });
-    tally(r, 9, c.lastMonth, false);
+    // Some days of the month (TASK-4391): last month is left out, as on the page.
+    if (!input.range) tally(r, 9, c.lastMonth, false);
   });
   const total = 2 + customers.length;
   put(ws, total, 1, "All truckload customers", { bold: true });
-  for (let col = 2; col <= 11; col += 1) {
+  for (let col = 2; col <= (input.range ? 8 : 11); col += 1) {
     const letter = ws.getColumn(col).letter;
     const money = col === 4 || col === 7 || col === 11;
     // With no customer rows the SUM would cover this row itself, a circular reference.
@@ -824,7 +844,8 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     forecast.rows.length > 0
       ? { formula: `SUMIFS($N$${first}:$N$${last},$O$${first}:$O$${last},"${FORECAST_BUCKET_LABELS[bucket]}")` }
       : 0;
-  put(ws, NR, 1, { formula: `Goals!$G$${GOAL_ROW.revenue}` }, { numFmt: DOLLAR_FORMAT });
+  // Some days of the month (TASK-4391): Goals!G holds only those days, but the forecast is the whole month's, so A is the month's invoiced, as on the page.
+  put(ws, NR, 1, input.range ? dollars(forecast.invoicedCents) : { formula: `Goals!$G$${GOAL_ROW.revenue}` }, { numFmt: DOLLAR_FORMAT });
   (["ready", "planned", "late", "not_planned"] as const).forEach((bucket, i) => put(ws, NR, 2 + i, bucketTotal(bucket), { numFmt: DOLLAR_FORMAT }));
   put(ws, NR, 6, { formula: `A${NR}+B${NR}+C${NR}` }, { numFmt: DOLLAR_FORMAT, bold: true });
   put(ws, NR, 7, { formula: `D${NR}+E${NR}` }, { numFmt: DOLLAR_FORMAT, bold: true });

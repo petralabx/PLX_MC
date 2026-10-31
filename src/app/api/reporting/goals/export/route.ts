@@ -5,14 +5,18 @@
 // `?fx=sage` converts USD revenue at the fixed Sage rate, as the page can, and
 // adds " (Sage rate)" to the name (TASK-3780). `?sales=` narrows it to some
 // salespeople's customers, as the page can, and names them (TASK-4277).
-// Viewers and Editors. Each export is recorded as reporting.goals.export (who,
-// the run id, the rate and the salespeople; never figures).
+// `?dates=` narrows it to some days of the month, as the page can, and adds
+// them to the name (TASK-4391). Viewers and Editors. Each export is recorded
+// as reporting.goals.export (who, the run id, the rate, the salespeople and
+// the dates; never figures).
 
 import { ApiError, route } from "@/lib/api/route";
 import { appendEvent } from "@/lib/compliance/repo";
 import {
+  DATES_PARAM_MESSAGE,
   XLSX_CONTENT_TYPE,
   buildGoalsWorkbook,
+  datesParam,
   loadGoalsExport,
   requireGoalsRole,
   revenueBasisParam,
@@ -29,7 +33,9 @@ export const GET = route(async (req) => {
   if (!basis) throw new ApiError("invalid_request", "fx must be boc or sage.");
   const sales = salesParam(params.get("sales"));
   if (!sales) throw new ApiError("invalid_request", "sales must be Sage salesperson codes or none, separated by commas.");
-  const { view, shipments, shipmentLines, truckloads, rates, creditNotes, pendingShipments, allEntries } = await loadGoalsExport(basis, sales);
+  const dates = datesParam(params.get("dates"));
+  if (!dates) throw new ApiError("invalid_request", DATES_PARAM_MESSAGE);
+  const { view, shipments, shipmentLines, truckloads, rates, creditNotes, pendingShipments, allEntries } = await loadGoalsExport(basis, sales, dates);
   const { run, model, settings } = view;
   if (view.state !== "ready" || !run || !model || !settings) {
     throw new ApiError(
@@ -45,6 +51,8 @@ export const GET = route(async (req) => {
   if (sales.length > 0 && !narrowed) {
     throw new ApiError("salespeople_unavailable", "Sage’s salespeople can’t be read right now, so the workbook can’t be narrowed to them.", 503);
   }
+  // Some days of the month (TASK-4391): the figures follow them and the goal-only cells are left out.
+  const range = view.range && !view.range.whole ? view.range : null;
   const workbook = await buildGoalsWorkbook({
     run,
     model,
@@ -60,18 +68,19 @@ export const GET = route(async (req) => {
     pendingShipments,
     customerRevenue: view.customerRevenue,
     salespeople: narrowed?.label,
+    range,
     allEntries,
   });
   await appendEvent({
     kind: "reporting.goals.export",
     actor: `human:${actor.label}`,
-    payload: { runId: run.id, fx: basis, ...(narrowed ? { sales: narrowed.selected } : {}) },
+    payload: { runId: run.id, fx: basis, ...(narrowed ? { sales: narrowed.selected } : {}), ...(range ? { dates: { from: range.from, to: range.to } } : {}) },
   });
   return new Response(new Uint8Array(workbook), {
     status: 200,
     headers: {
       "content-type": XLSX_CONTENT_TYPE,
-      "content-disposition": `attachment; filename="${workbookFileName(model.today, basis, narrowed?.selected)}"`,
+      "content-disposition": `attachment; filename="${workbookFileName(model.today, basis, narrowed?.selected, range)}"`,
       "cache-control": "no-store",
     },
   });

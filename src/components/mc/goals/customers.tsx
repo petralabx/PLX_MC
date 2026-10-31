@@ -84,6 +84,8 @@ export function CustomerRevenueSection({ page }: { page: ReadyPage }) {
   if (!data) throw new Error("a ready page model has revenue by customer");
   const { unpriced } = data;
   const batchWeeks = Object.keys(unpriced.batches.byWeek).sort();
+  // Some days of the month (TASK-4391): realized follows them; potential stays the month's.
+  const range = page.range && !page.range.whole ? page.range : null;
   return (
     <>
       <div className="gp-tools">
@@ -99,6 +101,11 @@ export function CustomerRevenueSection({ page }: { page: ReadyPage }) {
       </div>
 
       <h3>Potential: in production for an open order</h3>
+      {range ? (
+        <p className="gp-line" data-testid="goals-potential-month">
+          Potential is the whole month’s, whatever the dates.
+        </p>
+      ) : null}
       <RankingTable label="Potential revenue by customer" ranking={data.potential} query={query} testId="goals-potential" />
       <p className="gp-line">
         Each assembly order not yet invoiced, priced from its Sage order line and placed in the week it is scheduled.
@@ -121,10 +128,10 @@ export function CustomerRevenueSection({ page }: { page: ReadyPage }) {
         ) : null}
       </ul>
 
-      <h3>Realized: invoiced this month</h3>
+      <h3>Realized: invoiced {range ? `in ${range.label}` : "this month"}</h3>
       <RankingTable label="Realized revenue by customer" ranking={data.realized} query={query} testId="goals-realized" />
       <p className="gp-line">
-        The Revenue card&rsquo;s month by customer and ship week: {dollars(data.realized.totalCadCents)}
+        The Revenue card&rsquo;s {range ? "dates" : "month"} by customer and ship week: {dollars(data.realized.totalCadCents)}
         {data.realized.totalCadCents === data.cardTotalCents ? ", the card's total." : `, not the card's ${dollars(data.cardTotalCents)}.`}
       </p>
     </>

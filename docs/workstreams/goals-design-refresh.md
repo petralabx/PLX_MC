@@ -1,0 +1,67 @@
+# Goals and project page design refresh
+
+- Slug: `goals-design-refresh` (this file is `docs/workstreams/goals-design-refresh.md`)
+- Owner: Vince · operator: CoS (cos@petrasoap.com) · agents: claude/friendly-gates-2br59z
+- Branches: `claude/friendly-gates-2br59z`
+- MC tasks: TASK-4373, TASK-4385, TASK-4391; decision TASK-4387; project page TASK-4390, TASK-4392
+- SharePoint handoff: n/a
+
+## Goal
+
+Build the 2026-10-31 design canvas for Goals & production and the project page, one PR per slice. The canvas and its amendments note are on claude.ai (private to CoS): the Goals prototype, the project page prototype, and the "What we adopt" board.
+
+## Status
+
+active, as of 2026-10-31. Slice 1 (TASK-4373) is PLX_MC #543: green on every check, waiting on the required AI review (Claude review and Cursor Bugbot hit their usage limits). Slices 2 and 3 are committed locally on `local/goals-picker` (worktree `.claude/worktrees/goals-picker`) and go up on this branch once #543 lands. The project-page slices (TASK-4390 rich text, TASK-4392 Due filter) are committed on `local/mc-rich-text`. Slice 4 waits on Vince (TASK-4387).
+
+## Done
+
+- Slice 1, TASK-4373: Revenue → How it adds up. The card keeps its headline, split, bar, due so far and needed per day. The equation lines, returns, shipped-not-invoiced, product lines, currencies and data notes moved to the tab, to the cent. It follows `scope=mfg`, the salespeople and the rate. No query, API, schema or colour change.
+
+- Slice 3, TASK-4391: a date range for the whole report (`dates=mtd|week|7d|from..to`), narrowed like the salesperson filter. Partial pages show figures without the goal; the forecast and potential revenue stay the whole month's; days that split the month add up to it. The workbook follows the days.
+
+## Next steps
+
+1. Land slice 1 (PLX_MC #543), then restart the branch from `main` and push slices 2 and 3 as one Goals filters PR.
+2. Slice 2, TASK-4385: the salesperson list view in `src/components/mc/goals/salespeople.tsx` is built: search, Clear, picked first, customer counts, Done and Escape. Same `sales=` parameter. "Pick all shown" only while a search narrows the list.
+3. Slice 3 is built (TASK-4391). After it, push the project-page PR (TASK-4390, TASK-4392) from `local/mc-rich-text`.
+4. Slice 4: the vibrant status colours and the violet by-hand colour. It waits on Vince's decision 9. It ships as tokens v1.7.0 in PLX_MC and the portal.
+5. Slice 5: project status sections with Status and Dates filters. It needs a spec for where project status lives and who writes it.
+
+## Decisions and why
+
+- 2026-10-31 Goals keeps its tabs (TASK-4094); the breakdown is a tab, not a card drawer. Why: the cards sit in a sticky header capped at 38% of the screen. Decided by: CoS (plan approval).
+- 2026-10-31 How it adds up is the default tab; By class moves to `tab=classes`. Why: CoS asked to see this detail under the Revenue card. Decided by: CoS (plan approval).
+- 2026-10-31 Slice 1 changes no colours. Data notes keep today's amber. Why: the palette change needs Vince's decision 9. Decided by: CoS (plan approval).
+- 2026-10-31 The picker has no plain "Select all": picking every salesperson and "no salesperson" narrows the page to every customer but hides the goal status, so Clear covers it, and "Pick all shown" works on a search. Decided by: claude/friendly-gates-2br59z (slice 2 build).
+- 2026-10-31 Date presets resolve on the server against the run's date, so a shared `dates=week` link stays "this week" after the next refresh. The goals stay the whole month's: no pro-rating to a range. Decided by: claude/friendly-gates-2br59z (slice 3 spec).
+- 2026-10-31 The project status sections come from the project description, which TASK-4390 renders as structured text; the Status and Dates filters are the existing task filter plus a Due filter (TASK-4392). No new status store or migration. Decided by: claude/friendly-gates-2br59z.
+- 2026-10-31 Project resources already sit under the strip in production. Nothing to build. Why: `project-detail.tsx` renders the strip, then `pv-res`. Decided by: claude/friendly-gates-2br59z (code read).
+
+## Open questions
+
+- Decision 9, the status palette and by-hand violet: Vince.
+- Where project status lives (a field, a document, or MC events) and who writes it: Vince or CoS.
+
+## Files / areas touched
+
+- `src/components/mc/goals/` (goal-cards, revenue-breakdown, tabs, index)
+- `src/styles/mc-goals.css`
+- Goals vitest files and the goals Playwright specs
+
+## How to run the tests
+
+```bash
+npm run typecheck
+npm run lint
+npx vitest run tests/reporting-goals-*.test.ts
+node scripts/run-playwright.mjs --project=chromium e2e/goals.spec.ts e2e/goals-nav.spec.ts e2e/goals-returns.spec.ts e2e/goals-pending-shipments.spec.ts e2e/goals-scope.spec.ts e2e/goals-rate.spec.ts
+```
+
+## Blockers or dependencies on other workstreams
+
+- None for slice 1. Slice 4 waits on Vince's decision 9.
+
+## Last updated
+
+2026-10-31 by claude/friendly-gates-2br59z (CoS session).

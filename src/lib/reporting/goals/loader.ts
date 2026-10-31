@@ -1,12 +1,14 @@
 // Loads the page model: the latest successful snapshot, the live manual entries
 // and the references they match, then hands them to the pure view builder. The
 // export also gets that snapshot's invoices, their lines and truckload shipments,
-// narrowed as the page is when it shows some salespeople's customers (TASK-4277).
+// narrowed as the page is when it shows some salespeople's customers (TASK-4277)
+// or some days of the month (TASK-4391).
 
 import { ApiError } from "@/lib/api/route";
 import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
 
 import { previousMonthStart } from "./calendar";
+import { WHOLE_MONTH, type DatesChoice } from "./date-filter";
 import { lookupFinishedGoodCodes } from "./finished-goods";
 import { loadForecast } from "./forecast-store";
 import { normalizeRef, type EvaluatedEntry } from "./rules";
@@ -37,10 +39,15 @@ const EMPTY_SETTINGS = {
 /**
  * The page model with USD revenue at `basis` (TASK-3780): the run's Bank of
  * Canada rate, or the fixed Sage rate. `sales` (TASK-4277): salesperson codes
- * and `none` to narrow it to; empty, every customer.
+ * and `none` to narrow it to; empty, every customer. `dates` (TASK-4391): the
+ * days of the month to narrow it to; absent, the whole month.
  */
-export async function loadGoalsView(basis: RevenueRateBasis = "boc", sales: readonly string[] = []): Promise<GoalsView> {
-  return (await loadGoals(basis, sales)).view;
+export async function loadGoalsView(
+  basis: RevenueRateBasis = "boc",
+  sales: readonly string[] = [],
+  dates: DatesChoice = WHOLE_MONTH
+): Promise<GoalsView> {
+  return (await loadGoals(basis, sales, dates)).view;
 }
 
 /** The page model plus what the workbook adds, from the same run: its Sage invoices and their lines, truckload shipments and the stored rates. */
@@ -59,12 +66,16 @@ export interface GoalsExportData {
   allEntries?: EvaluatedEntry[];
 }
 
-export async function loadGoalsExport(basis: RevenueRateBasis = "boc", sales: readonly string[] = []): Promise<GoalsExportData> {
-  const { view, snapshot, rates, allEntries } = await loadGoals(basis, sales);
+export async function loadGoalsExport(
+  basis: RevenueRateBasis = "boc",
+  sales: readonly string[] = [],
+  dates: DatesChoice = WHOLE_MONTH
+): Promise<GoalsExportData> {
+  const { view, snapshot, rates, allEntries } = await loadGoals(basis, sales, dates);
   // Only the workbook reads them here; the page fetches them on demand (GET …/runs/[id]/shipment-lines).
   const stored = view.run ? await loadShipmentLines(view.run.id) : null;
-  // Narrowed to some salespeople's customers, the workbook lists only their invoices' lines.
-  const kept = view.salespeople?.applied ? new Set((snapshot?.shipments ?? []).map((s) => s.invoice)) : null;
+  // Narrowed to some salespeople's customers or some days, the workbook lists only the kept invoices' lines.
+  const kept = view.salespeople?.applied || view.range?.whole === false ? new Set((snapshot?.shipments ?? []).map((s) => s.invoice)) : null;
   const shipmentLines = stored && kept ? { ...stored, lines: stored.lines.filter((line) => kept.has(line.invoice)) } : stored;
   return {
     view,
@@ -80,7 +91,8 @@ export async function loadGoalsExport(basis: RevenueRateBasis = "boc", sales: re
 
 async function loadGoals(
   basis: RevenueRateBasis,
-  sales: readonly string[]
+  sales: readonly string[],
+  dates: DatesChoice
 ): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[]; allEntries: EvaluatedEntry[] }> {
   const configured = reportingDatabaseConfigured();
   const empty = {
@@ -147,6 +159,7 @@ async function loadGoals(
     finishedGoodCodes,
     revenueBasis: basis,
     salespeople: { lookup: salespersonLookup, selected: sales },
+    dates,
   });
   return { view, snapshot: run.snapshot, rates, allEntries };
 }

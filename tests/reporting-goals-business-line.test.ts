@@ -9,7 +9,7 @@ import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { GoalCards } from "@/components/mc/goals/goal-cards";
+import { RevenueBreakdown } from "@/components/mc/goals/revenue-breakdown";
 import { cents, isReady } from "@/components/mc/goals/helpers";
 import {
   businessLineOf,
@@ -36,6 +36,9 @@ import {
 const CREDIT_NOTES = creditNotesJson as unknown as CreditNotesDataset;
 const html = <P extends object>(component: ComponentType<P>, props: P) => renderToStaticMarkup(createElement(component, props));
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
+const esc = (s: string) => s.replace(/[$.*+?^{}()|[\]\\]/g, "\\$&");
+/** A product-line row in How it adds up: its label, its share of revenue, then its amount. */
+const lineRow = (label: string, amount: number) => new RegExp(`${esc(label)} [\\d.]+% of revenue ${esc(cents(amount))}`);
 
 function pageAt(basis: RevenueRateBasis, snapshot: Datasets = DATASETS) {
   const page = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, basis, snapshot);
@@ -226,10 +229,10 @@ describe("revenue by business line", () => {
     expect(businessLineSum(split.all.pending)).toBe(
       10_000 + split.all.pending.manufacturingCadCents + split.all.pending.servicesCadCents
     );
-    const markup = text(html(GoalCards, { page }));
+    const markup = text(html(RevenueBreakdown, { page }));
     expect(markup).not.toContain("not in this headline");
     expect(markup).toContain("no item lines");
-    expect(markup).toContain("shipped, not yet invoiced");
+    expect(markup).toContain("Shipped, not yet invoiced");
     expect(markup).toContain(cents(split.all.amounts.distributionCadCents + split.all.pending.distributionCadCents));
     expect(markup).not.toContain("$0.10");
   });
@@ -328,10 +331,10 @@ describe("revenue by business line", () => {
     expect(split.all.amounts.distributionCadCents).toBe(
       read.revenueByBusinessLine!.all.amounts.manufacturingCadCents + read.revenueByBusinessLine!.all.amounts.distributionCadCents
     );
-    const markup = text(html(GoalCards, { page: failed }));
+    const markup = text(html(RevenueBreakdown, { page: failed }));
     expect(markup).toContain("The MRP finished-good list can’t be read, so nothing is counted as Manufacturing.");
     expect(markup).toContain("3PL charges still count as Services.");
-    expect(markup).toContain(`Services (3PL) ${cents(split.all.amounts.servicesCadCents)}`);
+    expect(markup).toMatch(lineRow("Services (3PL)", split.all.amounts.servicesCadCents));
   });
 
   it("weights a 3PL charge by its amount, not its discount, and the three lines add to the headline", () => {
@@ -367,22 +370,22 @@ describe("revenue by business line", () => {
     expect(page.revenueByBusinessLine.all.serviceChargesCadCents).toBe(otherCents);
   });
 
-  it("shows the three totals on the Revenue card", () => {
+  it("shows the three totals in How it adds up, and they add to the headline", () => {
     const page = pageAt("boc");
     const amounts = page.revenueByBusinessLine!.all.amounts;
-    const markup = html(GoalCards, { page });
+    const markup = html(RevenueBreakdown, { page });
     const out = text(markup);
     expect(markup).toContain('data-testid="goals-revenue-lines"');
-    expect(out).toContain(`Manufacturing ${cents(amounts.manufacturingCadCents)}`);
-    expect(out).toContain(`Distribution ${cents(amounts.distributionCadCents)}`);
-    expect(out).toContain(`Services (3PL) ${cents(amounts.servicesCadCents)}`);
-    expect(out).toContain("These add to the headline.");
+    expect(out).toMatch(lineRow("Manufacturing", amounts.manufacturingCadCents));
+    expect(out).toMatch(lineRow("Distribution", amounts.distributionCadCents));
+    expect(out).toMatch(lineRow("Services (3PL)", amounts.servicesCadCents));
+    expect(out).toContain(`= Revenue the card’s headline ${cents(page.revenueGoal!.goalCadCents)}`);
     expect(out).not.toContain("finished-good list");
     expect(cents(businessLineSum(amounts))).toBe(cents(page.revenueGoal!.goalCadCents));
 
-    const mfg = text(html(GoalCards, { page, scope: "mfg" }));
+    const mfg = text(html(RevenueBreakdown, { page, scope: "mfg" }));
     const mfgAmounts = page.revenueByBusinessLine!.mfg.amounts;
-    expect(mfg).toContain(`Manufacturing ${cents(mfgAmounts.manufacturingCadCents)}`);
+    expect(mfg).toMatch(lineRow("Manufacturing", mfgAmounts.manufacturingCadCents));
     expect(businessLineSum(mfgAmounts)).toBe(page.revenueScope!.goalCadCents);
   });
 });

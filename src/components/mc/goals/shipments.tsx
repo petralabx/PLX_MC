@@ -495,7 +495,7 @@ export function ShipmentList({ page }: { page: ReadyPage }) {
           </tbody>
         </table>
         {rows.length === 0 ? (
-          <p className="gp-empty">{all.length === 0 ? "No shipments this month yet." : "No shipments match these filters."}</p>
+          <p className="gp-empty">{all.length === 0 ? (page.range && !page.range.whole ? "No shipments in these dates." : "No shipments this month yet.") : "No shipments match these filters."}</p>
         ) : null}
       </div>
       {rows.length > 0 ? (

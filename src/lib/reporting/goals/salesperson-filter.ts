@@ -153,8 +153,8 @@ export function salespeopleScope(lookup: ReadySalespersonLookup, selected: reado
   };
 }
 
-/** This month's revenue by currency, as queries/revenue-by-currency.ts adds it up, from the invoices kept. */
-function revenueRowsOf(shipments: readonly ShipmentRow[]): RevenueRow[] {
+/** This month's revenue by currency, as queries/revenue-by-currency.ts adds it up, from the invoices kept (the dates filter too, date-filter.ts). */
+export function revenueRowsOf(shipments: readonly ShipmentRow[]): RevenueRow[] {
   const byCurrency = new Map<string, string[]>();
   for (const s of shipments) {
     const nets = byCurrency.get(s.currency) ?? [];
@@ -168,7 +168,7 @@ function revenueRowsOf(shipments: readonly ShipmentRow[]): RevenueRow[] {
 }
 
 /** This month's revenue by day, as queries/daily.ts adds it up, from the invoices kept. Last month's can't follow the filter. */
-function dailyRowsOf(days: readonly DailyRow[], shipments: readonly ShipmentRow[]): DailyRow[] {
+export function dailyRowsOf(days: readonly DailyRow[], shipments: readonly ShipmentRow[]): DailyRow[] {
   const byDay = new Map<string, { CAD: string[]; USD: string[] }>();
   for (const s of shipments) {
     if (s.currency !== "CAD" && s.currency !== "USD") continue;

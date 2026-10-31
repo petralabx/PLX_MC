@@ -2,6 +2,7 @@
 // Not a test file (no .test.ts): vitest only collects tests/**/*.test.ts.
 
 import { ontarioStatutoryHolidays } from "@/lib/reporting/goals/calendar";
+import { datesParam } from "@/lib/reporting/goals/date-filter";
 import type { ForecastSnapshot } from "@/lib/reporting/goals/forecast";
 import { normalizeRef, type GoalsInput } from "@/lib/reporting/goals/rules";
 import { runCustomerCodes, type SalespeopleRun, type SalespersonLookup } from "@/lib/reporting/goals/salesperson-filter";
@@ -187,6 +188,21 @@ export function fixtureSalespeople(run: SalespeopleRun = goalsViewInput()): Sale
 /** The fixture's page narrowed to `selected` salespeople (`sales=`), with the fixture's roster unless another lookup is given. */
 export function salesGoalsPage(selected: string[], input: GoalsViewInput = goalsViewInput(), lookup?: SalespersonLookup): GoalsPage {
   const view = buildGoalsView({ ...input, salespeople: { lookup: lookup ?? fixtureSalespeople(input), selected } });
+  return { ...view, viewer: { editor: true } };
+}
+
+/**
+ * The fixture's page for some days of the month (`dates=`, TASK-4391), and for
+ * some salespeople too when `sales` is given, with the fixture's roster.
+ */
+export function datesGoalsPage(dates: string | null, sales?: string[], input: GoalsViewInput = goalsViewInput()): GoalsPage {
+  const choice = datesParam(dates);
+  if (!choice) throw new Error(`not a dates value: ${dates}`);
+  const view = buildGoalsView({
+    ...input,
+    dates: choice,
+    ...(sales ? { salespeople: { lookup: fixtureSalespeople(input), selected: sales } } : {}),
+  });
   return { ...view, viewer: { editor: true } };
 }
 

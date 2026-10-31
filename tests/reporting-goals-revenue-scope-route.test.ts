@@ -20,7 +20,8 @@ describe("goals scope route", () => {
 describe("goals section tab route", () => {
   it("keeps the open section in the URL and leaves the default out", () => {
     expect(routeToUrl({ screen: "goals" })).toBe("/?screen=goals");
-    expect(routeToUrl({ screen: "goals", tab: "classes" })).toBe("/?screen=goals");
+    expect(routeToUrl({ screen: "goals", tab: "breakdown" })).toBe("/?screen=goals");
+    expect(routeToUrl({ screen: "goals", tab: "classes" })).toBe("/?screen=goals&tab=classes");
     expect(routeToUrl({ screen: "goals", tab: "batches", fx: "sage", scope: "mfg" })).toBe(
       "/?screen=goals&fx=sage&scope=mfg&tab=batches"
     );
@@ -32,7 +33,8 @@ describe("goals section tab route", () => {
       tab: "forecast",
     });
     expect(urlToRoute("/?screen=goals")).toEqual({ screen: "goals" });
-    expect(urlToRoute("/?screen=goals&tab=classes")).toEqual({ screen: "goals" });
+    expect(urlToRoute("/?screen=goals&tab=breakdown")).toEqual({ screen: "goals" });
+    expect(urlToRoute("/?screen=goals&tab=classes")).toEqual({ screen: "goals", tab: "classes" });
     expect(urlToRoute("/?screen=goals&tab=nope")).toEqual({ screen: "goals" });
     expect(urlToRoute("/?screen=goals&tab=BATCHES")).toEqual({ screen: "goals" });
   });

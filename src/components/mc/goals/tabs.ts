@@ -1,8 +1,10 @@
 // Goals report sections (TASK-4094). One tab per section, grouped so related
-// sections sit together. The default (Revenue → By class) stays out of the URL,
-// so an existing `/?screen=goals` link still opens the report.
+// sections sit together. The default (Revenue → How it adds up, TASK-4373)
+// stays out of the URL, so an existing `/?screen=goals` link still opens the
+// report, now on how the Revenue headline adds up.
 
 export const GOALS_TABS = [
+  { id: "breakdown", group: "Revenue", label: "How it adds up" },
   { id: "classes", group: "Revenue", label: "By class" },
   { id: "shipments", group: "Revenue", label: "Shipments" },
   { id: "customers", group: "Revenue", label: "By customer" },
@@ -18,8 +20,8 @@ export const GOALS_TABS = [
 
 export type GoalsTab = (typeof GOALS_TABS)[number]["id"];
 
-/** Revenue → By class. Omitted from the URL. */
-export const DEFAULT_GOALS_TAB: GoalsTab = "classes";
+/** Revenue → How it adds up. Omitted from the URL. */
+export const DEFAULT_GOALS_TAB: GoalsTab = "breakdown";
 
 const GOALS_TAB_IDS: readonly string[] = GOALS_TABS.map((tab) => tab.id);
 

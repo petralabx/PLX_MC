@@ -136,6 +136,9 @@ const sumTally = (rows: LoadTally[]): LoadTally =>
 
 export function TruckloadTable({ page }: { page: ReadyPage }) {
   const rows = page.model.truckloads.customers;
+  // Some days of the month (TASK-4391): Sage's loads in those days, and no last month.
+  const partial = !!page.range && !page.range.whole;
+  const sageGroup = partial ? "In these dates" : "This month";
   const head = (group: string, hand?: boolean, edge?: boolean) =>
     ["Full", "Partial", "Product US$"].map((label, i) => (
       <th
@@ -163,30 +166,34 @@ export function TruckloadTable({ page }: { page: ReadyPage }) {
           <col className="gp-col-num" />
           <col className="gp-col-num" />
         </colgroup>
-        <colgroup>
-          <col className="gp-col-num" />
-          <col className="gp-col-num" />
-          <col className="gp-col-num" />
-        </colgroup>
+        {partial ? null : (
+          <colgroup>
+            <col className="gp-col-num" />
+            <col className="gp-col-num" />
+            <col className="gp-col-num" />
+          </colgroup>
+        )}
         <thead>
           <tr>
             <th scope="col" rowSpan={2}>
               Customer
             </th>
             <th scope="colgroup" colSpan={3} className="grp">
-              This month (Sage)
+              {sageGroup} (Sage)
             </th>
             <th scope="colgroup" colSpan={3} className="grp hand grp-edge">
               Entered by hand
             </th>
-            <th scope="colgroup" colSpan={3} className="grp grp-edge">
-              Last month
-            </th>
+            {partial ? null : (
+              <th scope="colgroup" colSpan={3} className="grp grp-edge">
+                Last month
+              </th>
+            )}
           </tr>
           <tr>
-            {head("This month")}
+            {head(sageGroup)}
             {head("By hand", true, true)}
-            {head("Last month", false, true)}
+            {partial ? null : head("Last month", false, true)}
           </tr>
         </thead>
         <tbody>
@@ -197,7 +204,7 @@ export function TruckloadTable({ page }: { page: ReadyPage }) {
               </th>
               <TallyCells t={r.thisMonth} />
               <TallyCells t={r.byHand} hand edge />
-              <TallyCells t={r.lastMonth} edge />
+              {partial ? null : <TallyCells t={r.lastMonth} edge />}
             </tr>
           ))}
         </tbody>
@@ -206,7 +213,7 @@ export function TruckloadTable({ page }: { page: ReadyPage }) {
             <th scope="row">Total</th>
             <TallyCells t={sumTally(rows.map((r) => r.thisMonth))} />
             <TallyCells t={sumTally(rows.map((r) => r.byHand))} hand edge />
-            <TallyCells t={sumTally(rows.map((r) => r.lastMonth))} edge />
+            {partial ? null : <TallyCells t={sumTally(rows.map((r) => r.lastMonth))} edge />}
           </tr>
         </tfoot>
       </table>
@@ -298,14 +305,15 @@ export function EntriesTable({ page, actions }: { page: ReadyPage; actions?: Ent
 
 const bandName = (band: string) => (band === "Total" ? "Total" : `${band} kg`);
 
-export function CompletedTiles({ tiles }: { tiles: readonly BandTile[] }) {
+/** `pace` false for some days of the month (TASK-4391): the pace per 20 working days is a whole-month comparison. */
+export function CompletedTiles({ tiles, pace = true }: { tiles: readonly BandTile[]; pace?: boolean }) {
   return (
     <ul className="gp-tiles">
       {tiles.map((t) => (
         <li key={t.band} className={t.band === "Total" ? "total" : undefined}>
           <span className="k">{bandName(t.band)}</span>
           <span className="v">{count(t.count)}</span>
-          <span className="s">{t.pacePer20 === null ? "—" : oneDecimal(t.pacePer20)} per 20 working days</span>
+          {pace ? <span className="s">{t.pacePer20 === null ? "—" : oneDecimal(t.pacePer20)} per 20 working days</span> : null}
           <span className="s">{count(t.kg)} kg</span>
           <span className="s">{count(t.notQcReleased)} not yet QC released</span>
         </li>
@@ -477,6 +485,14 @@ export function RulesText({ page }: { page: ReadyPage }) {
         freight. Its item lines less their discounts should come to its product value and its charges to its other
         charges, to the cent; an invoice whose lines don’t is marked, with both figures. The search finds item codes and
         descriptions too.
+      </li>
+      <li>
+        <b>Dates</b>: the page shows the whole month, or some of its days with the Dates switch: month to date, this
+        week (Monday to Sunday), the last 7 days, or days you choose, cut to {model.month.label}. Then every figure
+        follows the days: invoices and the shipped-not-invoiced estimate by ship date, returns by the credit note’s
+        date, batches by their date (a batch finished by hand by the entry’s), and entries by hand by their own date.
+        The goals are the whole month’s, so a few days have no status, due so far, pace or last month. The forecast and
+        potential revenue are always the whole month’s.
       </li>
       <li>
         <b>Covered through</b> is the later of the latest FileMaker or Sage data and the latest counted entry by hand,

@@ -132,10 +132,19 @@ traceable to a refresh run and a named query.
      batch list (search, filters, "Line 1 only" toggle, sortable columns) and
      the rules in plain words.
    - Section tabs (TASK-4094): the goal cards stay pinned under the top bar.
-     Every other section is one tab, grouped as Revenue (by class, shipments,
-     by customer, forecast), Batches (day by day, by size, scheduled, batch
-     list), Truckloads, Entries and Rules. The choice is `tab=` on
-     `/?screen=goals` (absent means Revenue → By class). `fx` and `scope` stay.
+     Every other section is one tab, grouped as Revenue (how it adds up, by
+     class, shipments, by customer, forecast), Batches (day by day, by size,
+     scheduled, batch list), Truckloads, Entries and Rules. The choice is
+     `tab=` on `/?screen=goals` (absent means Revenue → How it adds up,
+     TASK-4373). `fx` and `scope` stay.
+   - How it adds up (TASK-4373, `src/components/mc/goals/revenue-breakdown.tsx`):
+     the Revenue card's "side lines" below are rows here, to the cent. Three
+     tables: invoiced (Sage and by hand, charges included) less charges is the
+     invoiced product, plus the shipped-not-invoiced estimate, less returns, is
+     the headline; the three product lines; the currencies. Then the notes on
+     the data. It reads only the page model and follows `scope`, `sales` and
+     `fx`. The card keeps the headline, the Sage / by-hand split, the bar, due
+     so far and needed per day, and links to the tab.
    - Charts: `StackedColumns` and `RunningLines` in
      `src/components/mc/charts/column-chart.tsx` (native SVG; HTML labels).
      Each has a one-sentence summary and its numbers in a table under it.
@@ -563,12 +572,12 @@ Exclusive Distribution (Exclusive Manufacturing, Mixed and Unclassified stay).
   page, so switching it makes no new read.
 - **What it shows.** The Revenue card's headline becomes the manufacturing
   customers' month (`revenueScope` on the page model, from
-  `src/lib/reporting/goals/revenue-scope.ts`). In place of the Sage / by-hand
-  split, a side line shows the Exclusive Distribution amount left out and the
-  all-customers total, so the two add back to it. Both are read from revenue
+  `src/lib/reporting/goals/revenue-scope.ts`), with its own Sage / by-hand
+  split. How it adds up starts from the all-customers total and takes the
+  Exclusive Distribution amount off, so the two add back to it (TASK-4373). Both are read from revenue
   by customer class, so they add up with that table to the cent, at whichever
   rate the page is at; when the class split and the card are a refresh apart
-  the line says so.
+  a note in How it adds up says so.
 - **Status and pace.** The status chip, the bar and "Needed per working day"
   follow the headline: the manufacturing total against the same due-so-far
   and target. The bar shows it as one segment (the class split has no
@@ -615,6 +624,11 @@ calls them, salespeople.
   ticked. The choice lives in the URL (`/?screen=goals&sales=GGC,SM`, kept with
   `fx` and `scope`), and each change reads the page model again for it, so every
   figure comes from one build. "Show every customer" clears it.
+- **The list view (TASK-4385).** The open picker has a search (name or code),
+  Clear, one row per salesperson with the picked ones first (as they were when
+  it opened, so rows don't move while you tick), and Done. Escape closes it and
+  returns to the button. "Pick all shown" appears only while a search narrows
+  the list: every row picked would be every customer, which Clear gives.
 - **What follows.** The run is narrowed before the page model is built
   (`filterRunBySalespeople`, `salesperson-filter.ts`), so the same rules make
   every figure: the Revenue card (Sage, by hand, charges, returns, the
@@ -657,6 +671,47 @@ calls them, salespeople.
   leaves out the Sage shipments every customer's hand entries stand for, as the
   page does. It is refused rather than exported for every customer under their
   names when the salespeople can't be read.
+
+### Dates (TASK-4391)
+
+A "Dates" picker after the Salespeople picker: the page for some days of the
+run's month.
+
+- **The choice.** One parameter, `dates` (`date-filter.ts`): `mtd` (the 1st to
+  today), `week` (Monday to Sunday around today), `7d` (today and the 6 days
+  before) or `YYYY-MM-DD..YYYY-MM-DD`. Absent, or `month`, is the whole month,
+  and the page never writes `dates` for it. Presets resolve against the run's
+  today, on the server and in the picker alike. Days are cut to the run's
+  month; days wholly outside it show the whole month, and the page says so.
+  Anything else is 400 `invalid_request` on the page and export routes. The
+  choice lives in the URL with `fx`, `scope`, `tab` and `sales`.
+- **What follows.** The run is narrowed before the page model is built
+  (`filterRunByDates`), after the salesperson filter (the two commute):
+  invoices and the shipped-not-invoiced estimate by ship date, credit notes by
+  their date, this month's truckloads by ship date, batches by their date
+  (`batchDates` in `rules.ts`: a batch a hand entry completes takes the entry's
+  date) and hand entries by theirs. Undated and other-month entries stay listed;
+  they never count. Revenue by currency and by day are rebuilt from the kept
+  invoices. The cards, revenue by class, How it adds up, the day-by-day charts
+  and table (only those days), sizes, scheduled, the batch list, shipments,
+  truckloads by customer, entries by hand and realized revenue by customer all
+  follow. Days that cover the month add up to it, in native currency.
+- **What stays the month's.** The goals: a partial page has no target, status,
+  due so far, pace, needed per day or last month (the Revenue headlines are
+  built without pace, so their status is null). The forecast, potential revenue
+  and unpriced production on Revenue by customer, batch history and the
+  cutoffs stay the month's, for the same customers. The revenue covered-through
+  date and the hand-entry match for the estimate stay the whole page's.
+- **With salespeople.** The Revenue card sets their headline against every
+  customer's headline over the same days.
+- **The workbook.** `?dates=` narrows it the same way and names the days first
+  (`… 2026-10-14 (2026-10-12 to 2026-10-18) (Sage rate) (BB).xlsx`). The Read
+  me and Goals sheets say what it covers; the Goals sheet's target, due so far,
+  status and pace cells read "—"; the Daily sheet has a row per day of the
+  range and no target column; Truckloads leaves last month out.
+- **Left out.** Days across months, pro-rated goals, pace or size history for a
+  range, last month's same days, and a date filter on the forecast or
+  potential revenue.
 
 ### Revenue by customer
 
@@ -981,6 +1036,7 @@ Depended on by: nothing yet.
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, source-mcp, sql-literal, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - Revenue rate and revenue by class (TASK-3780, TASK-3781): `revenue-by-class.ts`, `money.ts` (`allocateConvertedCents`, `usableRate`), `excel/export.ts` (`usdToCadFormula`); `tests/reporting-goals-revenue-rate.test.ts` and the Sage-rate blocks of `tests/reporting-goals-export.test.ts`; `e2e/goals-rate.spec.ts`
 - Revenue by customer: `customer-revenue.ts`, `customer-search.ts`, `src/components/mc/goals/customers.tsx`, the Customers sheet in `excel/export.ts`; `tests/reporting-goals-customer-revenue.test.ts`; `e2e/goals-customers.spec.ts`
+- Dates filter (TASK-4391): `date-filter.ts` (pure), `batchDates` and `datesTakeaway` in `rules.ts`, `buildGoalsViewAndRun` in `view.ts`; `src/components/mc/goals/dates.tsx`; `tests/reporting-goals-dates.test.ts`; `e2e/goals-dates.spec.ts`
 - Salesperson filter (TASK-4277): `salesperson-filter.ts` (pure), `salespeople.ts` (the live lookup), `queries/salespeople.ts`, `buildGoalsViewAndRun` in `view.ts`; `src/components/mc/goals/salespeople.tsx`; `docs/modules/reporting-goals/readonly-grants-salespeople.sql`; `tests/reporting-goals-salespeople{,-lookup}.test.ts` and the salesperson block of `tests/reporting-goals-postgres.test.ts`; `e2e/goals-salespeople.spec.ts`
 - Reporting MCP path (TASK-3489): `source-mcp.ts`, `sql-literal.ts`; `tests/reporting-goals-source-mcp.test.ts` (a fake plx-reporting-mcp), `tests/reporting-goals-sql-literal.test.ts`, `tests/reporting-goals-source-select.test.ts`
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)

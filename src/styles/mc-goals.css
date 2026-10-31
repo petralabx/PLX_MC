@@ -407,6 +407,103 @@
   font-variant-numeric: tabular-nums;
 }
 
+.mc .goals .gp-card-link {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* ─── Revenue → How it adds up (TASK-4373) ─────────────────────────────────── */
+/* Three small tables side by side on a wide pane (one column on a phone), then
+   the notes on the data across the full width. Rows reuse .gp-table; a running
+   total gets a rule above it and the headline a heavier one. */
+.mc .goals .gp-bd-cols {
+  display: grid;
+  gap: 20px 28px;
+  align-items: start;
+}
+
+@container main (min-width: 60rem) {
+  .mc .goals .gp-bd-cols {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.mc .goals .gp-bd h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--p-grid);
+  font-size: var(--p-text-small);
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-bd-unit {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  font-weight: 400;
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
+}
+
+/* .gp-table.gp-ledger outranks the .gp-table rules further down this file. */
+.mc .goals .gp-table.gp-ledger :is(tbody th, tfoot th) {
+  white-space: normal;
+}
+
+.mc .goals .gp-table.gp-ledger tbody tr:last-child :is(td, th) {
+  border-bottom: 1px solid var(--p-grid);
+}
+
+.mc .goals .gp-bd-sign {
+  display: inline-block;
+  width: 1.2em;
+  font-family: var(--mono);
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-bd-sub {
+  display: block;
+  margin-left: 1.2em;
+  font-size: var(--p-text-meta);
+  line-height: 1.4;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-table.gp-ledger tr.gp-bd-subtotal :is(th, td) {
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 var(--p-ink-2);
+}
+
+.mc .goals .gp-table.gp-ledger tfoot :is(th, td) {
+  border-top: 2px solid var(--p-ink);
+  font-weight: 700;
+}
+
+.mc .goals .gp-ledger tfoot .gp-bd-sub {
+  font-weight: 400;
+}
+
+.mc .goals .gp-bd-after {
+  margin: 8px 0 0;
+  font-size: var(--p-text-small);
+  line-height: 1.45;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-bd-notes {
+  margin-top: 20px;
+}
+
+.mc .goals .gp-bd-none {
+  margin: 0;
+  font-size: var(--p-text-small);
+  color: var(--p-muted);
+}
+
 /* ─── Charts ───────────────────────────────────────────────────────────────── */
 .mc .goals .gp-charts {
   display: grid;
@@ -907,18 +1004,83 @@
   color: var(--p-paper);
 }
 
+/* The open picker is a list view (TASK-4385): a header with Clear, a search,
+   one column of rows (picked first) that scrolls on its own, and Done. */
 .mc .goals .gp-pick-menu {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
-  gap: 0 16px;
-  max-height: 22rem;
+  display: flex;
+  flex-direction: column;
+  max-width: 34rem;
   min-width: 0;
   margin: 8px 0 0;
-  padding: 6px 12px;
-  overflow-y: auto;
   border: 1px solid var(--p-grid);
   border-radius: var(--p-radius-sm);
   background: var(--p-paper);
+}
+
+.mc .goals .gp-pick-head,
+.mc .goals .gp-pick-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  font-size: var(--p-text-small);
+}
+
+.mc .goals .gp-pick-head {
+  border-bottom: 1px solid var(--p-grid-2);
+}
+
+.mc .goals .gp-pick-title {
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-pick-acts {
+  display: inline-flex;
+  gap: 14px;
+}
+
+.mc .goals .gp-pick-acts .tl-link {
+  min-height: var(--p-touch);
+}
+
+.mc .goals .gp-pick-acts .tl-link:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.mc .goals .gp-pick-find {
+  margin: 8px 12px 4px;
+  min-height: var(--p-touch);
+  padding: 0 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: var(--p-text-small);
+}
+
+.mc .goals .gp-pick-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 18rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 4px;
+  overflow-y: auto;
+  border: 0;
+}
+
+.mc .goals .gp-pick-list .gp-check {
+  display: flex;
+  padding: 0 12px;
+}
+
+.mc .goals .gp-pick-list .gp-check.on {
+  background: color-mix(in srgb, var(--p-accent) 8%, var(--p-paper));
 }
 
 .mc .goals .gp-pick-menu .ct {
@@ -933,8 +1095,38 @@
   color: var(--p-muted);
 }
 
-.mc .goals .gp-pick-menu .gp-check {
+.mc .goals .gp-pick-none {
+  margin: 8px 12px;
+  font-size: var(--p-text-small);
+  color: var(--p-muted);
+}
+
+/* The dates picker's custom row (TASK-4391): two day fields and a button, wrapping at phone width. */
+.mc .goals .gp-pick-dates {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--p-grid-2);
+  font-size: var(--p-text-small);
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-pick-dates input {
+  min-height: var(--p-touch);
+  padding: 0 8px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font: inherit;
+}
+
+.mc .goals .gp-pick-foot {
+  border-top: 1px solid var(--p-grid-2);
+  background: var(--p-paper-2);
+  color: var(--p-ink-2);
 }
 
 .mc .goals .gp-check {

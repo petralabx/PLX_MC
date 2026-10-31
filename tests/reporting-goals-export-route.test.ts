@@ -32,7 +32,7 @@ vi.mock("@/lib/reporting/goals/loader", () => ({ loadGoalsView: vi.fn(), loadGoa
 import { GET as exportGet } from "@/app/api/reporting/goals/export/route";
 import { ApiClientError, apiDownload, dispositionFileName } from "@/lib/api";
 import { appendEvent } from "@/lib/compliance/repo";
-import { WORKBOOK_SHEETS, XLSX_CONTENT_TYPE, type GoalsExportData } from "@/lib/reporting/goals";
+import { WHOLE_MONTH, WORKBOOK_SHEETS, XLSX_CONTENT_TYPE, type GoalsExportData } from "@/lib/reporting/goals";
 import { loadGoalsExport } from "@/lib/reporting/goals/loader";
 
 import {
@@ -43,6 +43,7 @@ import {
   SHIPMENT_LINES,
   SHIPMENT_LINES_SUMMARY,
   TODAY,
+  datesGoalsPage,
   goalsPage,
   goalsViewInput,
   salesGoalsPage,
@@ -114,7 +115,7 @@ describe("GET /api/reporting/goals/export", () => {
     h.data = exportData(goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "sage"));
     const resp = await exportGet(new Request("http://localhost/api/reporting/goals/export?fx=sage"), ctx);
     expect(resp.status).toBe(200);
-    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("sage", []);
+    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("sage", [], WHOLE_MONTH);
     expect(resp.headers.get("content-disposition")).toBe('attachment; filename="PLX goals and production 2026-10-14 (Sage rate).xlsx"');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await resp.arrayBuffer());
@@ -135,7 +136,7 @@ describe("GET /api/reporting/goals/export", () => {
     h.data = exportData(salesGoalsPage(["BB"]));
     const resp = await exportGet(new Request("http://localhost/api/reporting/goals/export?sales=bb"), ctx);
     expect(resp.status).toBe(200);
-    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("boc", ["BB"]);
+    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("boc", ["BB"], WHOLE_MONTH);
     expect(resp.headers.get("content-disposition")).toBe('attachment; filename="PLX goals and production 2026-10-14 (BB).xlsx"');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await resp.arrayBuffer());
@@ -152,6 +153,28 @@ describe("GET /api/reporting/goals/export", () => {
     expect(await refused.json()).toMatchObject({ error: { code: "salespeople_unavailable" } });
     const bad = await exportGet(new Request("http://localhost/api/reporting/goals/export?sales=%3Cx%3E"), ctx);
     expect(bad.status).toBe(400);
+  });
+
+  it("narrows the workbook to ?dates= and names it with the days; a dates value it can't read is 400 (TASK-4391)", async () => {
+    signedIn(["Goals.Viewer"]);
+    h.data = exportData(datesGoalsPage("week", ["BB"]));
+    const resp = await exportGet(new Request("http://localhost/api/reporting/goals/export?fx=sage&sales=BB&dates=week"), ctx);
+    expect(resp.status).toBe(200);
+    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("sage", ["BB"], { kind: "preset", preset: "week" });
+    expect(resp.headers.get("content-disposition")).toBe(
+      'attachment; filename="PLX goals and production 2026-10-14 (2026-10-12 to 2026-10-18) (Sage rate) (BB).xlsx"'
+    );
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await resp.arrayBuffer());
+    expect(String(wb.getWorksheet("Read me")!.getCell("A3").value)).toContain("Only Oct 12 to Oct 18 (2026-10-12 to 2026-10-18)");
+    expect(appendEvent).toHaveBeenLastCalledWith({
+      kind: "reporting.goals.export",
+      actor: "human:stephen@petrasoap.com",
+      payload: { runId: 41, fx: "sage", sales: ["BB"], dates: { from: "2026-10-12", to: "2026-10-18" } },
+    });
+    const bad = await exportGet(new Request("http://localhost/api/reporting/goals/export?dates=2026-10-18..2026-10-12"), ctx);
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: { code: "invalid_request", message: "dates must be mtd, week, 7d or YYYY-MM-DD..YYYY-MM-DD." } });
   });
 
   it("lets Editors and read-only break-glass sessions export too", async () => {

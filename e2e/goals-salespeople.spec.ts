@@ -64,6 +64,52 @@ test.describe("goals salesperson filter", () => {
     await expect(page.getByTestId("goals-salespeople-note")).toHaveCount(0);
   });
 
+  test("the list view: search, Pick all shown, Done and Escape, and the picked open first (TASK-4385)", async ({ page }) => {
+    await mockGoalsApi(page, salesGoalsPage([]));
+    const asked = await serveSales(page);
+    await page.goto("/?screen=goals");
+    await waitForHydration(page);
+    const details = picker(page).locator("details");
+    const rows = picker(page).locator(".gp-pick-list .gp-check");
+    const search = page.getByTestId("goals-salespeople-search");
+
+    await summary(page).click();
+    await expect(rows).toHaveCount(4);
+    await expect(page.getByTestId("goals-salespeople-menu-clear")).toBeDisabled();
+    // Every row picked would be every customer, so Pick all shown waits for a search.
+    await expect(page.getByTestId("goals-salespeople-pick-shown")).toHaveCount(0);
+    await search.fill("rep");
+    await expect(rows).toHaveCount(3);
+    await page.getByTestId("goals-salespeople-pick-shown").click();
+    await expect(page).toHaveURL(/[?&]sales=AA(%2C|,)BB(%2C|,)CC(&|$)/);
+    await expect(summary(page)).toHaveText("3 picked");
+    await expect(picker(page).locator(".gp-pick-foot")).toContainText("3 picked");
+    await search.fill("zzz");
+    await expect(rows).toHaveCount(0);
+    await expect(picker(page)).toContainText("No salesperson matches “zzz”.");
+
+    await page.getByTestId("goals-salespeople-menu-clear").click();
+    await expect(page).not.toHaveURL(/sales=/);
+    await search.fill("");
+    await picker(page).getByRole("checkbox", { name: /No salesperson/ }).check();
+    await expect(page).toHaveURL(/[?&]sales=none(&|$)/);
+    // Ticking doesn't move rows while the list is open.
+    await expect(rows.last()).toContainText("No salesperson");
+    await page.getByTestId("goals-salespeople-done").click();
+    await expect(details).toHaveJSProperty("open", false);
+    await expect(summary(page)).toBeFocused();
+
+    // Reopened: the search is empty and the picked row comes first.
+    await summary(page).click();
+    await expect(search).toHaveValue("");
+    await expect(rows.first()).toContainText("No salesperson");
+    await search.focus();
+    await page.keyboard.press("Escape");
+    await expect(details).toHaveJSProperty("open", false);
+    await expect(summary(page)).toBeFocused();
+    expect(asked).toEqual(["AA,BB,CC", "none"]);
+  });
+
   test("a sales= link opens narrowed and exports for those salespeople", async ({ page }) => {
     await mockGoalsApi(page, salesGoalsPage([]));
     const asked = await serveSales(page);

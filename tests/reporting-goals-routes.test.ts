@@ -52,7 +52,7 @@ import { GET as viewGet } from "@/app/api/reporting/goals/route";
 import { GET as runGet } from "@/app/api/reporting/goals/runs/[id]/route";
 import { GET as linesGet } from "@/app/api/reporting/goals/runs/[id]/shipment-lines/route";
 import { appendEvent } from "@/lib/compliance/repo";
-import { goalsRolesFromClaims, resolveGoalsActor } from "@/lib/reporting/goals";
+import { WHOLE_MONTH, goalsRolesFromClaims, resolveGoalsActor } from "@/lib/reporting/goals";
 import { loadGoalsView } from "@/lib/reporting/goals/loader";
 import { runRefresh, startRefresh } from "@/lib/reporting/goals/refresh";
 
@@ -129,7 +129,7 @@ describe("GET /api/reporting/goals", () => {
     vi.mocked(loadGoalsView).mockClear();
     for (const [query, basis] of [["", "boc"], ["?fx=boc", "boc"], ["?fx=sage", "sage"]] as const) {
       expect((await viewGet(new Request(`http://localhost/api/reporting/goals${query}`), ctx)).status).toBe(200);
-      expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith(basis, []);
+      expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith(basis, [], WHOLE_MONTH);
     }
     const bad = await viewGet(new Request("http://localhost/api/reporting/goals?fx=usd"), ctx);
     expect(bad.status).toBe(400);
@@ -143,11 +143,33 @@ describe("GET /api/reporting/goals", () => {
     signedIn(["Goals.Viewer"]);
     vi.mocked(loadGoalsView).mockClear();
     expect((await viewGet(new Request("http://localhost/api/reporting/goals?fx=sage&sales=sm,none,GGC"), ctx)).status).toBe(200);
-    expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith("sage", ["GGC", "SM", "none"]);
+    expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith("sage", ["GGC", "SM", "none"], WHOLE_MONTH);
     const bad = await viewGet(new Request("http://localhost/api/reporting/goals?sales=G%20C"), ctx);
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ error: { code: "invalid_request" } });
     expect(vi.mocked(loadGoalsView)).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads ?dates=: a preset or a range of days, month or absent for the whole month; anything else is 400 (TASK-4391)", async () => {
+    signedIn(["Goals.Viewer"]);
+    vi.mocked(loadGoalsView).mockClear();
+    for (const [query, dates] of [
+      ["", WHOLE_MONTH],
+      ["?dates=month", WHOLE_MONTH],
+      ["?dates=week", { kind: "preset", preset: "week" }],
+      ["?sales=BB&dates=2026-10-01..2026-10-07", { kind: "range", from: "2026-10-01", to: "2026-10-07" }],
+    ] as const) {
+      expect((await viewGet(new Request(`http://localhost/api/reporting/goals${query}`), ctx)).status).toBe(200);
+      expect(vi.mocked(loadGoalsView).mock.lastCall?.[2]).toEqual(dates);
+    }
+    for (const bad of ["fortnight", "2026-10-07..2026-10-01", "2026-02-30..2026-03-01", "2026-10-01"]) {
+      const resp = await viewGet(new Request(`http://localhost/api/reporting/goals?dates=${bad}`), ctx);
+      expect(resp.status, bad).toBe(400);
+      expect(await resp.json()).toMatchObject({
+        error: { code: "invalid_request", message: "dates must be mtd, week, 7d or YYYY-MM-DD..YYYY-MM-DD." },
+      });
+    }
+    expect(vi.mocked(loadGoalsView)).toHaveBeenCalledTimes(4);
   });
 });
 

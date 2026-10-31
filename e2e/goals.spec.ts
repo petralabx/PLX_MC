@@ -194,16 +194,16 @@ test.describe("goals & production", () => {
     await expect(sections).toHaveCount(2);
     await expect(sections.last()).toBeVisible();
     await expect(screen(page).locator(".gp-skel")).toHaveCount(2);
-    const loading = await page.getByTestId("goals-classes").boundingBox();
+    const loading = await page.getByTestId("goals-breakdown").boundingBox();
     release();
     await expect(page.getByText("Failed to load.")).toHaveCount(2);
     await expect(page.getByTestId("goals-as-of")).toHaveText("Couldn’t load the report: Internal error.");
     // The failed state takes the skeleton's place: nothing below moves.
-    const failed = await page.getByTestId("goals-classes").boundingBox();
+    const failed = await page.getByTestId("goals-breakdown").boundingBox();
     expect(failed?.y).toBe(loading?.y);
     await openGoalsTab(page, "Batches: Batch list");
     await expect(page.getByTestId("goals-batches")).toContainText("Failed to load.");
-    await expect(page.getByTestId("goals-classes")).toHaveCount(0);
+    await expect(page.getByTestId("goals-breakdown")).toHaveCount(0);
     fail = false;
     await page.getByTestId("goals-batches").getByRole("button", { name: "Retry" }).click();
     await expect(page.getByTestId("goals-card-line1")).toContainText("91,702 of 420,000 kg");

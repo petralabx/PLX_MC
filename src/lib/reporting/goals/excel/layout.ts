@@ -25,16 +25,23 @@ export type WorkbookSheet = (typeof WORKBOOK_SHEETS)[number];
 
 /**
  * "PLX goals and production 2026-10-14.xlsx"; at the Sage rate, "… 2026-10-14 (Sage rate).xlsx" (TASK-3780);
- * narrowed to some salespeople's customers, "… (GGC, SM).xlsx", or "… (4 salespeople).xlsx" past three (TASK-4277).
+ * narrowed to some salespeople's customers, "… (GGC, SM).xlsx", or "… (4 salespeople).xlsx" past three (TASK-4277);
+ * narrowed to some days of the month, "… 2026-10-14 (2026-10-12 to 2026-10-18).xlsx", the days first (TASK-4391).
  */
-export function workbookFileName(today: IsoDate, basis: RevenueRateBasis = "boc", sales: readonly string[] = []): string {
+export function workbookFileName(
+  today: IsoDate,
+  basis: RevenueRateBasis = "boc",
+  sales: readonly string[] = [],
+  range: { from: IsoDate; to: IsoDate } | null = null
+): string {
   const who =
     sales.length === 0
       ? ""
       : sales.length > 3
         ? ` (${sales.length} salespeople)`
         : ` (${sales.map((c) => (c === NO_SALESPERSON ? "no salesperson" : c)).join(", ")})`;
-  return `PLX goals and production ${today}${basis === "sage" ? " (Sage rate)" : ""}${who}.xlsx`;
+  const days = range ? ` (${range.from} to ${range.to})` : "";
+  return `PLX goals and production ${today}${days}${basis === "sage" ? " (Sage rate)" : ""}${who}.xlsx`;
 }
 
 // ─── The "Manual entries" sheet (the import template) ──────────────────────

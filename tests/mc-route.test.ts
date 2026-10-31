@@ -48,6 +48,17 @@ describe("routeToUrl (P3)", () => {
     expect(urlToRoute(routeToUrl(route))).toEqual(route);
   });
 
+  it("carries Goals dates beside the salespeople and drops the whole month and malformed values (TASK-4391)", () => {
+    const route: Route = { screen: "goals", sales: "BB", dates: "week" };
+    expect(routeToUrl(route)).toBe("/?screen=goals&sales=BB&dates=week");
+    expect(urlToRoute(routeToUrl(route))).toEqual(route);
+    const range: Route = { screen: "goals", tab: "daily", dates: "2026-10-01..2026-10-07" };
+    expect(urlToRoute(routeToUrl(range))).toEqual(range);
+    for (const bad of ["month", "fortnight", "2026-10-01", "2026-10-01..x", "<script>"]) {
+      expect(urlToRoute(`/?screen=goals&dates=${encodeURIComponent(bad)}`), bad).toEqual({ screen: "goals" });
+    }
+  });
+
   it("does NOT serialize the transient filter field", () => {
     const url = routeToUrl({ screen: "board", filter: { text: "wms", priority: ["urgent"] } });
     expect(url).toBe("/?screen=board");

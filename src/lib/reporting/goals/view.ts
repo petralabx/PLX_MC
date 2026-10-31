@@ -5,15 +5,20 @@
 // rate when the page asks for it (TASK-3780); truckloads stay on the Bank of Canada rate.
 // Narrowed to some salespeople's customers (TASK-4277), it is built again from
 // the run filterRunBySalespeople keeps, so every figure follows by the same rules.
+// Narrowed to some days of the month (TASK-4391), it is built again from the run
+// filterRunByDates keeps, after the salesperson filter (the two commute), with
+// no status or pace: the goals are the whole month's.
 
 import { applyServiceCharges, pendingProductsOf, revenueByBusinessLine, type BusinessLineScope, type RevenueByBusinessLine } from "./business-line";
 import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
+import { workingDaysBetween } from "./calendar";
+import { datesTitle, filterRunByDates, resolveDates, WHOLE_MONTH, type DatesChoice, type DatesRange } from "./date-filter";
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { prorateCents } from "./money";
 import { countedManualShipmentRefs, pendingShipmentsByClass, pendingShipmentsNotEnteredByHand } from "./pending-shipments";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
 import { revenueScope, type RevenueScopePace, type RevenueScopeView } from "./revenue-scope";
-import { computeGoals, salespeopleTakeaway, type EvaluatedEntry, type GoalsModel } from "./rules";
+import { batchDates, computeGoals, datesTakeaway, salespeopleTakeaway, type EvaluatedEntry, type GoalsModel } from "./rules";
 import {
   canonicalSales,
   filterRunBySalespeople,
@@ -139,6 +144,18 @@ export interface GoalsView {
   customerRevenue: CustomerRevenue | null;
   /** The salesperson filter (TASK-4277); null without a model, or when the loader didn't look salespeople up. */
   salespeople: SalespeopleView | null;
+  /** The days the figures cover (TASK-4391); null without a model. `whole`: the whole month, as without the filter. */
+  range: DatesView | null;
+}
+
+/**
+ * The dates filter (TASK-4391): the days shown, inside the run's month. Not
+ * whole, the figures follow the days and have no status, due so far, pace or
+ * last month; the forecast and potential revenue stay the whole month's.
+ */
+export interface DatesView extends DatesRange {
+  /** Working days from `from` to `to`. */
+  workingDays: number;
 }
 
 /** One salesperson the page can be narrowed to (TASK-4277). */
@@ -207,6 +224,8 @@ export interface GoalsViewInput {
   revenueBasis?: RevenueRateBasis;
   /** The salesperson filter (TASK-4277): the live lookup of this run's customers and the codes asked for; absent, the page has none. */
   salespeople?: { lookup: SalespersonLookup; selected: readonly string[] } | null;
+  /** The dates filter (TASK-4391): the days asked for; absent, the whole month. */
+  dates?: DatesChoice | null;
 }
 
 /**
@@ -219,7 +238,7 @@ function headlineAfterServiceCharges(
   scope: RevenueScopeView,
   line: BusinessLineScope,
   targetCents: number,
-  pace: RevenueScopePace,
+  pace?: RevenueScopePace,
 ): RevenueScopeView {
   const moved = applyServiceCharges(scope, line, targetCents, pace);
   const goalCadCents = moved.goalCadCents + moved.pendingCadCents;
@@ -228,9 +247,13 @@ function headlineAfterServiceCharges(
     invoicedProductCadCents: moved.totalCadCents - moved.chargesCadCents,
     goalCadCents,
     progress: targetCents > 0 ? goalCadCents / targetCents : null,
-    status: goalCadCents >= pace.dueSoFarCents ? "on_track" : "behind",
-    neededPerDayCents:
-      pace.remaining > 0 ? prorateCents(Math.max(0, targetCents - goalCadCents), 1, pace.remaining) : 0,
+    // Without pace (some days of the month, TASK-4391): no status or pace, as revenueScope gives.
+    status: pace ? (goalCadCents >= pace.dueSoFarCents ? "on_track" : "behind") : null,
+    neededPerDayCents: pace
+      ? pace.remaining > 0
+        ? prorateCents(Math.max(0, targetCents - goalCadCents), 1, pace.remaining)
+        : 0
+      : null,
   };
 }
 
@@ -240,38 +263,86 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
 
 /**
  * The page model and the run it was built from: narrowed to the picked
- * salespeople's customers when the filter applies (TASK-4277), which is what
- * the workbook's rows must come from. `entries` is every live entry, evaluated,
- * whatever the filter: the workbook's import template lists them all.
+ * salespeople's customers when the filter applies (TASK-4277), then to the days
+ * asked for (TASK-4391), which is what the workbook's rows must come from.
+ * `entries` is every live entry, evaluated, whatever the filters: the
+ * workbook's import template lists them all.
  */
 export function buildGoalsViewAndRun(input: GoalsViewInput): { view: GoalsView; run: GoalsViewInput; entries: EvaluatedEntry[] } {
   const whole = buildView(input);
   const entries = whole.model?.entries ?? [];
   const sales = input.salespeople;
-  if (!sales || !whole.model) return { view: { ...whole, salespeople: null }, run: input, entries };
-  const filter = salespeopleView(input, sales.lookup, canonicalSales(sales.selected));
-  if (filter.selected.length === 0 || sales.lookup.state !== "ready") return { view: { ...whole, salespeople: filter }, run: input, entries };
-  const run = filterRunBySalespeople(input, salespeopleScope(sales.lookup, filter.selected));
-  const view = buildView(run, {
+  if (!whole.model) return { view: { ...whole, salespeople: null, range: null }, run: input, entries };
+  const resolved = resolveDates(input.dates ?? WHOLE_MONTH, whole.model.today);
+  const range: DatesView = { ...resolved, workingDays: workingDaysBetween(resolved.from, resolved.to, input.holidays) };
+  // A page narrowed to some customers or days keeps the whole page's revenue covered-through date and counted hand shipments.
+  const narrowing = {
     revenueCoveredThrough: whole.model.coveredThrough.revenue,
-    // A Sage shipment a hand entry stands for stays out of the estimate whoever the entry was typed for, so the pages add up to the whole.
+    // A Sage shipment a hand entry stands for stays out of the estimate whoever the entry was typed for, and whatever its date, so the pages add up to the whole.
     countedRefs: countedManualShipmentRefs(whole.model.entries),
-  });
-  const everyCustomer = {
-    revenueGoalCadCents: whole.revenueGoal?.goalCadCents ?? null,
-    revenueScopeGoalCadCents: whole.revenueScope?.goalCadCents ?? null,
-    matchesCard: whole.revenueByClass?.matchesCard ?? true,
   };
-  // The takeaway's share is the Revenue card's: the headline against every customer's.
-  if (view.model) {
-    view.model.takeaway = salespeopleTakeaway(
-      view.model,
-      `For ${filter.label}`,
-      view.revenueGoal?.goalCadCents ?? view.model.revenue.totalCents,
-      everyCustomer.revenueGoalCadCents ?? whole.model.revenue.totalCents
-    );
+
+  // The month for the salespeople's customers (or every customer's): the forecast and potential revenue of a partial page come from it.
+  let filter: SalespeopleView | null = null;
+  let monthRun = input;
+  let month = whole;
+  if (sales) {
+    filter = salespeopleView(input, sales.lookup, canonicalSales(sales.selected));
+    if (filter.selected.length > 0 && sales.lookup.state === "ready") {
+      monthRun = filterRunBySalespeople(input, salespeopleScope(sales.lookup, filter.selected));
+      month = buildView(monthRun, narrowing);
+      filter = {
+        ...filter,
+        applied: true,
+        everyCustomer: {
+          revenueGoalCadCents: whole.revenueGoal?.goalCadCents ?? null,
+          revenueScopeGoalCadCents: whole.revenueScope?.goalCadCents ?? null,
+          matchesCard: whole.revenueByClass?.matchesCard ?? true,
+        },
+      };
+    }
   }
-  return { view: { ...view, salespeople: { ...filter, applied: true, everyCustomer } }, run, entries };
+
+  if (range.whole) {
+    // The takeaway's share is the Revenue card's: the headline against every customer's.
+    if (filter?.applied && month.model) {
+      month.model.takeaway = salespeopleTakeaway(
+        month.model,
+        `For ${filter.label}`,
+        month.revenueGoal?.goalCadCents ?? month.model.revenue.totalCents,
+        filter.everyCustomer?.revenueGoalCadCents ?? whole.model.revenue.totalCents
+      );
+    }
+    return { view: { ...month, salespeople: filter, range }, run: monthRun, entries };
+  }
+
+  // Some days of the month: the effective batch dates come from the whole month's model, so every page agrees on them.
+  const dated = batchDates(whole.model);
+  const run = filterRunByDates(monthRun, range, dated);
+  const view = buildView(run, { ...narrowing, withoutPace: true });
+  if (view.model) {
+    view.model.daily = view.model.daily.filter((d) => d.day >= range.from && d.day <= range.to);
+    const who = `${datesTitle(range)}${filter?.applied ? `, for ${filter.label}` : ""}`;
+    view.model.takeaway = datesTakeaway(view.model, who, view.revenueGoal?.goalCadCents ?? view.model.revenue.totalCents, !!filter?.applied);
+  }
+  // The forecast and potential revenue are the whole month's; realized revenue follows the days.
+  view.forecast = month.forecast;
+  if (view.customerRevenue && month.customerRevenue) {
+    view.customerRevenue = { ...month.customerRevenue, realized: view.customerRevenue.realized, cardTotalCents: view.customerRevenue.cardTotalCents };
+  }
+  if (filter?.applied) {
+    // Every customer's headlines over the same days, which the narrowed ones are set against.
+    const every = buildView(filterRunByDates(input, range, dated), { ...narrowing, withoutPace: true });
+    filter = {
+      ...filter,
+      everyCustomer: {
+        revenueGoalCadCents: every.revenueGoal?.goalCadCents ?? null,
+        revenueScopeGoalCadCents: every.revenueScope?.goalCadCents ?? null,
+        matchesCard: whole.revenueByClass?.matchesCard ?? true,
+      },
+    };
+  }
+  return { view: { ...view, salespeople: filter, range }, run, entries };
 }
 
 /** Who the page can be narrowed to: this run's customers' salespeople, with how many of its customers each has. */
@@ -309,11 +380,13 @@ function salespeopleView(run: SalespeopleRun, lookup: SalespersonLookup, selecte
  * The page model from `input`. `narrowed` (TASK-4277): a page narrowed to some
  * salespeople's customers keeps the whole page's revenue covered-through date
  * and counted hand shipments, and leaves last month's revenue out.
+ * `withoutPace` (TASK-4391): some days of the month, so the Revenue headlines
+ * have no status or pace.
  */
 function buildView(
   input: GoalsViewInput,
-  narrowed?: { revenueCoveredThrough: IsoDate; countedRefs: ReadonlySet<string> }
-): Omit<GoalsView, "salespeople"> {
+  narrowed?: { revenueCoveredThrough: IsoDate; countedRefs: ReadonlySet<string>; withoutPace?: boolean }
+): Omit<GoalsView, "salespeople" | "range"> {
   const { run, latestRun } = input;
   const latestAttempt = latestRun && (!run || latestRun.id !== run.id) ? latestRun : null;
   if (!run || !input.snapshot || !run.fxRate) {
@@ -369,7 +442,7 @@ function buildView(
   });
   const notes = input.snapshot.creditNotes ?? null;
   const byClass = revenueByClass(shipments, model, input.ftlCustomers, notes?.access === "read" ? notes.notes : []);
-  const pace = { dueSoFarCents: model.revenue.dueSoFarCents, remaining: model.calendar.remaining };
+  const pace = narrowed?.withoutPace ? undefined : { dueSoFarCents: model.revenue.dueSoFarCents, remaining: model.calendar.remaining };
   // INTERIM (TASK-3992): shipped, not yet invoiced, added to the card as an estimate.
   const pendingData = input.snapshot.pendingShipments ?? null;
   const countedRefs = narrowed?.countedRefs ?? countedManualShipmentRefs(model.entries);

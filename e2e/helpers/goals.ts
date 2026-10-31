@@ -57,8 +57,16 @@ export function runAt(over: Partial<RefreshRun>): RefreshRun {
   return { ...RUN, ...over };
 }
 
-export async function gotoGoals(page: Page): Promise<void> {
+/** Open a Goals section. `name` is the tab's accessible name, e.g. "Revenue: Shipments". */
+export async function openGoalsTab(page: Page, name: string): Promise<void> {
+  const tab = page.getByRole("tab", { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+}
+
+export async function gotoGoals(page: Page, tab?: string): Promise<void> {
   await page.goto("/?screen=goals");
   await waitForHydration(page);
   await expect(page.locator("[data-testid='goals-screen']")).toBeVisible();
+  if (tab) await openGoalsTab(page, tab);
 }

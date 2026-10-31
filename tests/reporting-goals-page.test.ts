@@ -375,11 +375,21 @@ describe("page shell", () => {
   it("renders skeletons, not spinners, before the page model arrives", () => {
     const markup = html(GoalsView, { route: { screen: "goals" }, nav: () => {} });
     expect(text(markup)).toContain("Loading the latest refresh…");
-    // One skeleton per section, the shipments list and the revenue forecast included.
-    expect(markup).toContain('data-testid="goals-shipments"');
-    expect(markup).toContain('data-testid="goals-forecast"');
+    // The pinned goal cards plus the default section (Revenue → By class).
+    // Every other section is one tab, mounted when that tab is the route.
+    expect(markup).toContain('data-testid="goals-classes"');
+    expect(markup).not.toContain('data-testid="goals-shipments"');
+    expect(markup).not.toContain('data-testid="goals-forecast"');
+    expect(markup.match(/role="tab"/g)).toHaveLength(11);
+    expect(markup.match(/aria-selected="true"/g)).toHaveLength(1);
     expect(markup.match(/class="gp-skel"/g)).toHaveLength(markup.match(/<section /g)?.length ?? -1);
     expect(text(markup)).toContain("Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.");
+
+    const forecast = html(GoalsView, { route: { screen: "goals", tab: "forecast" }, nav: () => {} });
+    expect(forecast).toContain('data-testid="goals-forecast"');
+    expect(forecast).not.toContain('data-testid="goals-classes"');
+    const shipments = html(GoalsView, { route: { screen: "goals", tab: "shipments" }, nav: () => {} });
+    expect(shipments).toContain('data-testid="goals-shipments"');
   });
 
   it("shows Failed to load with Retry in place of a section", () => {

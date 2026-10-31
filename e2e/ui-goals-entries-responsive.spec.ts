@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { entriesWorkbook, entryRow, excelDate } from "../tests/reporting-goals-workbook";
 import { ENTRIES } from "../tests/reporting-goals-helpers";
 
-import { gotoGoals } from "./helpers/goals";
+import { gotoGoals, openGoalsTab } from "./helpers/goals";
 import { EntriesApi } from "./helpers/goals-entries";
 import { expectSurfaceNoHorizontalOverflow } from "./helpers/ui-loop-surfaces";
 
@@ -41,6 +41,7 @@ test.describe("goals entries responsive (G3)", () => {
     await new EntriesApi().install(page);
     await gotoGoals(page);
     await expect(page.getByTestId("goals-card-line1")).toBeVisible();
+    await openGoalsTab(page, "Entries: By hand");
   });
 
   test("entry actions and the entry form fit", async ({ page }, testInfo) => {

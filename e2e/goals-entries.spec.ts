@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ENTRY_HEADERS, entriesWorkbook, entryRow, excelDate } from "../tests/reporting-goals-workbook";
 import { ENTRIES } from "../tests/reporting-goals-helpers";
 
-import { gotoGoals } from "./helpers/goals";
+import { gotoGoals, openGoalsTab } from "./helpers/goals";
 import { EntriesApi } from "./helpers/goals-entries";
 
 // Goals & Production, entries by hand (TASK-2897) against the 2026-10-14
@@ -21,6 +21,7 @@ async function open(page: Page, api = new EntriesApi()): Promise<EntriesApi> {
   await api.install(page);
   await gotoGoals(page);
   await expect(page.getByTestId("goals-card-line1")).toContainText("91,702 of 420,000 kg");
+  await openGoalsTab(page, "Entries: By hand");
   return api;
 }
 

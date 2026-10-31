@@ -2,6 +2,7 @@
 // object + `nav()` made typed). Screens receive { route, nav } and navigate
 // with nav(screen, { bucketId?, taskId? }).
 
+import { DEFAULT_GOALS_TAB, isGoalsTab, type GoalsTab } from "./goals/tabs";
 import type { FilterState } from "./work-views.helpers";
 
 // Runtime list of screens (P3 deep links): the URL parser validates the
@@ -69,6 +70,8 @@ export interface Route {
   fx?: "sage";
   /** Goals & Production revenue for manufacturing customers only (every class but Exclusive Distribution): `/?screen=goals&scope=mfg`; absent = all customers. */
   scope?: "mfg";
+  /** Goals report section (TASK-4094): `/?screen=goals&tab=shipments`. Absent = Revenue → By class. */
+  tab?: GoalsTab;
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -107,6 +110,7 @@ export function routeToUrl(route: Route): string {
   if (route.focus === "evidence") params.set("focus", "evidence");
   if (route.fx === "sage") params.set("fx", "sage");
   if (route.scope === "mfg") params.set("scope", "mfg");
+  if (route.tab && route.tab !== DEFAULT_GOALS_TAB) params.set("tab", route.tab);
   if (route.edit === "1") params.set("edit", "1");
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
@@ -133,6 +137,8 @@ export function urlToRoute(url: string): Route {
   if (params.get("focus") === "evidence") route.focus = "evidence";
   if (params.get("fx") === "sage") route.fx = "sage";
   if (params.get("scope") === "mfg") route.scope = "mfg";
+  const tab = params.get("tab");
+  if (isGoalsTab(tab) && tab !== DEFAULT_GOALS_TAB) route.tab = tab;
   if (params.get("edit") === "1") route.edit = "1";
   return route;
 }

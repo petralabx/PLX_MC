@@ -112,6 +112,13 @@ truth table is proven before any plumbing exists.
   count. `PLX_MC_APPROVAL_DECIDERS` lists who may approve. `PLX_MC_PATH_APPROVAL`
   is `enforce`, `warn` or `off`. Unset, it enforces once `PLX_MC_APPROVAL_SIGNING_KEY`
   and the decider list are set, and warns until then. Operator PRs stay ungated.
+- TASK-4308: the owner (`PLX_MC_OWNER_EMAIL`, default `vince@petrasoap.com`,
+  `owner-override.ts`) may decide any approval gate, including one raised in
+  their own name, and answer any question, including one addressed to someone
+  else. Each use writes `approval.owner_override` (reasonCode `self_requested`)
+  or `question.owner_override` (reasonCode `not_addressee`) with actor and time.
+  Separation of duties, the addressee rule and routing are unchanged for
+  everyone else. The decider allowlist still applies to the owner.
 - TASK-3916: a person approves a PR's head, not a task. For both rules above, a
   signed approval of the exact head on any task the PR stamps covers every task
   on it, so a PR with many tasks needs one approval. The approval's scope still

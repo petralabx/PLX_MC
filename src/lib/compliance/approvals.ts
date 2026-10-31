@@ -19,6 +19,7 @@ import {
 import { approvalExpiry, deciderViolation, signApproval } from "./approval-signature";
 import { APPROVAL_WAIT_MAX_MS, creatorApprovalPending, pendingApprovalGates } from "@/lib/mc-data/policy";
 import { isCreatorApprover } from "@/lib/permissions";
+import { isOwner } from "./owner-override";
 import type { ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-acl-guard";
 import { ensureSeeded, patchTask } from "@/lib/sync";
@@ -185,7 +186,10 @@ export async function decideApprovalGate(
     );
   }
   const violation = separationOfDutiesViolation(gate, input.decidedBy);
-  if (violation) {
+  // TASK-4308: the owner may decide a gate raised in their own name (a bot's
+  // gate lists the operator email as requester). Logged in the decide transaction.
+  const ownerOverride = violation !== null && isOwner(input.decidedBy);
+  if (violation && !ownerOverride) {
     // The rejected attempt is itself audit evidence; the gate is left untouched.
     await appendEvent({
       kind: "approval.denied",
@@ -276,6 +280,20 @@ export async function decideApprovalGate(
     );
     if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
 
+    if (ownerOverride) {
+      await appendEventTx(q, {
+        kind: "approval.owner_override",
+        actor: input.decidedBy,
+        taskId: input.taskId,
+        payload: {
+          gateId: gate.id,
+          reasonCode: "self_requested",
+          decision: input.decision,
+          requestedBy: fresh.requestedBy,
+          at: decidedAt,
+        },
+      });
+    }
     await appendEventTx(q, {
       kind: "approval.decided",
       actor: input.decidedBy,
@@ -288,6 +306,7 @@ export async function decideApprovalGate(
         note: input.note ?? null,
         expiresAt: decided.expiresAt ?? null,
         signed: !!decided.signature,
+        ...(ownerOverride ? { ownerOverride: "self_requested" } : {}),
       },
     });
     return { gate: decided, task: updated };

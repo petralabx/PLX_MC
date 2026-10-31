@@ -419,7 +419,7 @@ server.tool(
 
 server.tool(
   "mc_resolve_conflicts",
-  "Resolve a batch of SharePoint Sync conflicts with one explicit resolution (keep_mc | keep_sp). Never default keep_sp. Ledger owns Keep MC for stage-lag leftovers. Agents never mark a task Verified.",
+  "Resolve a batch of SharePoint Sync conflicts with one explicit resolution (keep_mc | keep_sp). Never default keep_sp. Ledger owns Keep MC for stage-lag leftovers. Agents never mark a task Verified. Returns per-id outcomes, and the rest still run when an id is refused: a refusal the engine raises (for example a pending creator approval) comes back resolved:false with its code; resolved:false with no code means the conflict was not found or its value was declined.",
   {
     conflictIds: z.array(z.string().min(1)).min(1),
     resolution: z.enum(["keep_mc", "keep_sp"]),

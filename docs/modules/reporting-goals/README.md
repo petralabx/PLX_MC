@@ -624,6 +624,11 @@ calls them, salespeople.
   ticked. The choice lives in the URL (`/?screen=goals&sales=GGC,SM`, kept with
   `fx` and `scope`), and each change reads the page model again for it, so every
   figure comes from one build. "Show every customer" clears it.
+- **The list view (TASK-4385).** The open picker has a search (name or code),
+  Clear, one row per salesperson with the picked ones first (as they were when
+  it opened, so rows don't move while you tick), and Done. Escape closes it and
+  returns to the button. "Pick all shown" appears only while a search narrows
+  the list: every row picked would be every customer, which Clear gives.
 - **What follows.** The run is narrowed before the page model is built
   (`filterRunBySalespeople`, `salesperson-filter.ts`), so the same rules make
   every figure: the Revenue card (Sage, by hand, charges, returns, the

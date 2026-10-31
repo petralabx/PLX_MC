@@ -3,7 +3,7 @@
 - Slug: `goals-design-refresh` (this file is `docs/workstreams/goals-design-refresh.md`)
 - Owner: Vince · operator: CoS (cos@petrasoap.com) · agents: claude/friendly-gates-2br59z
 - Branches: `claude/friendly-gates-2br59z`
-- MC tasks: TASK-4373
+- MC tasks: TASK-4373, TASK-4385
 - SharePoint handoff: n/a
 
 ## Goal
@@ -20,8 +20,8 @@ active, as of 2026-10-31. Slice 1 (TASK-4373) is built on `claude/friendly-gates
 
 ## Next steps
 
-1. Land slice 1, then restart the branch from `main` for slice 2.
-2. Slice 2: the salesperson list-view picker in `src/components/mc/goals/salespeople.tsx` (search, Select all, Clear, picked on top, customer counts). Same `sales=` parameter.
+1. Land slice 1 (PLX_MC #543), then restart the branch from `main` and push slice 2.
+2. Slice 2, TASK-4385: the salesperson list view in `src/components/mc/goals/salespeople.tsx` is built: search, Clear, picked first, customer counts, Done and Escape. Same `sales=` parameter. "Pick all shown" only while a search narrows the list.
 3. Slice 3: a date range for the whole report. Write a one-page spec first: how Line 1, truckloads and the forecast read inside a range. Narrow the run the way `filterRunBySalespeople` does.
 4. Slice 4: the vibrant status colours and the violet by-hand colour. It waits on Vince's decision 9. It ships as tokens v1.7.0 in PLX_MC and the portal.
 5. Slice 5: project status sections with Status and Dates filters. It needs a spec for where project status lives and who writes it.
@@ -31,6 +31,7 @@ active, as of 2026-10-31. Slice 1 (TASK-4373) is built on `claude/friendly-gates
 - 2026-10-31 Goals keeps its tabs (TASK-4094); the breakdown is a tab, not a card drawer. Why: the cards sit in a sticky header capped at 38% of the screen. Decided by: CoS (plan approval).
 - 2026-10-31 How it adds up is the default tab; By class moves to `tab=classes`. Why: CoS asked to see this detail under the Revenue card. Decided by: CoS (plan approval).
 - 2026-10-31 Slice 1 changes no colours. Data notes keep today's amber. Why: the palette change needs Vince's decision 9. Decided by: CoS (plan approval).
+- 2026-10-31 The picker has no plain "Select all": picking every salesperson and "no salesperson" narrows the page to every customer but hides the goal status, so Clear covers it, and "Pick all shown" works on a search. Decided by: claude/friendly-gates-2br59z (slice 2 build).
 - 2026-10-31 Project resources already sit under the strip in production. Nothing to build. Why: `project-detail.tsx` renders the strip, then `pv-res`. Decided by: claude/friendly-gates-2br59z (code read).
 
 ## Open questions

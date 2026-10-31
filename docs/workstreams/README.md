@@ -59,5 +59,5 @@ after 30 days; git history keeps them.
 | [nav-v2-sidebar](nav-v2-sidebar.md) | Vince | `claude/nav-v2-sidebar-4` | active | — | TASK-3954 to TASK-3961, TASK-3996 |
 | [draft-projects](draft-projects.md) | Vince | `claude/brave-heisenberg-7t8mks` | done | — | TASK-4056, TASK-4059, TASK-4071, TASK-4109, TASK-4110, TASK-4129 to TASK-4132, TASK-4135 |
 | [goals-shipped-not-invoiced](goals-shipped-not-invoiced.md) | Vince | `feat/goals-shipped-not-invoiced` | active | — | TASK-3992 |
-| [goals-design-refresh](goals-design-refresh.md) | Vince | `claude/friendly-gates-2br59z` | active | — | TASK-4373 |
+| [goals-design-refresh](goals-design-refresh.md) | Vince | `claude/friendly-gates-2br59z` | active | — | TASK-4373, TASK-4385 |
 | [agent-governance-consolidation](agent-governance-consolidation.md) | Vince | `claude/nice-albattani-rand8f`, `claude/nice-albattani-rand8f-ci` | active | — | TASK-4201, TASK-4204 to TASK-4207, TASK-3928, TASK-4257, TASK-4346, TASK-4348, TASK-4352 to TASK-4358 |

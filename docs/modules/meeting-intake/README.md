@@ -45,6 +45,9 @@ Capture → draft → triage → promote:
 5. **Promote** (`store.ts` → `promoteProposedTask`) — calls `addTask` (governed:
    accountable owner, allow-list repos via WS-2, ToDos mirror). The meeting
    source is written into the task description as a traceability artifact.
+   A create the server refuses puts the proposal back to `proposed`. With no
+   clear answer, the reload decides: the proposal links the task if it landed,
+   and goes back to `proposed` if not, or if the reload fails too (TASK-4294).
    `dismissProposedTask` drops a proposal.
 
 Invariants: capture is a no-op unless `meetingIntakeEnabled()` AND the meeting is

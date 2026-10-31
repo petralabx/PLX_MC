@@ -11,7 +11,7 @@
 // Everything here is gated by the feature flag + opt-in register (governance:
 // disabled by default, only designated meetings feed in).
 
-import { addTask, bucketById, directory, pushNotice, viewerId } from "@/lib/mc-data/store";
+import { addTask, allTasks, bucketById, directory, pushNotice, viewerId } from "@/lib/mc-data/store";
 import type { Task } from "@/lib/mc-data";
 
 import { parseAiInsights, transcriptToActionItems } from "./adapters";
@@ -199,18 +199,53 @@ export function promoteProposedTask(proposedId: string, opts: PromoteOptions = {
   // addTask clamps to the allow-list regardless.
   const repos = opts.repos ?? bucketById(bucket)?.repos ?? [];
 
-  const task = addTask({
-    title: p.suggestedTitle,
-    description: describeWithSource(p),
-    bucket,
-    assignee,
-    accountableOwner,
-    humanOnly: opts.humanOnly,
-    repos,
-    reporter: opts.actor ?? viewerId(),
-    due: opts.due ?? p.due,
-    labels: ["from-meeting"],
-  });
+  const title = p.suggestedTitle.trim();
+  const description = describeWithSource(p);
+  const task = addTask(
+    {
+      title,
+      description,
+      bucket,
+      assignee,
+      accountableOwner,
+      humanOnly: opts.humanOnly,
+      repos,
+      reporter: opts.actor ?? viewerId(),
+      due: opts.due ?? p.due,
+      labels: ["from-meeting"],
+    },
+    {
+      // The server's id can differ from the optimistic one (TASK-4294).
+      onCreated: (created) => {
+        p.promotedTaskId = created.id;
+        emit();
+      },
+      // A refused create puts the item back in the triage queue (TASK-4294).
+      onRefused: () => {
+        p.status = "proposed";
+        delete p.promotedTaskId;
+        emit();
+      },
+      // With no clear answer, the reload shows whether the task landed: link
+      // it if it did, or put the item back (TASK-4294). If the reload failed
+      // too, nothing shows that it landed, so the item goes back rather than
+      // point at a task that may not exist.
+      onUncertain: (reloaded) => {
+        const landed = reloaded
+          ? allTasks().find(
+              (t) => t.labels.includes("from-meeting") && t.title === title && (t.description ?? "") === description
+            )
+          : undefined;
+        if (landed) {
+          p.promotedTaskId = landed.id;
+        } else {
+          p.status = "proposed";
+          delete p.promotedTaskId;
+        }
+        emit();
+      },
+    }
+  );
 
   p.status = "promoted";
   p.promotedTaskId = task.id;

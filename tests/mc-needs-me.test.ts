@@ -124,6 +124,16 @@ describe("approvals waiting on me", () => {
     ]);
   });
 
+  // TASK-4168 (Vince, 2026-10-31): the owner decides a gate an agent raised in the owner's name.
+  it("the owner sees an agent-raised gate in their own name; nobody else gets that", () => {
+    const mine = { ...gate("apg_agent_as_vince", "vince@petrasoap.com"), requestedByPrincipal: "sp_mcp_cursor" };
+    const bare = gate("apg_vince_no_agent", "vince@petrasoap.com");
+    const rows = [row("T-VINCE-LATE", mine), row("T-VINCE-LATE", bare)];
+    expect(gateIds(approvalsWaitingOn(VINCE, rows, TASKS_FIXTURE))).toEqual(["apg_agent_as_vince"]);
+    const adaRows = [row("T-VINCE-LATE", { ...gate("apg_agent_as_ada", "ada@petrasoap.com"), requestedByPrincipal: "sp_mcp_cursor" })];
+    expect(gateIds(approvalsWaitingOn(ADA, adaRows, TASKS_FIXTURE))).toEqual([]);
+  });
+
   it("reads the same pending gates the Approvals screen lists, straight from tasks", () => {
     const tasks = [
       task({ id: "T-A", approvalGates: [gate("g1", "vibes"), { ...gate("g2", "vibes"), status: "approved" }] }),

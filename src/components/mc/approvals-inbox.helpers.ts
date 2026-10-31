@@ -301,11 +301,24 @@ export function raisedByViewer(gate: Pick<ApprovalGate, "requestedBy">, me: Read
 }
 
 /**
- * The items that wait on the viewer: every gate they raised is left out, since
- * someone else must decide it (Home's What needs me counts the same way).
+ * The viewer may not decide this gate: they raised it. The owner is the one
+ * exception, on a gate an agent raised in the owner's name, which names the
+ * agent's service principal (TASK-4168; the server's TASK-4308 owner override).
  */
-export function waitingOnViewer(items: readonly QueueItem[], me: ReadonlySet<string>): QueueItem[] {
-  return items.filter((item) => !(item.kind === "gate" && raisedByViewer(item.gate, me)));
+export function gateBlockedForViewer(
+  gate: Pick<ApprovalGate, "requestedBy" | "requestedByPrincipal">,
+  me: ReadonlySet<string>,
+  viewerIsOwner: boolean
+): boolean {
+  return raisedByViewer(gate, me) && !(viewerIsOwner && !!gate.requestedByPrincipal);
+}
+
+/**
+ * The items that wait on the viewer: every gate they may not decide is left
+ * out, since someone else must decide it (Home's What needs me counts the same way).
+ */
+export function waitingOnViewer(items: readonly QueueItem[], me: ReadonlySet<string>, viewerIsOwner = false): QueueItem[] {
+  return items.filter((item) => !(item.kind === "gate" && gateBlockedForViewer(item.gate, me, viewerIsOwner)));
 }
 
 /** The viewer's newest reminder on this question, if any. */

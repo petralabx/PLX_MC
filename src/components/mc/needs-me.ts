@@ -44,6 +44,11 @@ export function viewerLoadState(viewer: Human | null, settled: boolean): "loadin
 
 // ─── Who sees what ───────────────────────────────────────────────────────────
 
+/** The owner: the one person who may decide a gate an agent raised in their name (TASK-4168). */
+export function isOwnerViewer(viewer: Pick<Human, "role">): boolean {
+  return directoryRoleToAccessRole(viewer.role) === "owner";
+}
+
 /** Owners and admins also see team-wide items: unowned tasks, sync issues, every approval. */
 export function isOwnerOrAdmin(viewer: Pick<Human, "role">): boolean {
   const role = directoryRoleToAccessRole(viewer.role);
@@ -77,8 +82,10 @@ export function approvalsWaitingOn(viewer: Human, rows: PendingApprovalRow[], ta
   const me = viewerTokens(viewer);
   const broad = isOwnerOrAdmin(viewer);
   const ownerOf = new Map(tasks.map((t) => [t.id, t.accountableOwner]));
+  const owner = isOwnerViewer(viewer);
   return rows.filter((row) => {
-    if (me.has(row.gate.requestedBy.trim().toLowerCase())) return false;
+    // The viewer's own gate waits on someone else, except an agent-raised gate in the owner's name (TASK-4168).
+    if (me.has(row.gate.requestedBy.trim().toLowerCase()) && !(owner && row.gate.requestedByPrincipal)) return false;
     return broad || ownerOf.get(row.taskId) === viewer.id;
   });
 }

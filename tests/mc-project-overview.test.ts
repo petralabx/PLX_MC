@@ -26,6 +26,7 @@ import {
   shortDate,
   stageChipTone,
   dueCounts,
+  dueDate,
   filterDue,
   matchesDue,
 } from "@/components/mc/project-overview.helpers";
@@ -421,5 +422,20 @@ describe("due filter (TASK-4392)", () => {
     for (const key of ["any", "overdue", "week", "next14", "none"] as const) {
       expect(filterDue(tasks, key, now)).toHaveLength(counts[key]);
     }
+  });
+
+  it("reads a due label without a year in the year nearest today, across New Year", () => {
+    const dec30 = new Date(2026, 11, 30, 9, 0); // Wednesday: this week is Dec 28 to Jan 3
+    expect(matchesDue(t("Jan 02"), "overdue", dec30)).toBe(false);
+    expect(matchesDue(t("Jan 02"), "week", dec30)).toBe(true);
+    expect(matchesDue(t("Jan 05"), "next14", dec30)).toBe(true);
+    const jan3 = new Date(2027, 0, 3, 9, 0);
+    expect(matchesDue(t("Dec 20"), "overdue", jan3)).toBe(true);
+    expect(matchesDue(t("Dec 20"), "next14", jan3)).toBe(false);
+    // A written year is never moved.
+    expect(matchesDue(t("Jan 02, 2026"), "overdue", dec30)).toBe(true);
+    expect(dueDate("Jan 02", dec30)).toEqual(new Date(2027, 0, 2));
+    expect(dueDate("Dec 20", jan3)).toEqual(new Date(2026, 11, 20));
+    expect(dueDate("Jun 15", new Date(2026, 9, 31))).toEqual(new Date(2026, 5, 15));
   });
 });

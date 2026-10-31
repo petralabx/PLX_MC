@@ -110,9 +110,13 @@ export function ProjectOverview({
   );
 }
 
-function emptyText(filter: TaskFilterKey, due: DueFilterKey, total: number): string {
+// The status filter speaks first: the Due message shows only when the status
+// filter left rows and the Due choice took them all.
+function emptyText(filter: TaskFilterKey, due: DueFilterKey, total: number, statusRows: number): string {
   if (total === 0) return "No tasks in this initiative yet.";
-  if (due !== "any") return due === "none" ? "Every task here has a due date." : "Nothing here is due in these dates.";
+  if (due !== "any" && statusRows > 0) {
+    return due === "none" ? "Nothing here is missing a due date." : "Nothing here is due in these dates.";
+  }
   if (filter === "human") return "Nothing waiting on a human.";
   return `Nothing outstanding · all ${total} tasks closed.`;
 }
@@ -204,7 +208,7 @@ function InitiativeSection({
           key={`${filter}-${due}`}
           tasks={pool}
           closed={filter === "open" ? filterDue(tasks.filter((t) => !isOutstanding(t)), due, now) : undefined}
-          emptyText={emptyText(filter, due, total)}
+          emptyText={emptyText(filter, due, total, filterTasks(tasks, filter).length)}
           nav={nav}
         />
       )}

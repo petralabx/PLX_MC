@@ -41,7 +41,7 @@ import type {
 } from "@/lib/mc-data/types";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
 import {
-  endsStaleClose, isUatTicketTask, staleLabelCreateViolation, staleLabelPatchViolation,
+  endsStaleClose, staleLabelCreateViolation, staleLabelPatchViolation, uatCreateStageViolation, uatVerifyViolation,
 } from "@/lib/tasks/uat-labels";
 import { assertCreatorApprovedForStage, recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
@@ -542,6 +542,11 @@ export async function createTask(
   // writes its own row, refuses it the same way.
   const staleViolation = staleLabelCreateViolation(input.labels);
   if (staleViolation) throw new ApiError("forbidden", staleViolation, 403);
+  // Nor starts a UAT ticket task at merged or verified (TASK-4286): only its
+  // PR's merge and the portal's verify move it there.
+  const labels = createLabelsWithKind(input.labels, input.kind);
+  const stageViolation = uatCreateStageViolation(labels, input.stage);
+  if (stageViolation) throw new ApiError("forbidden", stageViolation, 403);
   await ensureSeeded();
   await ensureReposSeeded();
   await ensureBucketsSeeded();
@@ -591,7 +596,7 @@ export async function createTask(
       repos,
       targetEnv: input.targetEnv ?? "staging",
       estimate: input.estimate ?? "M",
-      labels: createLabelsWithKind(input.labels, input.kind),
+      labels,
       prs: [],
       due: input.due || "—",
       sync: { state: "pending", ts: repo.stamp(), sp: `ToDos · item ${numeric}` },
@@ -803,18 +808,8 @@ export async function patchTask(
   // A UAT ticket task is verified only when its submitter confirms the fix,
   // through the portal's mc_update_task verify (TASK-3697). Every other door
   // that reaches patchTask, the web PATCH included, is refused (TASK-3963).
-  if (
-    taskPatch.stage === "verified" &&
-    current.stage !== "verified" &&
-    !opts.uatVerify &&
-    (isUatTicketTask(current) || isUatTicketTask(effective))
-  ) {
-    throw new ApiError(
-      "forbidden",
-      `Task ${id} is a UAT ticket task; only the portal's mc_update_task verify (task.uat_sync) moves it to verified.`,
-      403
-    );
-  }
+  const verifyViolation = uatVerifyViolation(id, current, effective, taskPatch.stage, !!opts.uatVerify);
+  if (verifyViolation) throw new ApiError("forbidden", verifyViolation, 403);
   // uat:stale closes a merged UAT ticket task as closed and unconfirmed
   // (TASK-4200). Only the portal's closeStale adds it, on any task and door. No
   // label patch removes it or moves the task's ticket identity. A stage move
@@ -877,6 +872,7 @@ export async function patchTask(
     completedAt: opts.completedAt,
     cancellation: opts.cancellation,
     reopen: opts.reopen,
+    uatVerify: opts.uatVerify,
     // Person columns are pushed now (Item 1), so a person-only patch re-queues
     // the entity for the next outbound sweep.
     syncState: pushedDirty.length > 0 ? "pending" : undefined,

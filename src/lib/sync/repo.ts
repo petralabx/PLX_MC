@@ -24,7 +24,7 @@ import type {
 import { creatorApprovalViolation, TERMINAL_STAGES } from "@/lib/mc-data/policy";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { ApiError } from "@/lib/api/route";
-import { endsStaleClose, UAT_STALE_LABEL } from "@/lib/tasks/uat-labels";
+import { endsStaleClose, UAT_STALE_LABEL, uatVerifyViolation } from "@/lib/tasks/uat-labels";
 import type {
   EntityData,
   EntityType,
@@ -268,6 +268,9 @@ export async function updateEntity(
     // Set only by the reopen service: the one caller allowed to move a cancelled
     // task to another stage.
     reopen?: boolean;
+    // Set only by the portal's UAT verify (through patchTask): the one caller
+    // allowed to move a UAT ticket task to verified (TASK-3963, TASK-4286).
+    uatVerify?: boolean;
   },
   q: TxQuery = query
 ): Promise<void> {
@@ -324,6 +327,13 @@ export async function updateEntity(
   if (type === "task" && nextStage !== undefined && nextStage !== row.data.stage) {
     const violation = creatorApprovalViolation({ id, creatorApproval: (data as Partial<Task>).creatorApproval }, nextStage);
     if (violation) throw new ApiError("creator_approval_pending", violation, 409);
+  }
+  // The portal's verify alone moves a UAT ticket task to verified (TASK-3963),
+  // held here too so a SharePoint inbound pull or a conflict keep-SP cannot
+  // skip it (TASK-4286). The engine turns the refusal into a Sync conflict.
+  if (type === "task") {
+    const violation = uatVerifyViolation(id, row.data as Partial<Task>, data as Partial<Task>, nextStage, !!opts.uatVerify);
+    if (violation) throw new ApiError("uat_verify_required", violation, 403);
   }
   if (entersCancelled && !opts.cancellation) {
     throw new ApiError(

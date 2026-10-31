@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
 import { resolveCompletionAutonomy } from "@/lib/routing";
 import { classifyRiskTier, evidenceStandardReport, requiresHumanVerification } from "@/lib/compliance";
-import { recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
+import { assertCreatorApprovedForStage, recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
 import {
@@ -866,6 +866,18 @@ export async function actionComplete(
     prUrl: input.prUrl,
     outcome: input.outcome,
     actor: identity.actor,
+    // TASK-4304: a PR-less hand-in moves its task to the done stage, which the
+    // creator gate (TASK-3530) refuses while an approval is pending. complete()
+    // checks that move after the checkout, the actor and the approval gate, and
+    // before it appends task.completed: a refused hand-in leaves none, and a dead
+    // checkout is refused as before, with no event. The locked move below
+    // checks the gate again.
+    beforeRecord: async () => {
+      if (task && shouldPromotePrlessCompletion(task, input)) {
+        const ctx = { actor: mcpAuditActor(identity), actorId: identity.actor.id, repo: existingDispatch?.repo ?? identity.repo, door: "mcp" };
+        await recordingCreatorRefusal(async () => assertCreatorApprovedForStage(task, PRLESS_COMPLETION_STAGE, ctx));
+      }
+    },
   });
   if (autonomy && existingDispatch) {
     await complianceRepo.appendEvent({

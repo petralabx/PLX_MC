@@ -259,7 +259,8 @@ type MergeOutcome =
   | { kind: "verified" }
   | { kind: "held"; openPrs: number[] }
   | { kind: "elsewhere"; integrationBranch: string }
-  | { kind: "held_ended"; landed: PullRequest; sha?: string };
+  | { kind: "held_ended"; landed: PullRequest; sha?: string }
+  | { kind: "creator_pending"; creatorPrincipal: string | null };
 
 // A merged PR always shows on its task as merged, with the branch it went into.
 // The task moves to Merged only when the work reached the repo's integration
@@ -267,7 +268,9 @@ type MergeOutcome =
 async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task) return;
-  if (await skipBlockedPromotion(task, evt)) return;
+  // A task that waits for creator approval still records the merge below, so
+  // its PR row cannot stay open and hold a later promotion (TASK-4307).
+  if (task.stage === "cancelled" && (await skipBlockedPromotion(task, evt))) return;
 
   await requireProjectionAuthorized(
     "task.link",
@@ -333,6 +336,15 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
         result: { kind: "held", openPrs },
       };
     }
+    // The creator gate (TASK-3530) refuses the move, so the merge is recorded
+    // as on a verified task: no stage, no hold. The next merge after the
+    // approval promotes the task.
+    if (creatorApprovalPending(locked)) {
+      return {
+        patch: { prs, merge: { sha: mergeSha, on: mergeOn }, activityLine: line(`PR #${evt.prNumber} merged, not promoted: the task waits for creator approval`) },
+        result: { kind: "creator_pending", creatorPrincipal: locked.creatorApproval?.principal ?? null },
+      };
+    }
     return {
       patch: {
         stage: "merged",
@@ -355,7 +367,10 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
       taskId,
       pr: String(evt.prNumber),
       payload: { ...payload, sha: mergeSha },
-      dedupKey: `task.promotion_skipped:${evt.repo}:${evt.prNumber}:${evt.headSha}:${taskId}`,
+      // Its own key: an open or push at the PR's last head may already have
+      // written a skip under that head, and the insert keeps only the first.
+      // A replay of this merge still dedups.
+      dedupKey: `task.promotion_skipped:merged:${evt.repo}:${evt.prNumber}:${mergeSha}:${taskId}`,
     });
 
   switch (outcome.kind) {
@@ -367,6 +382,9 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
       return;
     case "held":
       await skip({ reason: "open_pr", openPrs: outcome.openPrs });
+      return;
+    case "creator_pending":
+      await skip({ reason: "creator_approval_pending", creatorPrincipal: outcome.creatorPrincipal });
       return;
     case "held_ended":
       await recordHeldPromotion(taskId, evt, outcome.sha);

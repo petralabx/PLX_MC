@@ -477,10 +477,12 @@ describe("POST /api/cursor/tasks with an idempotency key", () => {
   // path refuses it before the claim, like uat:stale, so the key stays usable.
   it("refuses a UAT ticket task at merged or verified with 403 before the claim, so the key is not used up", async () => {
     const labels = ["kind:code", "uat:cmfb7q2xk0001"];
-    for (const stage of ["merged", "verified"]) {
-      const refused = await restCreate({ ...TASK, labels, stage, idempotencyKey: "k-landed" });
-      expect(refused.status).toBe(403);
-      expect(refused.json.error?.code).toBe("forbidden");
+    for (const ticket of [{ labels }, { labels: ["uat:cmfb7q2xk0001"], kind: "code" }]) {
+      for (const stage of ["merged", "verified"]) {
+        const refused = await restCreate({ ...TASK, ...ticket, stage, idempotencyKey: "k-landed" });
+        expect(refused.status).toBe(403);
+        expect(refused.json.error?.code).toBe("forbidden");
+      }
     }
     expect(h.rows).toEqual([]);
     expect(h.createInputs).toEqual([]);

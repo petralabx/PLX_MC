@@ -31,6 +31,12 @@ export function uatTicketLabel(labels: readonly string[] | undefined): string | 
   return (labels ?? []).find((label) => UAT_TICKET_RE.test(label) && !UAT_STATE_LABELS.includes(label)) ?? null;
 }
 
+// Every uat:<feedbackId> label, as a set: the tickets a label search finds the task by.
+const uatTicketLabelSet = (labels: readonly string[] | undefined): string =>
+  [...new Set((labels ?? []).filter((label) => UAT_TICKET_RE.test(label) && !UAT_STATE_LABELS.includes(label)))]
+    .sort()
+    .join(" ");
+
 /** A UAT ticket task: kind:code plus a uat:<feedbackId> label. */
 export function isUatTicketTask(task: { labels?: readonly string[] }): boolean {
   return (task.labels ?? []).includes("kind:code") && uatTicketLabel(task.labels) !== null;
@@ -62,10 +68,13 @@ export function endsStaleClose(from: string | undefined, to: string | undefined)
 const UAT_VERIFY_DOOR = "only the portal's mc_update_task verify (task.uat_sync) moves it to verified";
 
 /**
- * Why a write may not move a task to verified, or null (TASK-3963): a UAT
- * ticket task is verified only when its submitter confirms the fix, through
- * the portal's verify (`portalVerify`, TASK-3697). patchTask and
- * repo.updateEntity both hold it, so every door that writes a stage does
+ * Why a write may not leave a verified UAT ticket task behind, or null
+ * (TASK-3963): a UAT ticket task is verified only when its submitter confirms
+ * the fix, through the portal's verify (`portalVerify`, TASK-3697). The rule
+ * holds on the end state: a move to verified, and a label edit on a verified
+ * task that makes it a UAT ticket task, takes it out of being one, or changes
+ * the tickets it answers to.
+ * patchTask and repo.updateEntity both hold it, so every write path does
  * (TASK-4286). `after` is the task with the write applied.
  */
 export function uatVerifyViolation(
@@ -75,19 +84,26 @@ export function uatVerifyViolation(
   nextStage: string | undefined,
   portalVerify: boolean
 ): string | null {
-  if (nextStage !== "verified" || before.stage === "verified" || portalVerify) return null;
-  return isUatTicketTask(before) || isUatTicketTask(after) ? `Task ${id} is a UAT ticket task; ${UAT_VERIFY_DOOR}.` : null;
+  if (portalVerify || (nextStage ?? before.stage) !== "verified") return null;
+  if (before.stage !== "verified") {
+    return isUatTicketTask(before) || isUatTicketTask(after) ? `Task ${id} is a UAT ticket task; ${UAT_VERIFY_DOOR}.` : null;
+  }
+  const isTicket = isUatTicketTask(after);
+  return isTicket !== isUatTicketTask(before) ||
+    (isTicket && uatTicketLabelSet(before.labels) !== uatTicketLabelSet(after.labels))
+    ? `Task ${id} is verified, so a label edit cannot make it a UAT ticket task, take it out of being one, or change its ticket (kind:code plus uat:<feedbackId>): ${UAT_VERIFY_DOOR}.`
+    : null;
 }
 
 /**
  * Why a new task may not start at this stage, or null (TASK-4286): a UAT
- * ticket task starts before merged. Only its PR's merge moves it to merged
- * (the compliance projection), and only the portal's verify to verified.
+ * ticket task starts before merged. The portal creates it in backlog, and
+ * MC's drift Create does too; only the portal's verify moves it to verified.
  * Labels compare as createTask stores them.
  */
 export function uatCreateStageViolation(labels: readonly string[], stage: string | undefined): string | null {
   if ((stage !== "merged" && stage !== "verified") || !isUatTicketTask({ labels })) return null;
-  return `The new task is a UAT ticket task, so it cannot start at ${stage}: only its PR's merge moves it to merged, and ${UAT_VERIFY_DOOR}.`;
+  return `The new task is a UAT ticket task, so it cannot start at ${stage}: it starts before merged, and ${UAT_VERIFY_DOOR}.`;
 }
 
 const STALE_LABEL_DOOR = `${UAT_STALE_LABEL} is set only by the portal's mc_update_task closeStale (task.uat_sync)`;

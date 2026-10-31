@@ -912,13 +912,6 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType, rec
         await recordCreatorApprovalBlocked(row.data as unknown as Task, "stage", { actor: SYNC_ACTOR, door: "sharepoint" }, requested);
       }
     }
-    for (const ev of attributionEvents) {
-      await repo.appendAudit(
-        SYNC_ACTOR,
-        `Human SharePoint edit beat service pending on ${row.id} · ${ev.field} (sp=${ev.inboundAt} > service=${ev.localAt}).`,
-        "synced"
-      );
-    }
     for (const c of conflicts) {
       const display = displayFieldFor(type, c.field) ?? c.field;
       await repo.insertConflict({
@@ -1003,7 +996,12 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType, rec
           : uatGated
             ? UAT_VERIFY_INBOUND_NOTE
             : "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.";
-        const mcVal = creatorGated || uatGated ? displayValue(row.data.stage) : displayValue("cancelled");
+        // A stage write can land after this pull's snapshot, as the refusal saw: show
+        // Mission Control's stage as it is now (TASK-4286).
+        const mcVal =
+          creatorGated || uatGated
+            ? displayValue(((await repo.getEntity(type, row.id)) ?? row).data.stage)
+            : displayValue("cancelled");
         await repo.insertConflict({
           id: `cf-${row.id.toLowerCase()}-stage-${Date.now()}`,
           entityType: type,
@@ -1024,6 +1022,16 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType, rec
         await repo.appendAudit(SYNC_ACTOR, `Conflict detected on ${row.id} · ${displayFieldFor(type, "stage") ?? "stage"} (edited both sides).`, "conflict");
         result.conflicts += 1;
         if (Object.keys(apply).length > 0 || clearedDirty.length > 0) await applyInbound();
+      }
+      // Audit a person's win only for a field this pull applied: each refusal above,
+      // and the catch's, keeps the service's value (TASK-4286).
+      for (const ev of attributionEvents) {
+        if (!(ev.field in apply)) continue;
+        await repo.appendAudit(
+          SYNC_ACTOR,
+          `Human SharePoint edit beat service pending on ${row.id} · ${ev.field} (sp=${ev.inboundAt} > service=${ev.localAt}).`,
+          "synced"
+        );
       }
       if (Object.keys(apply).length > 0) {
         await repo.appendAudit(

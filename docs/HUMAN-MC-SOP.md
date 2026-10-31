@@ -163,6 +163,7 @@ The compliance gate reads **`task.evidence`**, not PR-body prose. PR `## Rollbac
 
 - Task projects to **`merged`** via webhook/compliance projection; merge SHA recorded.
 - Advance to **`verified`** only when evidence bundle is complete and you have confirmed deploy/acceptance.
+  A UAT ticket task (`kind:code` plus `uat:<feedbackId>`) is the exception: only the portal's verify moves it there, when the person who filed it passes the re-test (TASK-3963, TASK-4286).
 - Complete the MC task with final notes if your workflow requires it.
 
 ---

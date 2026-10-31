@@ -394,8 +394,11 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   }
 
   const taskRow = await getEntity("task", input.taskId);
-  const task = taskRow?.data as Task | undefined;
-  if (task?.stage === "cancelled") {
+  // TASK-4304: a lease on an id with no task skips every check below, and the
+  // task that later takes the id inherits it. mc_checkout_task refuses it too.
+  if (!taskRow) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+  const task = taskRow.data as unknown as Task;
+  if (task.stage === "cancelled") {
     throw new ApiError(
       "task_cancelled",
       `Task ${input.taskId} is cancelled${task.cancellation ? ` (${task.cancellation.reason}${task.cancellation.replacedBy ? ` → ${task.cancellation.replacedBy}` : ""})` : ""}; it cannot be checked out. Reopen it first, or check out the replacement task.`,
@@ -404,16 +407,14 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   }
   // TASK-3530: a gated creator's task waits for creator approval. This covers
   // both checkout doors and every launch, which always takes a checkout.
-  if (task) {
-    await assertCreatorApprovedForCheckout(task, {
-      actor: input.runtime,
-      actorId: input.actor?.id ?? null,
-      repo: input.repo,
-      door: input.door ?? null,
-    });
-  }
+  await assertCreatorApprovedForCheckout(task, {
+    actor: input.runtime,
+    actorId: input.actor?.id ?? null,
+    repo: input.repo,
+    door: input.door ?? null,
+  });
   const backfilledOwner =
-    task && !task.accountableOwner ? resolveHumanAccountableOwner(input.accountableHuman) : null;
+    !task.accountableOwner ? resolveHumanAccountableOwner(input.accountableHuman) : null;
   if (backfilledOwner) {
     await patchTask(
       input.taskId,
@@ -428,7 +429,7 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
     );
   }
 
-  const owner = backfilledOwner ?? task?.accountableOwner ?? null;
+  const owner = backfilledOwner ?? task.accountableOwner ?? null;
   const accountablePerson = checkoutAccountablePeople(input.accountableHuman, owner)[0];
   const live = await repo.liveDispatchesForTask(input.taskId, input.repo);
   const mine = holderKey(input);
@@ -612,6 +613,12 @@ export interface CompleteInput {
   prUrl?: string;
   outcome?: "completed" | "blocked" | "failed";
   actor?: PermissionActor;
+  /**
+   * Runs once the checkout, the actor and the approval gate pass, just before
+   * task.completed is appended, so a refusal it throws records no hand-in.
+   * mc_complete_task checks the creator gate here (TASK-4304).
+   */
+  beforeRecord?: () => Promise<void>;
 }
 
 /**
@@ -671,6 +678,7 @@ export async function complete(input: CompleteInput): Promise<{ ok: true }> {
   }
 
   if (d.approvalGateId) await assertCheckoutApprovalCleared(d.taskId, d.approvalGateId);
+  if (input.beforeRecord) await input.beforeRecord();
 
   await repo.appendEvent({
     kind: "task.completed",
@@ -1593,8 +1601,8 @@ async function prTaskLinkOutcome(
   // holds (a replay, or linked work still open) is projected as usual.
   const holdsPr = (task.prs ?? []).some((p) => samePr(p, { repo: evt.repo, num: evt.prNumber }));
   if (task.stage === "cancelled" || ((task.stage === "merged" || task.stage === "verified") && !holdsPr)) return "task_closed";
-  // TASK-3530: no checkout reaches such a task, and its merge is skipped before
-  // the row is rewritten, so a linked open row would stay open for good.
+  // TASK-3530: no checkout reaches a task that waits for creator approval, and
+  // a PR that only names it links nothing either.
   if (creatorApprovalPending(task)) return "creator_approval_pending";
   return "resolved";
 }

@@ -71,9 +71,10 @@ export class CreatorApprovalRefusal extends ApiError {
  * rollback has released its connection. Every caller that can move a gated
  * task into progress or later inside its own transaction goes through here,
  * so each refusal leaves one event (TASK-4293). cancelTask does not, since a
- * cancel is never gated. Neither does the projection's patchLocked: promoteMerged
- * skips a pending task before it, and linkPr's locked build never sets a stage
- * on one (heldMergeReady). An MCP caller passes its audit actor, repo and door.
+ * cancel is never gated. Neither does the projection's patchLocked: its builds
+ * never set a stage on a pending task. promoteMerged records the merge with no
+ * stage (TASK-4307), and linkPr's heldMergeReady skips one. An MCP caller passes
+ * its audit actor, repo and door.
  */
 export async function recordingCreatorRefusal<T>(
   transaction: () => Promise<T>,

@@ -19,12 +19,24 @@ const db = vi.hoisted(() => ({
     actor: string;
     taskId?: string | null;
     payload?: Record<string, unknown>;
+    dedupKey?: string | null;
     // How the event was written: inside an open transaction, or with appendEventTx.
     inTx?: boolean;
     viaTx?: boolean;
   }[],
   openTx: 0,
-  dispatches: [] as { id: string; taskId: string; launchId?: string | null }[],
+  dispatches: [] as {
+    id: string;
+    taskId: string;
+    launchId?: string | null;
+    runtime?: string;
+    repo?: string;
+    accountableHuman?: string;
+    revoked?: boolean;
+    releasedAt?: string | null;
+    expiresAt?: string;
+    approvalGateId?: string;
+  }[],
   created: [] as Record<string, unknown>[],
   session: { oid: "", email: "" },
   buckets: [] as { id: string; project: string }[],
@@ -69,7 +81,9 @@ vi.mock("@/lib/sync/repo", () => ({
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
+  // As in Postgres, an event whose dedup key is already stored is dropped.
   async appendEvent(e: (typeof db.events)[number]) {
+    if (e.dedupKey && db.events.some((x) => x.dedupKey === e.dedupKey)) return undefined;
     db.events.push({ ...e, inTx: db.openTx > 0 });
     return String(db.events.length);
   },
@@ -80,6 +94,11 @@ vi.mock("@/lib/compliance/repo", () => ({
   async liveDispatchesForTask() { return []; },
   async insertDispatch(d: (typeof db.dispatches)[number]) { db.dispatches.push(d); },
   async getDispatchCheckoutAgent() { return null; },
+  // A live lease, for complete() and mc_complete_task.
+  async getDispatch(id: string) {
+    const d = db.dispatches.find((x) => x.id === id);
+    return d ? { revoked: false, releasedAt: null, expiresAt: new Date(Date.now() + 3_600_000).toISOString(), ...d } : null;
+  },
 }));
 
 vi.mock("@/lib/sync", async (importOriginal) => ({
@@ -117,7 +136,7 @@ import { approveCreatorApproval, decideApprovalGate } from "@/lib/compliance/app
 import { projectPullRequest } from "@/lib/compliance/projection";
 import { checkout } from "@/lib/compliance/service";
 import { stageAdvanceViolation } from "@/lib/mc-data/policy";
-import { actionCheckout, actionCreateTask } from "@/lib/mcp/actions";
+import { actionCheckout, actionComplete, actionCreateTask } from "@/lib/mcp/actions";
 import { actionUpdateTask } from "@/lib/mcp/task-update-actions";
 import { isCreatorApprovalGated, isCreatorApprover } from "@/lib/permissions";
 import { patchTask } from "@/lib/sync/state";
@@ -295,25 +314,84 @@ describe("while creator approval is pending", () => {
     expect(blocked()).toEqual([]);
   });
 
-  // The merge path (mc_link_merged_pr) skips the task before patchLocked's
-  // transaction, which records no refusal of its own (TASK-4293).
+  // The merge path (mc_link_merged_pr too) records the PR row as merged, and
+  // the merge, with no stage move, so patchLocked's transaction never trips
+  // the gate and records no refusal (TASK-4293). A merged row holds nothing:
+  // once the creator approves, the next merge promotes the task (TASK-4307).
   it("a merged PR does not promote it either", async () => {
-    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
-    try {
-      await projectPullRequest(
+    const stamped = { actorKind: "agent" as const, actorIdentity: "claude", taskIds: ["TASK-1"], sparse: false };
+    const merge = (prNumber: number, head: string, sha: string) =>
+      projectPullRequest(
         {
-          action: "closed", merged: true, repo: "PLX_MC", repoFullName: "petralabx/PLX_MC", prNumber: 7,
-          headSha: "abc", mergeSha: "abc", baseBranch: "main", branch: "b", title: "t", author: "", labels: [],
+          action: "closed", merged: true, repo: "PLX_MC", repoFullName: "petralabx/PLX_MC", prNumber,
+          headSha: head, mergeSha: sha, baseBranch: "main", branch: "b", title: "t", author: "", labels: [],
           checkoutId: null, checkoutIds: [],
         } as never,
-        { actorKind: "agent", actorIdentity: "claude", taskIds: ["TASK-1"], sparse: false }
+        stamped
       );
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
+    try {
+      // PR #7 was open on the task, and merges at the head it was opened at, as
+      // on GitHub. The open already wrote a skip under that head.
+      await projectPullRequest({ action: "opened", merged: false, repo: "PLX_MC", prNumber: 7, headSha: "a7", branch: "b", title: "t" } as never, stamped);
+      await merge(7, "a7", "abc");
+      expect(task().stage).toBe("planned");
+      expect(task().prs).toEqual([expect.objectContaining({ num: 7, status: "merged", base: "main" })]);
+      expect(task().merge).toEqual({ sha: "abc", on: expect.any(String) });
+      expect(db.events.filter((e) => e.kind === "task.promotion_skipped").map((e) => e.payload))
+        .toEqual([
+          expect.objectContaining({ reason: "creator_approval_pending" }),
+          expect.objectContaining({ reason: "creator_approval_pending", sha: "abc" }),
+        ]);
+      expect(blocked()).toEqual([]);
+
+      await approveCreatorApproval({ taskId: "TASK-1", approverOid: VINCE_OID, approverLabel: "vince@petrasoap.com" });
+      await merge(8, "a8", "def");
     } finally {
       vi.unstubAllEnvs();
     }
-    expect(task().stage).toBe("planned");
-    expect(db.events.filter((e) => e.kind === "task.promotion_skipped").map((e) => e.payload))
-      .toEqual([expect.objectContaining({ reason: "creator_approval_pending" })]);
+    expect(task().stage).toBe("merged");
+    expect(task().prs.map((p) => [p.num, p.status])).toEqual([[7, "merged"], [8, "merged"]]);
+    expect(task().merge).toEqual({ sha: "def", on: expect.any(String) });
+    expect(db.events.filter((e) => e.kind === "task.promoted").map((e) => e.payload))
+      .toEqual([expect.objectContaining({ sha: "def", completionSource: "pr_merge" })]);
+  });
+
+  // A merge while another of its PRs is open holds the task, as on any task
+  // (TASK-3797). Once the creator approves, the close of that last open PR ends
+  // the hold and promotes it (TASK-4307).
+  it("a merge with another PR open holds it, and that PR's close promotes it after the approval", async () => {
+    const stamped = { actorKind: "agent" as const, actorIdentity: "claude", taskIds: ["TASK-1"], sparse: false };
+    const pr = (action: string, prNumber: number, headSha: string, merged = false) =>
+      projectPullRequest(
+        {
+          action, merged, repo: "PLX_MC", repoFullName: "petralabx/PLX_MC", prNumber,
+          headSha, mergeSha: merged ? `m${prNumber}` : null, baseBranch: "main", branch: "b", title: "t", author: "", labels: [],
+          checkoutId: null, checkoutIds: [],
+        } as never,
+        stamped
+      );
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
+    try {
+      await pr("opened", 7, "a7");
+      await pr("opened", 9, "a9");
+      // #7 merges at the head it was opened at, as on GitHub.
+      await pr("closed", 7, "a7", true);
+      expect(task().stage).toBe("planned");
+      expect(task().merge).toEqual({ sha: "m7", on: expect.any(String), held: true });
+      expect(db.events.filter((e) => e.kind === "task.promotion_skipped").at(-1)?.payload)
+        .toMatchObject({ reason: "open_pr", openPrs: [9], sha: "m7" });
+
+      await approveCreatorApproval({ taskId: "TASK-1", approverOid: VINCE_OID, approverLabel: "vince@petrasoap.com" });
+      await pr("closed", 9, "a9");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(task().stage).toBe("merged");
+    expect(task().prs.map((p) => [p.num, p.status])).toEqual([[7, "merged"], [9, "closed"]]);
+    expect(task().merge).toEqual({ sha: "m7", on: expect.any(String) });
+    expect(db.events.filter((e) => e.kind === "task.promoted").map((e) => e.payload))
+      .toEqual([expect.objectContaining({ sha: "m7", completionSource: "held_merge" })]);
     expect(blocked()).toEqual([]);
   });
 });
@@ -442,5 +520,79 @@ describe("astra-P2-1 and astra-P2-2: transactions", () => {
   it("astra-P2-2: the approval event commits in the approval's transaction", async () => {
     await approveCreatorApproval({ taskId: "TASK-1", approverOid: VINCE_OID, approverLabel: "vince@petrasoap.com" });
     expect(db.events.find((e) => e.kind === "creator_approval.approved")).toMatchObject({ viaTx: true });
+  });
+});
+
+// TASK-4304: a checkout needs its task. A lease on an id with no task skips
+// every check checkout() makes on the task, and the task that later takes the
+// id inherits it, one that waits for creator approval included.
+describe("a checkout of a task id that does not exist (TASK-4304)", () => {
+  it("checkout() refuses it with 404 and mints no lease", async () => {
+    await expect(checkout(checkoutInput({ taskId: "TASK-2" }))).rejects.toMatchObject({ code: "not_found", status: 404 });
+    expect(db.dispatches).toEqual([]);
+    expect(db.events).toEqual([]);
+  });
+
+  const earlyLease = { id: "dsp_early", taskId: "TASK-1", runtime: "claude", accountableHuman: "vince@petrasoap.com", repo: "petralabx/PLX_MC" };
+  const handIn = { checkoutId: "dsp_early", summary: "Fixed the bug.", verificationCommands: ["npm test"], rollback: "Revert the PR." };
+
+  // A lease minted that way before the fix still reaches mc_complete_task.
+  it("a PR-less hand-in the creator gate refuses writes no task.completed", async () => {
+    gated();
+    db.dispatches.push(earlyLease);
+    await expect(actionComplete(agent, handIn)).rejects.toMatchObject({ code: "creator_approval_pending", status: 409 });
+    expect(db.events.map((e) => e.kind)).toEqual(["creator_approval.blocked"]);
+    expect(blocked()[0]).toMatchObject({
+      taskId: "TASK-1",
+      inTx: false,
+      actor: "claude/claude-cli:vince@petrasoap.com",
+      payload: { action: "stage", requestedStage: "merged", door: "mcp", actorId: "sp_mcp_claude_code" },
+    });
+    expect(task().stage).toBe("planned");
+    expect(task().evidence).toBeUndefined();
+  });
+
+  // Only a PR-less hand-in moves the stage. A hand-in with a PR, or a blocked
+  // or failed one, moves none, so the creator gate lets it through.
+  it.each([
+    ["a prUrl", { prUrl: "https://github.com/petralabx/PLX_MC/pull/7" }],
+    ["outcome blocked", { outcome: "blocked" as const }],
+    ["outcome failed", { outcome: "failed" as const }],
+  ])("a hand-in with %s is recorded and moves no stage", async (_what, over) => {
+    gated();
+    db.dispatches.push(earlyLease);
+    await actionComplete(agent, { ...handIn, ...over });
+    expect(db.events.filter((e) => e.kind === "task.completed")).toHaveLength(1);
+    expect(blocked()).toEqual([]);
+    expect(task().stage).toBe("planned");
+    expect(task().evidence).toMatchObject({ summary: "Fixed the bug.", rollback: "Revert the PR." });
+  });
+
+  // complete() refuses a dead lease before the creator gate is checked, and
+  // that refusal appends nothing (review S4), however often it is retried.
+  it.each([
+    ["revoked", { revoked: true }],
+    ["released", { releasedAt: "2026-10-30T12:00:00.000Z" }],
+    ["expired", { expiresAt: new Date(Date.now() - 60_000).toISOString() }],
+  ])("a lease that is %s is refused as invalid_checkout and records nothing", async (_kind, dead) => {
+    gated();
+    db.dispatches.push({ ...earlyLease, ...dead });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(actionComplete(agent, handIn)).rejects.toMatchObject({ code: "invalid_checkout", status: 409 });
+    }
+    expect(db.events).toEqual([]);
+    expect(task().stage).toBe("planned");
+    expect(task().evidence).toBeUndefined();
+  });
+
+  // So is a checkout blocked on a pending approval gate: complete() checks the
+  // gate first, as before.
+  it("a checkout blocked on an approval gate is refused as approval_pending and records nothing", async () => {
+    gated({
+      approvalGates: [{ id: "apg_1", reason: "go?", requestedBy: "agent@x", requestedByPrincipal: "sp_mcp_claude_code", requestedAt: "t", status: "pending" }],
+    });
+    db.dispatches.push({ ...earlyLease, approvalGateId: "apg_1" });
+    await expect(actionComplete(agent, handIn)).rejects.toMatchObject({ code: "approval_pending", status: 409 });
+    expect(db.events).toEqual([]);
   });
 });

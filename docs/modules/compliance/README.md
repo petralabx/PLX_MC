@@ -123,6 +123,10 @@ truth table is proven before any plumbing exists.
   signed approval of the exact head on any task the PR stamps covers every task
   on it, so a PR with many tasks needs one approval. The approval's scope still
   pins the repo, PR and head SHA, so it covers nothing else.
+- TASK-4304: `checkout()` refuses a task id with no task row (404
+  `not_found`) on both doors, as `mc_checkout_task` already did. A lease on
+  such an id would skip the cancelled and creator-approval checks, and a task
+  created later under that id would inherit it.
 - TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.
@@ -238,7 +242,15 @@ truth table is proven before any plumbing exists.
   (`open_pr`, `merge.held`, with the open PR numbers in the activity line). The
   close or merge of that last open PR then promotes it and clears the hold
   (`completionSource: "held_merge"`). Only a hold promotes this way: an older
-  integration merge on a task moved back never does. A closed row opens again
+  integration merge on a task moved back never does. A merge on a task that
+  waits for creator approval (TASK-3530) marks the row merged and records the
+  merge, with no stage move (`task.promotion_skipped`,
+  `creator_approval_pending`); another open PR still holds it, as above. So no
+  row stays open to hold the task after the approval (TASK-4307). A merge's
+  skip has its own dedup key, so a skip that an open or push already wrote at
+  the PR's last head does not hide it. The approval
+  itself moves nothing: a later merge, or the end of a hold, promotes the task,
+  or a person moves it. A closed row opens again
   only on `reopened`, so a late or replayed open event cannot hold a task.
   Tasks promoted by a feature-branch merge before this are moved back to In
   Progress by `scripts/repair-non-integration-merges.mjs` (dry run by default;

@@ -399,6 +399,9 @@ describe("open PR checkout lifetime (TASK-2011)", () => {
 });
 
 describe("checkout", () => {
+  // A checkout needs its task row (TASK-4304).
+  beforeEach(() => db.tasks.set("TASK-900", taskish({})));
+
   it("mints a dispatch credential and emits a checkout event", async () => {
     const { checkoutId } = await checkout({
       taskId: "TASK-900",
@@ -669,6 +672,9 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
 });
 
 describe("complete", () => {
+  // A checkout needs its task row (TASK-4304).
+  beforeEach(() => db.tasks.set("TASK-900", taskish({})));
+
   it("emits a task.completed event tied to the dispatch", async () => {
     const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
     await complete({ checkoutId, summary: "shipped", commitSha: "deadbeef", prUrl: "https://github.com/x/y/pull/1" });

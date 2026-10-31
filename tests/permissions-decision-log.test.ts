@@ -59,6 +59,10 @@ vi.mock("@/lib/db", () => ({
         },
       ];
     }
+    // checkout() refuses a task id with no row (TASK-4304).
+    if (sql.includes("FROM entities WHERE entity_type") && params[0] === "task" && params[1] === "TASK-1") {
+      return [{ entity_type: "task", id: "TASK-1", data: { id: "TASK-1", stage: "planned", accountableOwner: "vince" }, sync_state: "synced", sp_item_id: null, dirty_fields: [] }];
+    }
     if (sql.includes("FROM mc_dispatch WHERE id")) {
       return [
         {

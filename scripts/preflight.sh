@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Unified preflight gate for commit/push/CI.
 # One stable command wraps every repository check, so local hooks, agent
-# sessions, and CI all run the exact same pipeline. GitHub Actions is NOT
-# your test runner — everything must pass here first.
+# sessions, and CI all run the exact same pipeline.
 #
-# Usage: scripts/preflight.sh [--mode <pre-commit|pre-push|ci>]
+# Usage: scripts/preflight.sh [--mode <pre-commit|pre-push|full|ci>]
 #        scripts/preflight.sh --only <python-tests|node-tests|build|e2e> [-- <playwright args>]
 #
 # Modes:
 #   pre-commit  Fast checks suitable for every commit (~seconds).
-#   pre-push    Full local CI before any push (lint + all tests + build).
+#   pre-push    Policy checks, then the changed files: ruff, the changed Python
+#               tests, typecheck, ESLint and the unit tests they touch
+#               (TASK-4389). CI runs the full suite in parallel jobs in about
+#               7 min, faster than the 20+ min it takes here in sequence.
+#   full        The whole local suite (lint + all tests + build + e2e), in order.
 #   ci          Fast policy checks re-run in CI (same code path as pre-commit).
 #
-# --only runs one step of the pre-push full suite. CI runs each step in its own
-# parallel job, so CI and pre-push run the same commands.
+# --only runs one step of the full suite. CI runs each step in its own
+# parallel job, so CI and full mode run the same commands.
 set -euo pipefail
 
 MODE="pre-commit"
@@ -241,8 +244,56 @@ run_full() {
   run_e2e
 }
 
+# ---------------------------------------------------------------------------
+# Changed-file checks (pre-push, TASK-4389): what CI would catch first, in
+# seconds to a couple of minutes. The unit tests get PREFLIGHT_TEST_BUDGET
+# seconds (default 120); past that it warns and goes on, because CI runs them.
+# ---------------------------------------------------------------------------
+changed_files() {
+  local base="${PREFLIGHT_BASE:-origin/main}" mb
+  mb="$(git merge-base "$base" HEAD 2>/dev/null)" || return 0
+  { git diff --name-only "$mb"; git ls-files --others --exclude-standard; } | sort -u
+}
+
+run_changed() {
+  local f py=() py_tests=() js=() rc=0
+  while IFS= read -r f; do
+    [[ -f "$f" ]] || continue
+    case "$f" in
+      *.py) py+=("$f"); [[ "$f" == tests/test_*.py ]] && py_tests+=("$f") ;;
+      *.ts|*.tsx|*.js|*.jsx|*.mjs) js+=("$f") ;;
+    esac
+  done < <(changed_files)
+  if [[ ${#py[@]} -eq 0 && ${#js[@]} -eq 0 ]]; then
+    echo "[preflight] no changed Python or TypeScript files"
+    return 0
+  fi
+  if [[ ${#py[@]} -gt 0 ]]; then
+    step "Python lint, changed files (ruff check + format --check)"
+    run_ruff check "${py[@]}"
+    run_ruff format --check "${py[@]}"
+  fi
+  if [[ ${#py_tests[@]} -gt 0 ]]; then
+    step "Python tests, changed test files"
+    run_pytest -q "${py_tests[@]}"
+  fi
+  if [[ ${#js[@]} -gt 0 && -f package.json ]]; then
+    step "TypeScript typecheck"
+    npm run typecheck
+    step "ESLint, changed files"
+    npx eslint --no-warn-ignored "${js[@]}"
+    step "Unit tests the changed files touch (vitest related)"
+    timeout "${PREFLIGHT_TEST_BUDGET:-120}" npx vitest related --run --passWithNoTests "${js[@]}" || rc=$?
+    if [[ $rc -eq 124 ]]; then
+      echo "[preflight] the related unit tests ran past ${PREFLIGHT_TEST_BUDGET:-120}s; CI runs them"
+    elif [[ $rc -ne 0 ]]; then
+      return "$rc"
+    fi
+  fi
+}
+
 # --only runs one full-suite step. CI runs each in its own parallel job; the
-# steps are the same functions pre-push runs in order.
+# steps are the same functions full mode runs in order.
 if [[ -n "$ONLY" ]]; then
   case "$ONLY" in
     python-tests) run_python_tests ;;
@@ -265,7 +316,11 @@ case "$MODE" in
     run_policy
     run_quick
     ;;
-  pre-push|push|full)
+  pre-push|push)
+    run_policy
+    run_changed
+    ;;
+  full)
     run_policy
     run_quick
     run_full

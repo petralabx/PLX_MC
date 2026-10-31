@@ -69,6 +69,16 @@ describe("CI runs the pre-push full suite as parallel jobs", () => {
     expect(jobs.ci.needs).toEqual(["test"]);
   });
 
+  it("pre-push checks the changed files, and full mode keeps the whole suite (TASK-4389)", () => {
+    const arm = (mode: string) => new RegExp(`^\\s*${mode}\\)\\n([\\s\\S]*?);;`, "m").exec(preflight)?.[1] ?? "";
+    const calls = (body: string) => [...body.matchAll(/^\s*(run_[a-z_]+)\s*$/gm)].map((m) => m[1]);
+    expect(calls(arm("pre-push\\|push"))).toEqual(["run_policy", "run_changed"]);
+    expect(calls(arm("full"))).toEqual(["run_policy", "run_quick", "run_full"]);
+    const changed = /run_changed\(\) \{([\s\S]*?)\n\}/.exec(preflight)?.[1] ?? "";
+    expect(changed).toContain("npx vitest related --run");
+    expect(changed).not.toMatch(/run_full|npm run build|test:e2e/);
+  });
+
   it("gives every preflight job the one shared setup", () => {
     for (const [, job] of preflightJobs) {
       expect(job.steps?.some((s) => s.uses === "./.github/actions/plx-mc-setup")).toBe(true);

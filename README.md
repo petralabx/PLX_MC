@@ -70,7 +70,8 @@ same script; there is exactly one definition of "passing."
 
 ```bash
 ./scripts/preflight.sh --mode pre-commit   # before every commit (~seconds)
-./scripts/preflight.sh --mode pre-push     # before every push (full suite + build)
+./scripts/preflight.sh --mode pre-push     # before every push: policy + the changed files
+./scripts/preflight.sh --mode full         # the whole suite + build + e2e, as CI runs it
 ```
 
 Org CI is staged across layers **L0–L3** (compliance + secrets floor, parallel

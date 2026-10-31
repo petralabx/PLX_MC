@@ -41,7 +41,7 @@ import type {
 } from "@/lib/mc-data/types";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
 import { isUatTicketTask } from "@/lib/tasks/uat-labels";
-import { assertCreatorApprovedForStage, CreatorApprovalRefusal } from "@/lib/compliance/creator-approval";
+import { assertCreatorApprovedForStage, recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import { withTransaction, type TxQuery } from "@/lib/db";
@@ -721,17 +721,12 @@ export async function patchTask(
     if (patch.repos) await ensureReposSeeded();
     // Lock the row across the cancelled-stage guard and the write, so a
     // concurrent cancel cannot commit between them and be silently undone.
-    try {
-      return await withTransaction(async (q) => {
+    return recordingCreatorRefusal(() =>
+      withTransaction(async (q) => {
         if (!(await repo.getEntity("task", id, q, true))) return null;
         return patchTask(id, patch, actor, { ...opts, query: q });
-      });
-    } catch (err) {
-      // Record a creator-gate refusal (TASK-3530) only after the rollback has
-      // released the transaction's connection.
-      if (err instanceof CreatorApprovalRefusal) await err.record();
-      throw err;
-    }
+      })
+    );
   }
   const row = await repo.getEntity("task", id, opts.query);
   if (!row) return null;

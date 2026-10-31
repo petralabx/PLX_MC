@@ -4,15 +4,32 @@ import { gotoProject } from "./helpers/project";
 
 test.describe("project wiring (G2)", () => {
   test("health, owner, target, description, and initiative navigation are wired", async ({ page }) => {
+    // The e2e server runs DB-less, so every project save fails and rolls back. Each save is held
+    // here until the optimistic value has been checked, then let through (TASK-4393): otherwise a
+    // fast failure rolls the field back before the check reads it.
+    let hold = true;
+    const held: Array<() => void> = [];
+    await page.route("**/api/projects/**", async (route) => {
+      if (route.request().method() !== "PATCH" || !hold) return route.fallback();
+      await new Promise<void>((go) => held.push(go));
+      return route.fallback();
+    });
+    const letSavesThrough = async () => {
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      held.splice(0).forEach((go) => go());
+    };
+
     await gotoProject(page);
 
     await page.getByLabel("Set project health").selectOption("risk");
     await expect(page.locator(".mc .ph .r .pill", { hasText: "At risk" })).toBeVisible();
+    await letSavesThrough();
 
     const ownerButton = page.locator(".mc .pv-strip .ntm-field-btn");
     await ownerButton.click();
     await page.locator(".ppick .pi", { hasText: "Stephen Alton" }).click();
     await expect(ownerButton).toContainText("Stephen Alton");
+    await letSavesThrough();
 
     await ownerButton.click();
     await page.locator(".ppick .pi.clear").click();
@@ -20,13 +37,22 @@ test.describe("project wiring (G2)", () => {
       "Projects require a human accountable owner."
     );
 
-    await page.getByLabel("Set target").fill("Dec 31");
-    await page.getByLabel("Set target").press("Enter");
-    await expect(page.getByLabel("Set target")).toHaveValue("Dec 31");
+    const target = page.getByLabel("Set target");
+    const prior = await target.inputValue();
+    await target.fill("Dec 31");
+    await target.press("Enter");
+    await expect(target).toHaveValue("Dec 31");
+    await letSavesThrough();
+    // The failed save rolls back, and says so.
+    await expect(target).toHaveValue(prior);
+    await expect(page.locator(".mc .mc-notice .body", { hasText: "rolled back" }).first()).toBeVisible();
 
-    await page.getByLabel("Set target").fill("");
-    await page.getByLabel("Set target").press("Enter");
-    await expect(page.getByLabel("Set target")).toHaveValue("—");
+    await target.fill("");
+    await target.press("Enter");
+    await expect(target).toHaveValue("—");
+    await letSavesThrough();
+    await expect(target).toHaveValue(prior);
+    hold = false;
 
     // Description save: the e2e server runs DB-less, so the PATCH mirror fails
     // by design — the contract under test is optimistic apply → visible

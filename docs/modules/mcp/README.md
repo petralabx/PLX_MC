@@ -441,7 +441,13 @@ the `openConflicts()` UI fields). Optional filters: `entityId` / `taskId`
 `cf-{entityId.lower}-{field}-{detectedAtMs}` (e.g. `cf-task-123-stage-…`).
 `mc_resolve_conflict` / `mc_resolve_conflicts` (`POST /api/cursor/conflicts/resolve`)
 call `resolveConflict` in the sync engine. Args: conflict id(s) + required
-`resolution` `keep_mc` \| `keep_sp`. Auth is the MCP principal + `sync.mutate`,
+`resolution` `keep_mc` \| `keep_sp`. `mc_resolve_conflicts` returns per-id
+outcomes, and the rest still run when an id is refused (TASK-4295). A refusal
+the engine raises as an error (a pending creator approval, a closed or
+restricted project) comes back `resolved: false` with its `code`.
+`resolved: false` with no code means the conflict was not found, or the engine
+declined the value (for example keep-SP on a cancelled task); that conflict may
+still be open, so list again. Any other error fails the call. Auth is the MCP principal + `sync.mutate`,
 not browser Entra. Ledger owns Keep MC for stage-lag leftovers; never silent
 `keep_sp`; agents never mark a task Verified. The Sync console
 `POST /api/sync/conflicts/{id}/resolve` stays Entra-gated. The Sync badge

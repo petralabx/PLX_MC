@@ -14,6 +14,7 @@ vi.mock("@/lib/permissions/decision-log", () => ({
   recordPermissionDecision: vi.fn(async () => true),
 }));
 
+import { ApiError } from "@/lib/api/route";
 import type { McpIdentity } from "@/lib/mcp/auth";
 import {
   actionResolveConflict,
@@ -177,6 +178,44 @@ describe("actionResolveConflicts", () => {
       },
       { conflictId: "cf-b", resolved: true },
     ]);
+  });
+
+  // TASK-4295: resolveConflict refuses a keep-SP value with an ApiError before any
+  // write (a pending creator approval, a closed or restricted project, and
+  // TASK-4286's uat_verify_required). The refused id comes back with its code,
+  // and the rest of the batch still runs.
+  it("reports each refused conflict per id with its code, and still resolves the rest", async () => {
+    const refusals: Record<string, ApiError> = {
+      "cf-gated": new ApiError("creator_approval_pending", "TASK-9100 waits for its creator's approval.", 409),
+      "cf-closed": new ApiError("project_closed", "PRJ-OLD is closed.", 409),
+      "cf-uat": new ApiError("uat_verify_required", "TASK-9200 is a UAT ticket task; only the portal verifies it.", 403),
+    };
+    mocks.resolveConflict.mockImplementation(async (id: string) => {
+      if (refusals[id]) throw refusals[id];
+      return true;
+    });
+    const ids = ["cf-a", "cf-gated", "cf-b", "cf-closed", "cf-uat", "cf-c"];
+    const result = await actionResolveConflicts(mcpIdentity, { conflictIds: ids, resolution: "keep_sp" });
+    expect(mocks.resolveConflict.mock.calls.map(([id]) => id)).toEqual(ids);
+    expect(result.resolvedCount).toBe(3);
+    expect(result.results).toEqual(
+      ids.map((conflictId) =>
+        refusals[conflictId]
+          ? { conflictId, resolved: false, code: refusals[conflictId].code, error: refusals[conflictId].message }
+          : { conflictId, resolved: true }
+      )
+    );
+  });
+
+  it("still fails the whole call on an error that is not a refusal", async () => {
+    mocks.resolveConflict.mockImplementation(async (id: string) => {
+      if (id === "cf-a") throw new Error("connection reset");
+      return true;
+    });
+    await expect(
+      actionResolveConflicts(mcpIdentity, { conflictIds: ["cf-a", "cf-b"], resolution: "keep_sp" })
+    ).rejects.toThrow("connection reset");
+    expect(mocks.resolveConflict).toHaveBeenCalledTimes(1);
   });
 });
 

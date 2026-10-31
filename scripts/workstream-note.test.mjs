@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { SECTIONS, check, findNote, parseIndex, sessionStartText, staleReason } from "./workstream-note.mjs";
+import { SECTIONS, check, findNote, liveStateText, noteTaskIds, parseIndex, sessionStartText, staleReason } from "./workstream-note.mjs";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "workstream-note.mjs");
 
@@ -160,3 +160,55 @@ test("the template carries every section in order", () => {
   const headings = [...template.matchAll(/^## (.+?)\s*$/gm)].map((m) => m[1]);
   assert.deepEqual(headings, SECTIONS);
 });
+
+// TASK-4378: a note names work; Mission Control holds its state, read live.
+const ENV = { MC_BASE_URL: "https://mc.example/", MC_MCP_API_KEY: "k1", MC_OPERATOR_EMAIL: "a@example.com", MC_REPO: "petralabx/x" };
+const TASKS = {
+  "TASK-1": { stage: "review", prs: [{ repo: "x", num: 7, status: "open" }], approvalGates: [{ status: "pending" }, { status: "approved" }] },
+  "TASK-2": { stage: "merged", prs: [] },
+};
+function fakeFetch(calls, answer = (id) => (TASKS[id] ? { status: 200, body: { data: { task: TASKS[id] } } } : { status: 404, body: { error: { code: "not_found" } } })) {
+  return async (url, init) => {
+    calls.push({ url, headers: init.headers });
+    const { status, body } = answer(url.split("/").pop());
+    return { ok: status < 300, status, json: async () => body };
+  };
+}
+
+test("noteTaskIds lists each TASK id once, first mention first", () => {
+  assert.deepEqual(noteTaskIds("TASK-2 then TASK-1, TASK-2 again; not TASK-x or MYTASK-3"), ["TASK-2", "TASK-1"]);
+});
+
+test("liveStateText prints each task's stage, PRs and pending gates from MC", async () => {
+  const calls = [];
+  const text = await liveStateText("/nowhere", "Work: TASK-1 and TASK-2.", ENV, fakeFetch(calls));
+  assert.match(text, /^=== Live state from Mission Control/);
+  assert.match(text, /^TASK-1 review · x#7 open · 1 approval gate pending$/m);
+  assert.match(text, /^TASK-2 merged$/m);
+  assert.equal(calls[0].url, "https://mc.example/api/cursor/tasks/TASK-1");
+  assert.deepEqual(
+    { auth: calls[0].headers.authorization, email: calls[0].headers["x-mc-operator-email"], repo: calls[0].headers["x-mc-repo"] },
+    { auth: "Bearer k1", email: "a@example.com", repo: "petralabx/x" }
+  );
+});
+
+test("liveStateText names what it could not read, and never throws", async () => {
+  const text = await liveStateText("/nowhere", "TASK-1 TASK-9 TASK-8", ENV, fakeFetch([]));
+  assert.match(text, /Not read \(HTTP 404 not_found\): TASK-9, TASK-8\. Use mc_get_task\./);
+  const down = await liveStateText("/nowhere", "TASK-1", ENV, async () => {
+    throw new Error("ECONNREFUSED");
+  });
+  assert.match(down, /Not read \(unreachable\): TASK-1/);
+});
+
+test("liveStateText is silent without TASK ids and says where state lives without MC_BASE_URL", async () => {
+  assert.equal(await liveStateText("/nowhere", "no ids here", ENV, fakeFetch([])), "");
+  assert.match(await liveStateText("/nowhere", "TASK-1", {}, fakeFetch([])), /MC_BASE_URL is not set here\. Read TASK-1 with mc_get_task/);
+});
+
+test("liveStateText lists ids past its limit instead of dropping them", async () => {
+  const ids = Array.from({ length: 22 }, (_, i) => `TASK-${i + 1}`).join(" ");
+  const text = await liveStateText("/nowhere", ids, ENV, fakeFetch([]));
+  assert.match(text, /Not read \(over 20\): TASK-21, TASK-22\./);
+});
+

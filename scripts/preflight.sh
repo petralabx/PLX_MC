@@ -158,6 +158,9 @@ run_policy() {
   step "Migration numbering (serialized prefixes)"
   "$PY" scripts/check-migrations.py
 
+  step "Workstream notes and index agree (TASK-4378)"
+  node scripts/workstream-note.mjs check --strict
+
   step "Workstation secrets-loader drift (host-local; skips where absent)"
   # Exit codes: 0 clean, 1 drift, 2 no loader on this host.
   # CI runners and servers have no ~/.secrets-env.staging.ps1, so 2 is the

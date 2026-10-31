@@ -3,12 +3,18 @@
 // when a session starts, remind the agent when it goes stale, and check that the
 // index and the notes agree. No dependencies; Node 18+.
 //
-//   node scripts/workstream-note.mjs session-start   Claude Code SessionStart hook: prints the note
+//   node scripts/workstream-note.mjs session-start   Claude Code SessionStart hook: prints the note, then
+//                                                    the live MC state of each TASK id it names
 //   node scripts/workstream-note.mjs stop            Claude Code Stop hook: asks once for a stale note
 //   node scripts/workstream-note.mjs path            prints this branch's note path, or nothing
 //   node scripts/workstream-note.mjs check [--strict] index and notes agree; --strict exits 1 on a problem
 //
 // Hooks never fail a session: any error exits 0 with nothing printed.
+//
+// A note names work; Mission Control holds its state. The note never says a PR is
+// open or what stage a task is in: session-start reads that live (TASK-4378).
+// Its source is petralabx/skills; each repo takes this copy with that repo's
+// scripts/apply-workstream-bundle.py, and its --check finds a drifted copy.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -29,7 +35,12 @@ export const SECTIONS = [
   "Last updated",
 ];
 export const STATUSES = ["active", "blocked", "paused", "done"];
-const MAX_NOTE_CHARS = 8000; // SessionStart output is capped at 10,000 characters.
+const MAX_NOTE_CHARS = 7500; // SessionStart output is capped at 10,000 characters, live state included.
+const MAX_LIVE_TASKS = 20;
+const MAX_LIVE_CHARS = 1800;
+const LIVE_TIMEOUT_MS = 3000;
+const LIVE_BUDGET_MS = 7000; // the SessionStart hook has 10 s
+const LIVE_CONCURRENCY = 4; // MC answers 4 at a time quickly; 20 at once time out
 const REMIND_EVERY_MS = 45 * 60 * 1000;
 const DEFAULT_BRANCHES = ["main", "master", "staging"];
 
@@ -146,6 +157,87 @@ export function sessionStartText(root, branch) {
   return `=== Workstream note: ${rel} (SessionStart hook) ===\n${note.trim()}\n=== end of note ===\n${footer}`;
 }
 
+/** The TASK ids a note names, first mention first. */
+export function noteTaskIds(text) {
+  return [...new Set(text.match(/\bTASK-\d+\b/g) ?? [])];
+}
+
+/** One line for a task as Mission Control holds it: stage, PRs and pending gates. */
+export function liveLine(id, task) {
+  const parts = [`${id} ${task.stage}`];
+  for (const pr of task.prs ?? []) parts.push(`${pr.repo}#${pr.num} ${pr.status}`);
+  const gates = (task.approvalGates ?? []).filter((g) => g.status === "pending").length;
+  if (gates) parts.push(`${gates} approval gate${gates > 1 ? "s" : ""} pending`);
+  return parts.join(" · ");
+}
+
+function originSlug(root) {
+  const m = /github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/.exec(git(root, ["remote", "get-url", "origin"]));
+  return m ? m[1] : "";
+}
+
+/**
+ * The live-state block for the TASK ids a note names, read from Mission Control
+ * (GET /api/cursor/tasks/<id>, MC_BASE_URL and MC_MCP_API_KEY as the other
+ * scripts use them). Never throws; "" when the note names no task.
+ */
+export async function liveStateText(root, noteText, env = process.env, fetchImpl = globalThis.fetch) {
+  const named = noteTaskIds(noteText);
+  const ids = named.slice(0, MAX_LIVE_TASKS);
+  if (ids.length === 0) return "";
+  const head = "=== Live state from Mission Control (SessionStart hook) ===";
+  const base = (env.MC_BASE_URL || "").replace(/\/+$/, "");
+  if (!base || typeof fetchImpl !== "function") {
+    return `${head}\nMC_BASE_URL is not set here. Read ${ids.join(", ")} with mc_get_task: the note does not hold their state.`;
+  }
+  const headers = { "x-mc-runtime": env.MC_RUNTIME || "workstream-hook" };
+  const key = (env.MC_MCP_API_KEY || "").replace(/\$\{.*\}/, "").trim();
+  // Bearer, not x-api-key: MC reads either, and a credential-injecting proxy swaps only this header.
+  if (key) headers.authorization = `Bearer ${key}`;
+  if (env.MC_OPERATOR_EMAIL) headers["x-mc-operator-email"] = env.MC_OPERATOR_EMAIL;
+  const repo = env.MC_REPO || originSlug(root);
+  if (repo) headers["x-mc-repo"] = repo;
+  const deadline = Date.now() + LIVE_BUDGET_MS;
+  const readOne = async (id) => {
+    if (Date.now() >= deadline) return { id, error: "timed out" };
+    try {
+      const res = await fetchImpl(`${base}/api/cursor/tasks/${id}`, { headers, signal: AbortSignal.timeout(LIVE_TIMEOUT_MS) });
+      if (!res.ok) {
+        const code = await res.json().then((b) => b?.error?.code, () => undefined);
+        return { id, error: `HTTP ${res.status}${typeof code === "string" ? ` ${code}` : ""}` };
+      }
+      const task = (await res.json())?.data?.task;
+      return task?.stage ? { id, line: liveLine(id, task) } : { id, error: "no task in the answer" };
+    } catch (err) {
+      return { id, error: err?.name === "TimeoutError" ? "timed out" : "unreachable" };
+    }
+  };
+  const results = new Array(ids.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length) {
+      const i = next++;
+      results[i] = await readOne(ids[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(LIVE_CONCURRENCY, ids.length) }, worker));
+  const failed = new Map();
+  for (const r of results) if (r.error) failed.set(r.error, [...(failed.get(r.error) ?? []), r.id]);
+  if (named.length > ids.length) failed.set(`over ${MAX_LIVE_TASKS}`, named.slice(ids.length));
+  // Room for the "Not read" lines is kept first and task lines are cut whole, so a long list never hides a failure.
+  const lines = [...failed].map(([error, failedIds]) => `Not read (${error}): ${failedIds.join(", ")}. Use mc_get_task.`);
+  const shown = [];
+  let size = head.length + lines.join("\n").length;
+  const ok = results.filter((r) => r.line);
+  for (const r of ok) {
+    if (size + r.line.length + 1 > MAX_LIVE_CHARS) break;
+    shown.push(r.line);
+    size += r.line.length + 1;
+  }
+  if (shown.length < ok.length) lines.push(`Not shown (no room): ${ok.slice(shown.length).map((r) => r.id).join(", ")}. Use mc_get_task.`);
+  return [head, ...shown, ...lines, "=== end of live state ==="].join("\n");
+}
+
 function defaultBase(root) {
   const head = git(root, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]).replace("refs/remotes/", "");
   const candidates = head ? [head] : DEFAULT_BRANCHES.map((b) => `origin/${b}`);
@@ -253,7 +345,7 @@ export function check(root) {
   return problems;
 }
 
-function main(argv) {
+async function main(argv) {
   const [cmd, ...rest] = argv;
   const root = repoRoot();
   const branch = currentBranch(root);
@@ -261,6 +353,11 @@ function main(argv) {
     case "session-start": {
       const text = sessionStartText(root, branch);
       if (text) process.stdout.write(`${text}\n`);
+      const found = text ? findNote(root, branch) : null;
+      if (found?.path && existsSync(found.path)) {
+        const live = await liveStateText(root, readFileSync(found.path, "utf8"));
+        if (live) process.stdout.write(`${live}\n`);
+      }
       return 0;
     }
     case "stop": {
@@ -293,15 +390,16 @@ function main(argv) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  let code = 0;
-  try {
-    code = main(process.argv.slice(2));
-  } catch (err) {
-    // Hooks must never break a session; `check` reports the error.
-    if (process.argv[2] === "check") {
-      process.stderr.write(`workstream-note: ${err.message}\n`);
-      code = 1;
+  main(process.argv.slice(2)).then(
+    (code) => {
+      process.exitCode = code;
+    },
+    (err) => {
+      // Hooks must never break a session; `check` reports the error.
+      if (process.argv[2] === "check") {
+        process.stderr.write(`workstream-note: ${err.message}\n`);
+        process.exitCode = 1;
+      }
     }
-  }
-  process.exitCode = code;
+  );
 }

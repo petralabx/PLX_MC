@@ -18,7 +18,9 @@ Bring this branch's workstream note up to date. The note is the agents' working 
      one-PR change, say so and stop.
 2. Rewrite each section from what this session did and decided. Keep every section, in template
    order. Replace stale text instead of appending; git history keeps the old version.
-   - **Status**: `active`, `blocked`, `paused` or `done`, with today's date and one line.
+   - **Status**: `active`, `blocked`, `paused` or `done`, with today's date and one line. Never
+     type a PR's or task's state (open, in review, waiting): Mission Control holds it, and the
+     SessionStart hook prints it live for every TASK id the note names. Name each TASK id.
    - **Done**: what landed, with PR links. **Next steps**: numbered, the next one first.
    - **Decisions and why**: dated, with who decided. **Open questions**: with who can answer.
    - **Files / areas touched**, **How to run the tests**, **Blockers or dependencies on other

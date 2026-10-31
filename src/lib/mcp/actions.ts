@@ -30,10 +30,12 @@ import {
   creatorApprovalViolation,
   isArchived,
   resolveHumanAccountableOwner,
+  stageAdvanceViolation,
   STAGE_IDX,
   TERMINAL_STAGES,
   isClosedStage,
   type Evidence,
+  type PullRequest,
   type StageKey,
   type Task,
 } from "@/lib/mc-data";
@@ -799,6 +801,32 @@ export function shouldPromotePrlessCompletion(
   return typeof task.stage === "string" && PRLESS_PROMOTABLE_STAGES.has(task.stage);
 }
 
+// TASK-4378: the stages a completed hand-in moves up to In Review.
+const REVIEW_PROMOTABLE_STAGES = new Set(["backlog", "specced", "approved", "planned", "progress", "qa"]);
+const PR_URL = /github\.com\/[^/\s]+\/([^/\s]+)\/pull\/(\d+)/i;
+
+/**
+ * Whether a completed hand-in moves its task to In Review. `pr` when prUrl names
+ * a PR the task holds and that PR is open and ready; `reason` when prUrl names
+ * a PR but the move cannot happen yet (a draft, or a PR the task does not hold
+ * yet); null when the hand-in has nothing to say about it. PR rows hold the
+ * bare repo name, as GitHub events give it.
+ */
+export function completionReview(
+  task: Pick<Task, "stage" | "prs"> | undefined,
+  input: { prUrl?: string; outcome?: "completed" | "blocked" | "failed" }
+): { pr: PullRequest; reason?: undefined } | { pr?: undefined; reason: string } | null {
+  if (!task || (input.outcome ?? "completed") !== "completed") return null;
+  if (typeof task.stage !== "string" || !REVIEW_PROMOTABLE_STAGES.has(task.stage)) return null;
+  const m = PR_URL.exec(input.prUrl ?? "");
+  if (!m) return null;
+  const num = Number(m[2]);
+  const pr = (task.prs ?? []).find((p) => p.repo.toLowerCase() === m[1].toLowerCase() && p.num === num);
+  if (pr?.status === "open") return { pr };
+  const what = pr ? `${pr.repo}#${num} is ${pr.status}` : `${m[1]}#${num} is not linked to this task yet`;
+  return { reason: `${what}. After you mark it ready, move the task with mc_report_progress (stage review).` };
+}
+
 export async function actionComplete(
   identity: McpIdentity,
   input: {
@@ -902,6 +930,8 @@ export async function actionComplete(
 
   // Sent fields win; evidence saved earlier with mc_save_evidence fills the rest (TASK-4055).
   const { evidence, qa } = buildTaskEvidence(input, task?.evidence);
+  // Set inside the transaction below; the cast keeps TypeScript from narrowing it to undefined.
+  let review = undefined as { moved: boolean; reason?: string } | undefined;
   if (taskId) {
     // Files from mc_upload_evidence (TASK-3166) outlive a new hand-in. They are
     // read under the task row lock, so an upload that lands meanwhile is kept.
@@ -912,20 +942,26 @@ export async function actionComplete(
       // promote it, so it stayed in backlog. Move it to the done stage
       // ("merged") here; tasks with PRs keep the merged-PR projection path.
       const promote = shouldPromotePrlessCompletion(locked, input);
+      // TASK-4378: a hand-in with an open, ready PR moves the task to In Review.
+      // A stage gate keeps the stage, and the hand-in still lands.
+      const reviewCheck = promote ? null : completionReview(locked, input);
+      const reviewPr = reviewCheck?.pr ?? null;
+      const reviewBlock = reviewPr && locked ? stageAdvanceViolation(locked, "review") : reviewCheck?.reason ?? null;
+      if (reviewCheck) review = reviewBlock ? { moved: false, reason: reviewBlock } : { moved: true };
+      const who = dispatch?.accountableHuman ?? identity.operatorEmail;
+      const move = promote
+        ? { stage: PRLESS_COMPLETION_STAGE, what: "Completed with no linked PR (mc_complete_task); moved to merged" }
+        : reviewPr && !reviewBlock
+          ? {
+              stage: "review" as const,
+              what: `Completed with ${reviewPr.repo}#${reviewPr.num} open and ready (mc_complete_task); moved to In Review`,
+            }
+          : null;
       await patchTask(
         taskId,
         {
           evidence: { ...evidence, ...(artifacts?.length ? { artifacts } : {}) },
-          ...(promote
-            ? {
-                stage: PRLESS_COMPLETION_STAGE,
-                activityLine: {
-                  who: dispatch?.accountableHuman ?? identity.operatorEmail,
-                  what: "Completed with no linked PR (mc_complete_task); moved to merged",
-                  kind: "move",
-                },
-              }
-            : {}),
+          ...(move ? { stage: move.stage, activityLine: { who, what: move.what, kind: "move" } } : {}),
         } as Parameters<typeof patchTask>[1],
         dispatch?.accountableHuman ?? identity.operatorEmail,
         { query: q, attribution: { source: "service", actorId: identity.actor.id } }
@@ -950,6 +986,8 @@ export async function actionComplete(
       shots: input.shots ?? [],
     },
     evidenceStandard,
+    // Present when prUrl names an open, ready PR on the task (TASK-4378).
+    ...(review ? { review } : {}),
     sync: taskId ? await syncMetaForTask(taskId) : undefined,
   };
 }

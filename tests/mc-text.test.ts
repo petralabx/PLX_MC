@@ -209,6 +209,35 @@ describe("McText", () => {
     expect(html("see https://ci.example.com/_runs_/x_ end")).toContain('title="https://ci.example.com/_runs_/x_"');
     // An escaped trailing underscore stays in the URL as the underscore.
     expect(html("_see https://x.com/a\\_ now_")).toContain('href="https://x.com/a_"');
+    // An escaped backslash escapes nothing after it: that underscore still closes.
+    expect(html("_note https://x.com/a\\\\_ end")).toContain("<em>note <a");
+    // Any escaped punctuation reads as itself in the href (CommonMark).
+    expect(html("see https://x.com/a\\~ now")).toContain('href="https://x.com/a~"');
+    // A closing underscore right after a URL closes the emphasis (GFM), so the URL stops before it.
+    const closes = html("_note https://ci.example.com/_runs_/x_ end");
+    expect(closes).toContain("<em>note <a");
+    expect(closes).toContain('title="https://ci.example.com/_runs_/x"');
+    // A code span is literal: a URL in it keeps its backslash.
+    expect(html("Run `curl https://x.com/a\\_b` now")).toContain("<code>curl https://x.com/a\\_b</code>");
+  });
+
+  it("never opens emphasis in a URL's trailing punctuation", () => {
+    const out = html("Logs (https://ci.example.com/run_) and _this_ note");
+    expect(out.match(/<em>/g)).toHaveLength(1);
+    expect(out).toContain("<em>this</em>");
+    expect(out).toContain('title="https://ci.example.com/run_"');
+    const star = html("(https://x.com/a*) then *b*");
+    expect(star.match(/<em>/g)).toHaveLength(1);
+    expect(star).toContain("<em>b</em>");
+  });
+
+  it("finds a URL's trailing punctuation in one pass, however long the run", () => {
+    const started = performance.now();
+    const inside = html(`see https://x.com/${".".repeat(100_000)}a end`);
+    const ending = html(`see https://x.com/a${"_".repeat(50_000)}${"*".repeat(50_000)} end`);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(inside).toContain(" end");
+    expect(ending).toContain(" end");
   });
 
   it("keeps ids and words with underscores intact: an underscore inside a word is not emphasis", () => {

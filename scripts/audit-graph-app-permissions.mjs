@@ -5,6 +5,14 @@
 // drift: any forbidden role, any role outside required+transitional, or a
 // transitional role past its retire-by date.
 //
+// Accepted exceptions (TASK-4422): a person may decide to keep a transitional
+// role past its retire-by. `acceptedExceptions` records that decision (role,
+// decidedBy, decidedAt, reason, reviewBy, source). Until reviewBy the role is a
+// warning, not a failure; after reviewBy it fails again, and the record itself
+// fails the static check until it is renewed or removed. An exception can only
+// extend a listed transitional role: it never allows a forbidden, required or
+// unlisted role.
+//
 // Site grants (TASK-4422): every SharePoint site the code writes to must have
 // a declared `siteGrants` entry with `write`. The sites are read from the
 // source (CODE_SITE_SOURCES), not copied here, so a new or moved site cannot
@@ -14,8 +22,10 @@
 // (docs/runbooks/graph-least-privilege.md). It runs even without credentials.
 //
 // Exit codes: 0 = compliant, 1 = drift/violations (role or site grant),
-// 2 = credentials not configured and the static site-grant check passed.
-// Usage: node scripts/audit-graph-app-permissions.mjs [--manifest <path>]
+// 2 = credentials not configured and the static checks (site grants,
+// accepted exceptions) passed.
+// Usage: node scripts/audit-graph-app-permissions.mjs [--manifest <path>] [--now <YYYY-MM-DD>]
+// (--now overrides today's date, for tests and for checking a reviewBy ahead.)
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -98,6 +108,60 @@ export function evaluateSiteGrants(codeSites, manifest) {
   return { violations, warnings };
 }
 
+const EXCEPTION_FIELDS = ["role", "decidedBy", "decidedAt", "reason", "reviewBy", "source"];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const endOfDay = (date) => new Date(`${date}T23:59:59Z`);
+const isDate = (value) => typeof value === "string" && DATE_RE.test(value) && !Number.isNaN(endOfDay(value).getTime());
+
+/**
+ * Pure evaluation: the manifest's acceptedExceptions records, statically.
+ * Each record needs every field, valid dates (decidedAt <= reviewBy), one per
+ * role, and a role that is a listed transitional role (not forbidden or
+ * required). A record past its reviewBy is a violation. Returns
+ * { violations }.
+ */
+export function evaluateAcceptedExceptions(manifest, now = new Date()) {
+  const transitional = new Set((manifest.transitionalRoles ?? []).map((t) => t.role));
+  const forbidden = new Set(manifest.forbiddenRoles ?? []);
+  const required = new Set(manifest.requiredRoles ?? []);
+  const seen = new Set();
+  const violations = [];
+
+  for (const exception of manifest.acceptedExceptions ?? []) {
+    const role = exception?.role ?? "(no role)";
+    const missing = EXCEPTION_FIELDS.filter((f) => typeof exception?.[f] !== "string" || !exception[f].trim());
+    if (missing.length > 0) {
+      violations.push(`accepted exception for ${role} is missing ${missing.join(", ")}`);
+      continue;
+    }
+    if (seen.has(role)) violations.push(`more than one accepted exception for ${role}`);
+    seen.add(role);
+    if (forbidden.has(role) || required.has(role) || !transitional.has(role)) {
+      violations.push(`accepted exception for ${role} must name a transitional role (not forbidden, required or unlisted)`);
+      continue;
+    }
+    if (!isDate(exception.decidedAt) || !isDate(exception.reviewBy)) {
+      violations.push(`accepted exception for ${role} needs decidedAt and reviewBy as YYYY-MM-DD`);
+      continue;
+    }
+    if (endOfDay(exception.reviewBy) < endOfDay(exception.decidedAt)) {
+      violations.push(`accepted exception for ${role} has reviewBy before decidedAt`);
+      continue;
+    }
+    if (endOfDay(exception.reviewBy) < now) {
+      violations.push(`accepted exception for ${role} expired (review by ${exception.reviewBy}); renew or remove it`);
+    }
+  }
+  return { violations };
+}
+
+/** The live (valid, not yet past reviewBy) accepted exception for a role, if any. */
+function liveException(manifest, role, now) {
+  const records = (manifest.acceptedExceptions ?? []).filter((e) => e?.role === role);
+  const { violations } = evaluateAcceptedExceptions({ ...manifest, acceptedExceptions: records }, now);
+  return records.length > 0 && violations.length === 0 ? records[0] : null;
+}
+
 /**
  * Pure evaluation: granted roles vs the manifest.
  * Returns { violations: string[], warnings: string[] }.
@@ -122,7 +186,14 @@ export function evaluateGraphAppRoles(grantedRoles, manifest, now = new Date()) 
     if (transitional.has(role)) {
       const retireBy = transitional.get(role);
       if (retireBy && new Date(`${retireBy}T23:59:59Z`) < now) {
-        violations.push(`transitional role past retire-by (${retireBy}): ${role}`);
+        const exception = liveException(manifest, role, now);
+        if (exception) {
+          warnings.push(
+            `transitional role kept past retire-by (${retireBy}) as an accepted exception (decided ${exception.decidedAt} by ${exception.decidedBy}, review by ${exception.reviewBy}): ${role}`
+          );
+        } else {
+          violations.push(`transitional role past retire-by (${retireBy}): ${role}`);
+        }
       } else {
         warnings.push(`transitional role still granted (retire by ${retireBy ?? "unset"}): ${role}`);
       }
@@ -175,17 +246,28 @@ async function fetchAppToken({ tenantId, clientId, clientSecret }) {
   return body.access_token;
 }
 
-function manifestArg(argv) {
-  const i = argv.indexOf("--manifest");
+function flagArg(argv, flag) {
+  const i = argv.indexOf(flag);
   return i >= 0 && argv[i + 1] ? argv[i + 1] : undefined;
 }
 
+function nowArg(argv) {
+  const value = flagArg(argv, "--now");
+  if (value === undefined) return new Date();
+  if (!isDate(value)) throw new Error(`--now must be YYYY-MM-DD, got ${value}`);
+  console.log(`[graph-audit] evaluating as of ${value} (--now)`);
+  return new Date(`${value}T12:00:00Z`);
+}
+
 async function main() {
-  const manifest = loadManifest(manifestArg(process.argv.slice(2)));
+  const argv = process.argv.slice(2);
+  const manifest = loadManifest(flagArg(argv, "--manifest"));
+  const now = nowArg(argv);
 
   const discovered = discoverCodeSites();
   const siteResult = evaluateSiteGrants(discovered.sites, manifest);
-  const violations = [...discovered.errors, ...siteResult.violations];
+  const exceptionResult = evaluateAcceptedExceptions(manifest, now);
+  const violations = [...discovered.errors, ...siteResult.violations, ...exceptionResult.violations];
   const warnings = [...siteResult.warnings];
   console.log(
     `[graph-audit] sites written by code: ${discovered.sites.map((s) => s.site).join(", ") || "(none)"}`
@@ -199,7 +281,7 @@ async function main() {
     const token = await fetchAppToken({ tenantId, clientId, clientSecret });
     const roles = decodeJwtRoles(token);
     console.log(`[graph-audit] granted application roles: ${roles.join(", ") || "(none)"}`);
-    const roleResult = evaluateGraphAppRoles(roles, manifest);
+    const roleResult = evaluateGraphAppRoles(roles, manifest, now);
     violations.push(...roleResult.violations);
     warnings.push(...roleResult.warnings);
   }
@@ -209,10 +291,10 @@ async function main() {
 
   if (!configured) {
     if (violations.length > 0) {
-      console.error("[graph-audit] siteGrants in the manifest do not cover the sites the code writes to");
+      console.error("[graph-audit] the manifest fails the static checks (site grants or accepted exceptions)");
       process.exit(1);
     }
-    console.error("[graph-audit] MICROSOFT_GRAPH_* credentials not configured — site grants checked, roles not audited.");
+    console.error("[graph-audit] MICROSOFT_GRAPH_* credentials not configured — site grants and accepted exceptions checked, roles not audited.");
     process.exit(2);
   }
 

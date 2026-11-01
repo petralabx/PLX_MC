@@ -12,8 +12,10 @@ and Office Nested App Auth are different registrations. Fleet policy:
 
 ## Current vs target
 
-- Current (transitional): `Sites.ReadWrite.All` — tenant-wide write to every
-  SharePoint site. Retire-by is tracked in the manifest.
+- Current: `Sites.ReadWrite.All` — tenant-wide write to every SharePoint
+  site. Its retire-by (2026-08-21) has passed. Vince decided on 2026-11-01 to
+  keep it as an accepted exception, to be reviewed by 2027-11-01 (see
+  [Accepted exception](#accepted-exception-sitesreadwriteall)).
 - Target: `Sites.Selected` application role + a per-site `write` permission
   grant on `/sites/plx-mission-control` only. The sync engine (lists delta,
   item PATCH/POST, change-notification subscriptions) works on site-scoped
@@ -60,7 +62,9 @@ State on 2026-11-01:
 - The library exists (seen in the PLXSite navigation, 2026-11-01).
 - A per-site `write` grant on `/sites/PLXSite` was recorded on 2026-10-26.
 - The app still holds `Sites.ReadWrite.All`. Its `retireBy` (2026-08-21) has
-  passed and is not extended. A credentialed audit run fails on it by design.
+  passed and is not extended. It is an accepted exception (decided
+  2026-11-01, review by 2027-11-01), so a credentialed audit run warns on it
+  instead of failing.
 - Whether `PLX_MC_EVIDENCE_STORE_ENABLED=1` is on in production is unconfirmed.
 
 ### Grant needed
@@ -85,9 +89,28 @@ State on 2026-11-01:
 3. Run the TASK-4421 upload probe with both roles present. Confirm healthy
    uploads to `Mission Control` before you remove the broad role.
 
+### Accepted exception: `Sites.ReadWrite.All`
+
+Vince answered the MC question on TASK-4422 on 2026-11-01: "Keep
+Sites.ReadWrite.All; record it as an accepted exception." The manifest records
+it in `acceptedExceptions` with `role`, `decidedBy`, `decidedAt`, `reason`,
+`reviewBy` (2027-11-01) and `source`.
+
+- Until `reviewBy`, the audit reports the role as a warning, not a failure.
+- After `reviewBy`, the audit fails on the role and on the record itself.
+  A person then renews the decision (new `decidedAt` and `reviewBy`) or
+  removes the role (below).
+- An exception extends only a role listed in `transitionalRoles`. It never
+  allows a forbidden, required or unlisted role, and an incomplete or badly
+  dated record fails the audit.
+- `--now YYYY-MM-DD` evaluates the audit as of another date, e.g. to check a
+  `reviewBy` ahead of time.
+
 ### Remove `Sites.ReadWrite.All`
 
-Removing a Graph app permission needs a signed MC approval with scope `flags`.
+This is no longer planned while the accepted exception stands. If the
+decision changes: removing a Graph app permission needs a signed MC approval
+with scope `flags`.
 Vince decides it; send it to CoS, which batches it for him. Agents never
 change the registration.
 
@@ -97,15 +120,17 @@ change the registration.
    re-consents.
 3. Re-run the TASK-4421 probe and a sync sweep. On failure, re-add the role
    (see Rollback).
-4. In the same change, move `Sites.ReadWrite.All` to `forbiddenRoles` in the
-   manifest. The audit must exit 0 with no transitional warnings.
+4. In the same change, move `Sites.ReadWrite.All` to `forbiddenRoles` and
+   delete its `acceptedExceptions` record in the manifest. The audit must exit
+   0 with no transitional warnings.
 
 ## Audit cadence
 
 Run the audit script after any app-registration change and in incident review.
-Exit codes: 0 compliant, 1 drift (fail the check: a role, or a missing site
-grant), 2 credentials not configured and the site-grant check passed (roles
-skipped, e.g. local dev).
+Exit codes: 0 compliant, 1 drift (fail the check: a role, a missing site
+grant, or an invalid or expired accepted exception), 2 credentials not
+configured and the static checks (site grants, accepted exceptions) passed
+(roles skipped, e.g. local dev).
 
 ## Rollback
 

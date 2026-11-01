@@ -211,6 +211,23 @@ describe("McText", () => {
     expect(html("_see https://x.com/a\\_ now_")).toContain('href="https://x.com/a_"');
   });
 
+  it("never opens emphasis in a URL's trailing punctuation", () => {
+    const out = html("Logs (https://ci.example.com/run_) and _this_ note");
+    expect(out.match(/<em>/g)).toHaveLength(1);
+    expect(out).toContain("<em>this</em>");
+    expect(out).toContain('title="https://ci.example.com/run_"');
+    const star = html("(https://x.com/a*) then *b*");
+    expect(star.match(/<em>/g)).toHaveLength(1);
+    expect(star).toContain("<em>b</em>");
+  });
+
+  it("finds a URL's trailing punctuation in one pass, however long the run", () => {
+    const started = performance.now();
+    const out = html(`see https://x.com/${".".repeat(100_000)}a end`);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(out).toContain(" end");
+  });
+
   it("keeps ids and words with underscores intact: an underscore inside a word is not emphasis", () => {
     const out = html("Gates apg_1234abcd5678 and apg_9abcdef01234 for snake_case_name; _this_ is emphasis.");
     expect(out.match(/class="mct-chip"/g)).toHaveLength(2);

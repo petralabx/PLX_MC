@@ -29,9 +29,10 @@
 // Env:
 //   SESSION_TELEMETRY_ENABLED  set to "0" to disable telemetry (default: enabled).
 //                              SESSION_BRAIN_ENABLED switches only the artifact.
-//   MC_BASE_URL, MC_MCP_API_KEY, MC_OPERATOR_EMAIL (or MC_ACCOUNTABLE)
+//   MC_MCP_API_KEY, MC_OPERATOR_EMAIL (or MC_ACCOUNTABLE)
 //                              Mission Control credentials, read the way
 //                              scripts/compliance-checkout.mjs reads them
+//   MC_BASE_URL                Mission Control (default https://mc.plxcustomer.io)
 //   MC_REPO                    owner/name for x-mc-repo (default: the origin remote)
 //   MC_CHECKOUT_ID             dsp_* checkout of this session (default: the
 //                              MC-Checkout trailer of the newest commit made in
@@ -47,6 +48,8 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 
 const TELEMETRY_ROUTE = "/api/cursor/session-telemetry";
+// Same default as scripts/compliance-pr-verify.mjs, so an installed hook needs only the key.
+const DEFAULT_MC_BASE_URL = "https://mc.plxcustomer.io";
 // Inside the 8 s Cursor and 10 s Claude Code hook timeouts.
 const DEFAULT_BUDGET_MS = 8000;
 const SCAN_SHARE_MS = 3000;
@@ -109,7 +112,7 @@ function transcriptFiles(transcriptPath) {
 
 /**
  * Token usage of a Claude Code session: { tokensIn, tokensOut, model, messages, startedAt }.
- * Each message id counts once across the transcript and its subagent transcripts.
+ * Each message id counts once (its last line) across the transcript and its subagent transcripts.
  * null when the main transcript is unreadable, the files pass maxBytes together,
  * nothing carries usage, or reading takes longer than deadlineMs (a partial sum
  * is never reported).
@@ -130,10 +133,10 @@ export async function sumTranscriptUsage(
   } catch {
     return null;
   }
-  const seen = new Set();
-  const models = new Map();
-  let tokensIn = 0;
-  let tokensOut = 0;
+  // A message's usage repeats on each of its content-block lines; the last line holds
+  // its final count, so the last one per id wins.
+  const byId = new Map();
+  const anonymous = [];
   let startedAt = null;
   for (const file of files) {
     const stream = createReadStream(file, { encoding: "utf8" });
@@ -160,14 +163,13 @@ export async function sumTranscriptUsage(
         const usage = message && typeof message === "object" ? message.usage : null;
         if (!usage || typeof usage !== "object") continue;
         const id = nonEmpty(message.id) || nonEmpty(entry.requestId);
-        if (id) {
-          if (seen.has(id)) continue;
-          seen.add(id);
-        }
-        tokensIn += anthropicInput(usage);
-        tokensOut += tokenCount(usage.output_tokens);
-        const model = nonEmpty(message.model);
-        if (model && model !== "<synthetic>") models.set(model, (models.get(model) ?? 0) + 1);
+        const counted = {
+          tokensIn: anthropicInput(usage),
+          tokensOut: tokenCount(usage.output_tokens),
+          model: nonEmpty(message.model),
+        };
+        if (id) byId.set(id, counted);
+        else anonymous.push(counted);
       }
     } catch {
       if (file === transcriptPath) return null; // an unreadable subagent file is skipped
@@ -176,9 +178,18 @@ export async function sumTranscriptUsage(
       stream.destroy();
     }
   }
-  if (seen.size === 0 && tokensIn === 0 && tokensOut === 0) return null;
+  const counted = [...byId.values(), ...anonymous];
+  if (counted.length === 0) return null;
+  const models = new Map();
+  let tokensIn = 0;
+  let tokensOut = 0;
+  for (const c of counted) {
+    tokensIn += c.tokensIn;
+    tokensOut += c.tokensOut;
+    if (c.model && c.model !== "<synthetic>") models.set(c.model, (models.get(c.model) ?? 0) + 1);
+  }
   const model = [...models.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  return { tokensIn, tokensOut, model, messages: seen.size, startedAt };
+  return { tokensIn, tokensOut, model, messages: counted.length, startedAt };
 }
 
 /**
@@ -209,27 +220,33 @@ function slugFromRemote(url) {
  * The integration branch this checkout merges into: origin/HEAD when the clone has it,
  * else origin/staging (the portal), else origin/main. A clone often lacks origin/HEAD.
  */
-function defaultBaseRef(cwd, timeoutMs) {
-  const originHead = git(cwd, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], timeoutMs);
+function defaultBaseRef(cwd, deadline) {
+  const originHead = gitBy(cwd, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], deadline);
   if (originHead) return originHead;
   for (const ref of ["origin/staging", "origin/main"]) {
-    if (git(cwd, ["rev-parse", "--verify", "--quiet", `refs/remotes/${ref}`], timeoutMs)) return ref;
+    if (gitBy(cwd, ["rev-parse", "--verify", "--quiet", `refs/remotes/${ref}`], deadline)) return ref;
   }
   return null;
 }
 
+/** One git call, given whatever is left of the budget (at most GIT_TIMEOUT_MS); "" once it is spent. */
+function gitBy(cwd, args, deadline) {
+  const left = Math.min(GIT_TIMEOUT_MS, deadline - Date.now());
+  return left > 0 ? git(cwd, args, left) : "";
+}
+
 /** MC_CHECKOUT_ID, else the last MC-Checkout trailer of the newest session commit that has one. */
-function sessionCheckoutId(cwd, env, startedAt, timeoutMs) {
+function sessionCheckoutId(cwd, env, startedAt, deadline) {
   const fromEnv = nonEmpty(env.MC_CHECKOUT_ID);
   if (CHECKOUT_ID.test(fromEnv)) return fromEnv;
   // Without a base, merged-in commits from other sessions carry their own trailers,
   // so no checkout is sent rather than someone else's.
-  const base = defaultBaseRef(cwd, timeoutMs);
+  const base = defaultBaseRef(cwd, deadline);
   if (!base) return null;
   const args = ["log", `--max-count=${MAX_COMMITS}`, "--format=%(trailers:key=MC-Checkout,valueonly,separator=%x2C)"];
   if (startedAt) args.push(`--since=${startedAt}`);
   args.push("HEAD", "--not", base);
-  for (const line of git(cwd, args, timeoutMs).split("\n")) {
+  for (const line of gitBy(cwd, args, deadline).split("\n")) {
     const ids = line
       .split(",")
       .map((id) => id.trim())
@@ -272,12 +289,10 @@ export async function reportTelemetry({
     }
     const sessionId = (nonEmpty(payload?.session_id) || nonEmpty(payload?.conversation_id)).slice(0, 120);
     if (!sessionId) return skip("the hook payload has no session id");
-    const baseUrl = nonEmpty(env.MC_BASE_URL).replace(/\/$/, "");
+    const baseUrl = (nonEmpty(env.MC_BASE_URL) || DEFAULT_MC_BASE_URL).replace(/\/$/, "");
     const apiKey = (env.MC_MCP_API_KEY || "").replace(/\$\{.*\}/, "").trim();
     const operatorEmail = nonEmpty(env.MC_OPERATOR_EMAIL || env.MC_ACCOUNTABLE).toLowerCase();
-    if (!baseUrl || !apiKey || !operatorEmail) {
-      return skip("MC_BASE_URL, MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set");
-    }
+    if (!apiKey || !operatorEmail) return skip("MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set");
     const usage =
       runtime === "claude-code"
         ? await sumTranscriptUsage(payload?.transcript_path, { deadlineMs: Math.min(SCAN_SHARE_MS, left()) })
@@ -290,9 +305,9 @@ export async function reportTelemetry({
     const envRepo = nonEmpty(env.MC_REPO);
     const repo = REPO_SLUG.test(envRepo)
       ? envRepo
-      : slugFromRemote(git(cwd, ["remote", "get-url", "origin"], Math.min(GIT_TIMEOUT_MS, left())));
+      : slugFromRemote(gitBy(cwd, ["remote", "get-url", "origin"], deadline));
     if (!repo) return skip("no MC_REPO and no origin remote to name the repo");
-    const checkoutId = sessionCheckoutId(cwd, env, usage.startedAt ?? null, Math.min(GIT_TIMEOUT_MS, left()));
+    const checkoutId = sessionCheckoutId(cwd, env, usage.startedAt ?? null, deadline);
     const body = {
       sessionId,
       tokensIn: usage.tokensIn,

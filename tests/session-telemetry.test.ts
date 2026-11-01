@@ -150,6 +150,20 @@ describe("sumTranscriptUsage", () => {
     });
   });
 
+  it("keeps the last line's usage when a message id repeats", async () => {
+    const dir = tempDir();
+    const file = path.join(dir, "grow.jsonl");
+    writeFileSync(
+      file,
+      [
+        assistant("g1", { input_tokens: 10, output_tokens: 1 }),
+        assistant("g2", { input_tokens: 5, output_tokens: 5 }),
+        assistant("g1", { input_tokens: 10, output_tokens: 40 }),
+      ].join("\n")
+    );
+    expect(await sumTranscriptUsage(file)).toMatchObject({ tokensIn: 15, tokensOut: 45, messages: 2 });
+  });
+
   it("adds subagent transcripts and counts a message seen in both files once", async () => {
     const file = usageTranscript(tempDir());
     addSubagents(file);
@@ -219,6 +233,15 @@ describe("reportTelemetry", () => {
       checkoutId: "dsp_new3",
     });
     expect(lines.join("\n")).not.toContain(KEY);
+  });
+
+  it("posts to mc.plxcustomer.io when MC_BASE_URL is unset", async () => {
+    const dir = stampedRepo();
+    const { fetch, calls } = recorder();
+    const env: Record<string, string> = { ...MC_ENV };
+    delete env.MC_BASE_URL;
+    await reportTelemetry({ env, fetch, log: quiet, cwd: dir, runtime: "claude-code", payload: { session_id: "s", transcript_path: usageTranscript(dir) } });
+    expect(calls[0].url).toBe("https://mc.plxcustomer.io/api/cursor/session-telemetry");
   });
 
   it("takes MC_CHECKOUT_ID and MC_REPO first, and sends no checkout it cannot tie to the session", async () => {
@@ -322,8 +345,8 @@ describe("reportTelemetry", () => {
     }) as unknown as typeof globalThis.fetch;
     const cases: Array<[Record<string, string>, typeof globalThis.fetch, string]> = [
       [{ ...MC_ENV, SESSION_TELEMETRY_ENABLED: "0" }, recorder().fetch, "disabled (SESSION_TELEMETRY_ENABLED=0)"],
-      [{ ...MC_ENV, MC_MCP_API_KEY: "${MC_MCP_API_KEY}" }, recorder().fetch, "MC_BASE_URL, MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set"],
-      [{ MC_BASE_URL: "http://mc.test", MC_MCP_API_KEY: KEY }, recorder().fetch, "MC_BASE_URL, MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set"],
+      [{ ...MC_ENV, MC_MCP_API_KEY: "${MC_MCP_API_KEY}" }, recorder().fetch, "MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set"],
+      [{ MC_MCP_API_KEY: KEY }, recorder().fetch, "MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set"],
       [MC_ENV, recorder({ ok: false, status: 500 }).fetch, "HTTP 500"],
       [MC_ENV, throwing, "request failed"],
       // A login page or proxy answering 200 is not a recorded row.

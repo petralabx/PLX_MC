@@ -336,7 +336,11 @@ export async function reportTelemetry({
         redirect: "error",
         signal: controller.signal,
       });
-      if (!res.ok) return skip(`HTTP ${res.status}`);
+      if (!res.ok) {
+        // Release the error body, so an open keep-alive socket never holds the hook past its deadline.
+        await res.body?.cancel?.().catch(() => undefined);
+        return skip(`HTTP ${res.status}`);
+      }
       const answer = await res.json().catch(() => null);
       recorded = answer?.data?.recorded === true;
     } catch (err) {

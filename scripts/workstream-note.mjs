@@ -38,6 +38,8 @@ export const STATUSES = ["active", "blocked", "paused", "done"];
 const MAX_NOTE_CHARS = 7500; // SessionStart output is capped at 10,000 characters, live state included.
 const MAX_LIVE_TASKS = 20;
 const MAX_LIVE_CHARS = 1800;
+const MAX_FAILED_IDS = 8; // ids named on one "Not read" line
+const MAX_FAILED_LINES = 6;
 const LIVE_TIMEOUT_MS = 3000;
 const LIVE_BUDGET_MS = 7000; // the SessionStart hook has 10 s
 const LIVE_CONCURRENCY = 4; // MC answers 4 at a time quickly; 20 at once time out
@@ -194,14 +196,18 @@ export async function liveStateText(root, noteText, env = process.env, fetchImpl
   const key = (env.MC_MCP_API_KEY || "").replace(/\$\{.*\}/, "").trim();
   // Bearer, not x-api-key: MC reads either, and a credential-injecting proxy swaps only this header.
   if (key) headers.authorization = `Bearer ${key}`;
-  if (env.MC_OPERATOR_EMAIL) headers["x-mc-operator-email"] = env.MC_OPERATOR_EMAIL;
+  // MC needs the operator header. Like compliance-checkout.mjs, fall back to the accountable human when it is unset.
+  const operator = (env.MC_OPERATOR_EMAIL || env.MC_ACCOUNTABLE || "").trim().toLowerCase();
+  if (operator) headers["x-mc-operator-email"] = operator;
   const repo = env.MC_REPO || originSlug(root);
   if (repo) headers["x-mc-repo"] = repo;
   const deadline = Date.now() + LIVE_BUDGET_MS;
   const readOne = async (id) => {
     if (Date.now() >= deadline) return { id, error: "timed out" };
     try {
-      const res = await fetchImpl(`${base}/api/cursor/tasks/${id}`, { headers, signal: AbortSignal.timeout(LIVE_TIMEOUT_MS) });
+      // Never past the deadline: a read that starts late gets only the time left, so the hook ends inside its 10 s.
+      const wait = Math.max(1, Math.min(LIVE_TIMEOUT_MS, deadline - Date.now()));
+      const res = await fetchImpl(`${base}/api/cursor/tasks/${id}`, { headers, signal: AbortSignal.timeout(wait) });
       if (!res.ok) {
         const code = await res.json().then((b) => b?.error?.code, () => undefined);
         return { id, error: `HTTP ${res.status}${typeof code === "string" ? ` ${code}` : ""}` };
@@ -225,7 +231,15 @@ export async function liveStateText(root, noteText, env = process.env, fetchImpl
   for (const r of results) if (r.error) failed.set(r.error, [...(failed.get(r.error) ?? []), r.id]);
   if (named.length > ids.length) failed.set(`over ${MAX_LIVE_TASKS}`, named.slice(ids.length));
   // Room for the "Not read" lines is kept first and task lines are cut whole, so a long list never hides a failure.
-  const lines = [...failed].map(([error, failedIds]) => `Not read (${error}): ${failedIds.join(", ")}. Use mc_get_task.`);
+  // Each line names at most MAX_FAILED_IDS ids and there are at most MAX_FAILED_LINES lines, so they fit MAX_LIVE_CHARS too.
+  const idList = (list) =>
+    list.length > MAX_FAILED_IDS ? `${list.slice(0, MAX_FAILED_IDS).join(", ")} and ${list.length - MAX_FAILED_IDS} more` : list.join(", ");
+  let groups = [...failed];
+  if (groups.length > MAX_FAILED_LINES) {
+    const rest = groups.slice(MAX_FAILED_LINES - 1).flatMap(([, failedIds]) => failedIds);
+    groups = [...groups.slice(0, MAX_FAILED_LINES - 1), ["other errors", rest]];
+  }
+  const lines = groups.map(([error, failedIds]) => `Not read (${String(error).slice(0, 60)}): ${idList(failedIds)}. Use mc_get_task.`);
   const shown = [];
   let size = head.length + lines.join("\n").length;
   const ok = results.filter((r) => r.line);
@@ -234,7 +248,7 @@ export async function liveStateText(root, noteText, env = process.env, fetchImpl
     shown.push(r.line);
     size += r.line.length + 1;
   }
-  if (shown.length < ok.length) lines.push(`Not shown (no room): ${ok.slice(shown.length).map((r) => r.id).join(", ")}. Use mc_get_task.`);
+  if (shown.length < ok.length) lines.push(`Not shown (no room): ${idList(ok.slice(shown.length).map((r) => r.id))}. Use mc_get_task.`);
   return [head, ...shown, ...lines, "=== end of live state ==="].join("\n");
 }
 

@@ -1714,6 +1714,26 @@ export function __projectUpdateSettled(): Promise<void> {
   return projectUpdateInFlight;
 }
 
+// Saves per project go to the server one at a time, oldest first (TASK-4414),
+// so each response is the server's latest project. The screen always shows the
+// last confirmed project with every save still waiting applied over it, in
+// order: a failed save drops out and only its own edits revert, and neither a
+// late success nor a late failure can undo an edit made after it.
+interface ProjectSaveQueue {
+  /** The project as the server last confirmed it (or as it was before the first save). */
+  confirmed: Project;
+  /** Saves not yet settled, oldest first: each one's edited fields. */
+  pending: Array<Record<string, unknown>>;
+  /** Settles when every save so far has; the next save waits on it. */
+  chain: Promise<void>;
+}
+const projectSaveQueues = new Map<string, ProjectSaveQueue>();
+
+/** The confirmed project with every waiting save applied over it, in order. */
+function projectWithPending(queue: ProjectSaveQueue): Project {
+  return queue.pending.reduce<Project>((project, edits) => ({ ...project, ...edits }) as Project, queue.confirmed);
+}
+
 export function updateProject(id: string, patch: ProjectPatch): Promise<void> | void {
   const existing = state.projects[id];
   if (!existing) return;
@@ -1726,26 +1746,49 @@ export function updateProject(id: string, patch: ProjectPatch): Promise<void> | 
   }
   const entries = Object.entries(clamped).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return;
-  const prior = clone(existing);
-  state.projects = { ...state.projects, [id]: { ...existing, ...Object.fromEntries(entries) } };
+  const edits = Object.fromEntries(entries);
+  let queue = projectSaveQueues.get(id);
+  if (!queue && (typeof window !== "undefined" || projectUpdateMirrorInjected)) {
+    queue = { confirmed: clone(existing), pending: [], chain: Promise.resolve() };
+    projectSaveQueues.set(id, queue);
+  }
+  state.projects = { ...state.projects, [id]: { ...existing, ...edits } };
   emit();
-  if (typeof window === "undefined" && !projectUpdateMirrorInjected) return;
-  projectUpdateInFlight = projectUpdateMirror(id, clamped).then(
-    (saved) => {
-      state.projects = { ...state.projects, [id]: saved };
-      emit();
-    },
-    (err) => {
-      state.projects = { ...state.projects, [id]: prior };
-      pushNotice(
-        `Couldn't save the change to ${id} — it was rolled back. ${
-          err instanceof Error ? err.message : "The server rejected the update."
-        }`
-      );
-      emit();
-    }
+  if (!queue) return;
+  const q = queue;
+  q.pending.push(edits);
+  const settle = () => {
+    q.pending.splice(q.pending.indexOf(edits), 1);
+    if (q.pending.length === 0 && projectSaveQueues.get(id) === q) projectSaveQueues.delete(id);
+  };
+  const run = q.chain.then(() =>
+    projectUpdateMirror(id, clamped).then(
+      (saved) => {
+        q.confirmed = saved;
+        settle();
+        state.projects = { ...state.projects, [id]: projectWithPending(q) };
+        emit();
+      },
+      (err) => {
+        settle();
+        const shown = state.projects[id] as unknown as Record<string, unknown> | undefined;
+        const next = projectWithPending(q);
+        const after = next as unknown as Record<string, unknown>;
+        const reverted = Object.keys(edits).some((key) => JSON.stringify(shown?.[key]) !== JSON.stringify(after[key]));
+        state.projects = { ...state.projects, [id]: next };
+        const reason = err instanceof Error ? err.message : "The server rejected the update.";
+        pushNotice(
+          reverted
+            ? `Couldn't save the change to ${id} — it was rolled back. ${reason}`
+            : `Couldn't save an earlier change to ${id}; your later change is still saving. ${reason}`
+        );
+        emit();
+      }
+    )
   );
-  return projectUpdateInFlight;
+  q.chain = run.catch(() => undefined);
+  projectUpdateInFlight = run;
+  return run;
 }
 
 // ─── Buckets / initiatives (EN-005) ──────────────────────────────────────────
@@ -2113,6 +2156,7 @@ export function __setOpenConflictsForTests(conflicts: SpConflict[]) {
 // Test-only: reset the store to the seed fixture.
 export function resetStore() {
   state = initialState();
+  projectSaveQueues.clear();
   notices = [];
   noticeSeq = 0;
   notifSeq = 0;

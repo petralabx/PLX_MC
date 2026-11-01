@@ -47,7 +47,7 @@ were hard to read and nothing was clickable (design review 2026-10-31, the
 
 ## Dependencies
 
-- governance-sops: `parseMarkdown` and its node types (`src/lib/governance-sops/markdown.ts`, imported directly because that module's barrel also exports server-only sources).
+- governance-sops: `parseMarkdown`, `BARE_URL_SOURCE` (the one bare-URL pattern both parsers share) and the node types (`src/lib/governance-sops/markdown.ts`, imported directly because that module's barrel also exports server-only sources).
 - web: `nav-model.ts` `navHref` and `isPlainLeftClick`, and the `Route` and `Nav` types.
 
 ### Key Files

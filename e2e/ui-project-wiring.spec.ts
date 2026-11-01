@@ -19,8 +19,16 @@ test.describe("project wiring (G2)", () => {
       await expect.poll(() => held.length).toBeGreaterThan(0);
       held.splice(0).forEach((go) => go());
     };
-    // Notices stay until dismissed, so each rollback is checked by the count going up by one.
+    // Each failed save says so in one notice. Notices stay until dismissed, and their stack sits
+    // over the page, so each one is dismissed once checked: the stack never covers a later control.
+    const notices = page.locator(".mc .mc-notices .mc-notice");
     const rolledBack = page.locator(".mc .mc-notice .body", { hasText: "rolled back" });
+    const dismissNotices = async () => {
+      for (let n = await notices.count(); n > 0; n -= 1) {
+        await notices.first().getByRole("button", { name: "Dismiss" }).click();
+        await expect(notices).toHaveCount(n - 1);
+      }
+    };
 
     await gotoProject(page);
 
@@ -31,6 +39,7 @@ test.describe("project wiring (G2)", () => {
     await letSavesThrough();
     await expect(health).toHaveValue(priorHealth);
     await expect(rolledBack).toHaveCount(1);
+    await dismissNotices();
 
     const ownerButton = page.locator(".mc .pv-strip .ntm-field-btn");
     const priorOwner = (await ownerButton.textContent()) ?? "";
@@ -39,13 +48,15 @@ test.describe("project wiring (G2)", () => {
     await expect(ownerButton).toContainText("Stephen Alton");
     await letSavesThrough();
     await expect(ownerButton).toHaveText(priorOwner);
-    await expect(rolledBack).toHaveCount(2);
+    await expect(rolledBack).toHaveCount(1);
+    await dismissNotices();
 
     await ownerButton.click();
     await page.locator(".ppick .pi.clear").click();
     await expect(page.locator(".mc .mc-notice .body").first()).toContainText(
       "Projects require a human accountable owner."
     );
+    await dismissNotices();
 
     const target = page.getByLabel("Set target");
     const prior = await target.inputValue();
@@ -55,14 +66,16 @@ test.describe("project wiring (G2)", () => {
     await letSavesThrough();
     // The failed save rolls back, and says so.
     await expect(target).toHaveValue(prior);
-    await expect(rolledBack).toHaveCount(3);
+    await expect(rolledBack).toHaveCount(1);
+    await dismissNotices();
 
     await target.fill("");
     await target.press("Enter");
     await expect(target).toHaveValue("—");
     await letSavesThrough();
     await expect(target).toHaveValue(prior);
-    await expect(rolledBack).toHaveCount(4);
+    await expect(rolledBack).toHaveCount(1);
+    await dismissNotices();
     hold = false;
 
     // Description save: the e2e server runs DB-less, so the PATCH mirror fails
@@ -72,10 +85,11 @@ test.describe("project wiring (G2)", () => {
     await page.locator(".mc .ph .tl-link", { hasText: "Edit" }).click();
     await page.getByLabel("Edit project description").fill("Hardening updated this project description.");
     await page.locator(".mc .ph .desc-edit-acts .btn", { hasText: "Save" }).click();
-    await expect(rolledBack).toHaveCount(5);
+    await expect(rolledBack).toHaveCount(1);
     await expect(page.locator(".mc .ph .sub")).toContainText(
       "Umbrella project for all PLX Portal go-live initiatives."
     );
+    await dismissNotices();
 
     // Cancel discards the draft without touching the description.
     await page.locator(".mc .ph .tl-link", { hasText: "Edit" }).click();

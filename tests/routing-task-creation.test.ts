@@ -113,6 +113,7 @@ vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => true),
   ensureBucketsSeeded: vi.fn(async () => true),
+  ensureProjectsSeeded: vi.fn(async () => {}),
   checkRoutingFreshness: vi.fn(async () => ({
     ok: true,
     code: "ok",

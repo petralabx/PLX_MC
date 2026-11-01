@@ -24,6 +24,7 @@ vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => true),
   ensureBucketsSeeded: vi.fn(async () => true),
+  ensureProjectsSeeded: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/sync/repo", () => ({
   stamp: () => "2026.10.11 · 00:00",

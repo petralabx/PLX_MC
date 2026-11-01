@@ -558,6 +558,8 @@ export async function createTask(
   await ensureSeeded();
   await ensureReposSeeded();
   await ensureBucketsSeeded();
+  // TASK-4005 reads the projects below, so a fresh database must have them first.
+  await ensureProjectsSeeded();
   // Allow-list enforcement (EN-002): a task may only attach registry repos.
   // Normalize GitHub slugs / names → registry ids before persist.
   const registry = await repo.getRepos();
@@ -907,7 +909,8 @@ export async function patchTask(
   const updated = await repo.getEntity("task", id, opts.query);
   const updatedTask = (updated?.data ?? null) as Task | null;
   // TASK-4005: the change that closes a project's last open task asks its owner to close it.
-  if (updatedTask && taskPatch.stage && isOpenInRollup(current) && !isOpenInRollup(updatedTask)) {
+  // A labels-only change can close a task too (closeStale adds uat:stale to a merged UAT ticket).
+  if (updatedTask && isOpenInRollup(current) && !isOpenInRollup(updatedTask)) {
     await noteProjectReadyToClose(updatedTask, actor, opts.query);
   }
   return updatedTask;
@@ -927,7 +930,8 @@ async function noteProjectReadyToClose(task: Task, actor: string, q: TxQuery): P
     const projectId = buckets.find((b) => b.id === task.bucket)?.project;
     const project = projectId ? (await repo.getProjects(q)).find((p) => p.id === projectId) : undefined;
     if (project) {
-      const bucketIds = buckets.filter((b) => b.project === project.id).map((b) => b.id);
+      // Archived buckets leave the count, as on the project page and in mc_list_projects.
+      const bucketIds = buckets.filter((b) => b.project === project.id && !isArchived(b)).map((b) => b.id);
       if (projectReadyToClose(project, await repo.getTaskStagesInBuckets(bucketIds, q))) {
         const { appendEventTx } = await import("@/lib/compliance/repo");
         await appendEventTx(q, {

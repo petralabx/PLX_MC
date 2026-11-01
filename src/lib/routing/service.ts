@@ -28,7 +28,7 @@ import type {
   RoutingDecisionKind,
   WorkLinkType,
 } from "@/lib/routing/types";
-import { ensureSeeded, ensureReposSeeded, ensureBucketsSeeded } from "@/lib/sync/engine";
+import { ensureSeeded, ensureReposSeeded, ensureBucketsSeeded, ensureProjectsSeeded } from "@/lib/sync/engine";
 import type { FieldAttribution } from "@/lib/sync/mapping";
 import * as syncRepo from "@/lib/sync/repo";
 import type { AuthorizedActor } from "./mutations/actors";
@@ -498,8 +498,8 @@ export async function createConfirmedTask(
   }
 
   const bucket = await requireExistingBucket(input.bucketId);
-  // TASK-4005: a routed task needs a bucket of a project too.
-  assertBucketHasProject(bucket, await syncRepo.getProjects());
+  // TASK-4005 reads projects inside the transaction below; seed them first, on the pool.
+  await ensureProjectsSeeded();
   // Autonomy dial (TASK-635): service-actor creations honor the bucket dial;
   // repo-level is asserted below once the proposal (and its repo) is loaded.
   if (authorized.actorKind === "service") {
@@ -575,6 +575,9 @@ export async function createConfirmedTask(
       taskId = String(priorIntent[0].task_id);
       replayed = true;
     } else {
+      // TASK-4005: a new routed task needs a bucket of a project too. Checked here, so
+      // a retry of a task that was already created still replays.
+      assertBucketHasProject(bucket, await syncRepo.getProjects(q));
       taskId = await allocateNextTaskId(q);
       await insertCreationIntent(
         {

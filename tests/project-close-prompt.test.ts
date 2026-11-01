@@ -14,7 +14,7 @@ type Row = {
 const s = vi.hoisted(() => ({
   table: new Map<string, Row>(),
   events: [] as Record<string, unknown>[],
-  buckets: [] as { id: string; name: string; project?: string | null }[],
+  buckets: [] as { id: string; name: string; project?: string | null; archivedAt?: string | null }[],
   projects: [] as { id: string; name: string; owner: string; status?: string; archivedAt?: string | null }[],
   failBuckets: false,
   sql: [] as string[],
@@ -66,7 +66,7 @@ vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   appendAudit: async () => undefined,
 }));
 
-import { projectReadyToClose } from "@/lib/mc-data/policy";
+import { projectReadyToClose, showProjectClosePrompt } from "@/lib/mc-data/policy";
 import { patchTask } from "@/lib/sync/state";
 
 const row = (id: string, data: Record<string, unknown>): Row => ({
@@ -127,6 +127,22 @@ describe("project.close_prompt event", () => {
     warn.mockRestore();
   });
 
+  it("is recorded when a labels-only change closes the last open task (closeStale's uat:stale)", async () => {
+    const UAT = ["kind:code", "uat:R5JD2K", "uat-attempt:1"];
+    putTask("TASK-1", "BKT-A", "merged");
+    putTask("TASK-2", "BKT-B", "merged", UAT); // a merged UAT ticket awaiting re-test is open
+    await patchTask("TASK-2", { labels: [...UAT, "uat:stale"] }, "portal", { uatStaleClose: true });
+    expect(s.events).toEqual([expect.objectContaining({ kind: "project.close_prompt", taskId: "TASK-2" })]);
+  });
+
+  it("leaves archived buckets out, as the project page and mc_list_projects do", async () => {
+    s.buckets.push({ id: "BKT-OLD", name: "Old", project: "PRJ-X", archivedAt: "2026-10-01T00:00:00Z" });
+    putTask("TASK-9", "BKT-OLD", "backlog"); // open, but in an archived bucket
+    putTask("TASK-2", "BKT-B", "review");
+    await merge("TASK-2");
+    expect(s.events).toEqual([expect.objectContaining({ kind: "project.close_prompt", taskId: "TASK-2" })]);
+  });
+
   it("is not recorded while another task of the project is open", async () => {
     putTask("TASK-1", "BKT-A", "progress");
     putTask("TASK-2", "BKT-B", "review");
@@ -150,6 +166,18 @@ describe("project.close_prompt event", () => {
     putTask("TASK-2", "BKT-B", "review", ["kind:code", "uat:R5JD2K", "uat-attempt:1"]);
     await merge("TASK-2");
     expect(s.events).toHaveLength(0);
+  });
+});
+
+describe("showProjectClosePrompt (the project screen's banner)", () => {
+  it("shows only to the project's owner", () => {
+    const project = { owner: "stephen", status: "active" as const };
+    const done = [{ stage: "merged" as const }];
+    expect(showProjectClosePrompt(project, done, "stephen")).toBe(true);
+    expect(showProjectClosePrompt(project, done, "ricardo")).toBe(false);
+    expect(showProjectClosePrompt(project, done, null)).toBe(false);
+    expect(showProjectClosePrompt({ owner: null, status: "active" }, done, "stephen")).toBe(false);
+    expect(showProjectClosePrompt(project, [{ stage: "review" }], "stephen")).toBe(false);
   });
 });
 

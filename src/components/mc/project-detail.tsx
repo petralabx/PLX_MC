@@ -13,7 +13,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
-import { ACTORS, MILESTONES, PROJECTS, projectReadyToClose } from "@/lib/mc-data";
+import { ACTORS, MILESTONES, PROJECTS, showProjectClosePrompt } from "@/lib/mc-data";
 import { SHAREPOINT_REGISTERS, docLinkFromPrd, docLinkKind, type SharePointRegisterKey } from "@/lib/mc-data/doc-links";
 import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import { allRisks, allTasks, bucketsForProject, projectById, pushNotice, updateProject } from "@/lib/mc-data/store";
@@ -56,7 +56,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
   const rollups = rollupForProject(buckets, tasks);
   const progress = projectProgress(tasks);
   // TASK-4005: when no task is open, ask the owner to close the project. Never auto-close.
-  const askToClose = projectReadyToClose(project, tasks) && !!viewer && viewer.id === project.owner;
+  const askToClose = showProjectClosePrompt(project, tasks, viewer?.id);
   const projectSpec = docLinkFromPrd(project.prd);
   const bucketIds = new Set(buckets.map((b) => b.id));
   const milestoneCount = MILESTONES.filter((m) => bucketIds.has(m.bucket)).length;

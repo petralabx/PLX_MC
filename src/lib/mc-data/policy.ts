@@ -77,6 +77,15 @@ export function projectReadyToClose(
   return tasks.length > 0 && !tasks.some(isOpenInRollup);
 }
 
+/** The project screen's close prompt: shown only to the project's owner (TASK-4005). */
+export function showProjectClosePrompt(
+  project: { owner?: string | null; status?: "active" | "closed"; archivedAt?: string | null } | null | undefined,
+  tasks: readonly RollupTask[],
+  viewerId: string | null | undefined
+): boolean {
+  return !!viewerId && !!project?.owner && viewerId === project.owner && projectReadyToClose(project, tasks);
+}
+
 export function countTaskProgress(tasks: readonly RollupTask[]): TaskProgressCounts {
   let done = 0;
   let cancelled = 0;

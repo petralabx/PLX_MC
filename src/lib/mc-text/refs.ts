@@ -96,7 +96,7 @@ function urlRef(href: string): McRef {
     const q = url.searchParams;
     // A link that names a screen collapses only to that screen's chip: a board link
     // that also carries a taskId stays a link, and approvals with a gate is the gate.
-    const screen = q.get("screen");
+    const screen = q.get("screen") || null; // an empty screen= is no screen
     const on = (name: string) => screen === null || screen === name;
     const taskId = q.get("taskId");
     if (on("task") && taskId && /^TASK-\d{1,6}$/.test(taskId)) return { kind: "task", id: taskId };

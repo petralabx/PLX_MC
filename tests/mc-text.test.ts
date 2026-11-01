@@ -102,6 +102,7 @@ describe("splitRefs", () => {
     expect(splitRefs(`${base}task&taskId=TASK-1`)).toEqual([{ kind: "task", id: "TASK-1" }]);
     expect(splitRefs(`${base}board&taskId=TASK-1`)[0].kind).toBe("url");
     expect(splitRefs("https://mc.plxcustomer.io/?taskId=TASK-1")).toEqual([{ kind: "task", id: "TASK-1" }]);
+    expect(splitRefs("https://mc.plxcustomer.io/?screen=&taskId=TASK-1")).toEqual([{ kind: "task", id: "TASK-1" }]);
   });
 
   it("collapses every Mission Control path alias, and keeps a draft's frozen version", () => {
@@ -186,6 +187,14 @@ describe("McText", () => {
     expect(out).toContain('title="https://ci.example.com/_runs_/x*1*y"');
     expect(out.match(/<em>/g)).toHaveLength(1);
     expect(out).toContain("<em>this</em>");
+    // Emphasis opened before a URL cannot close inside it.
+    const before = html("_note https://ci.example.com/_runs_/x_ end");
+    expect(before).not.toContain("<em>");
+    expect(before).toContain('title="https://ci.example.com/_runs_/x_"');
+    // An escaped underscore in a URL reads as the underscore itself.
+    expect(html("See https://x.com/a\\_b now")).toContain('href="https://x.com/a_b"');
+    // A URL in a Markdown link still links.
+    expect(html("[the log](https://ci.example.com/_runs_/1)")).toContain('href="https://ci.example.com/_runs_/1"');
   });
 
   it("keeps ids and words with underscores intact: an underscore inside a word is not emphasis", () => {

@@ -17,7 +17,14 @@ import {
   RESTRICTED_MIRROR_SP,
   type ProjectVisibility,
 } from "@/lib/permissions/project-acl";
-import { TERMINAL_STAGES, assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
+import {
+  TERMINAL_STAGES,
+  assignmentViolation,
+  isAgentId,
+  isOpenInRollup,
+  projectReadyToClose,
+  stageAdvanceViolation,
+} from "@/lib/mc-data/policy";
 import {
   formatRepoNotAllowedMessage,
   normalizeRepoInputs,
@@ -45,6 +52,7 @@ import {
 } from "@/lib/tasks/uat-labels";
 import { assertCreatorApprovedForStage, recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
+import { assertBucketHasProject } from "./bucket-project";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import type { EntityData, FieldAttribution } from "./mapping";
@@ -563,12 +571,12 @@ export async function createTask(
     throw new ApiError("invalid_bucket", `Bucket ${input.bucket} does not exist.`, 422);
   }
   if (isArchived(parentBucket)) throw new ApiError("bucket_archived", `Bucket ${parentBucket.id} is archived.`, 409);
-  if (parentBucket.project) {
-    assertProjectOpen(
-      (await repo.getProjects()).find((p) => p.id === parentBucket.project),
-      "task"
-    );
-  }
+  const projects = await repo.getProjects();
+  assertBucketHasProject(parentBucket, projects);
+  assertProjectOpen(
+    projects.find((p) => p.id === parentBucket.project),
+    "task"
+  );
 
   const { withTransaction } = await import("@/lib/db");
   const { allocateNextTaskId } = await import("@/lib/routing/repo");
@@ -897,7 +905,44 @@ export async function patchTask(
     await repo.appendAudit(actor, `Edited ${id} (${loggable.join(", ")}) — pending push.`, "pending", opts.query);
   }
   const updated = await repo.getEntity("task", id, opts.query);
-  return (updated?.data ?? null) as Task | null;
+  const updatedTask = (updated?.data ?? null) as Task | null;
+  // TASK-4005: the change that closes a project's last open task asks its owner to close it.
+  if (updatedTask && taskPatch.stage && isOpenInRollup(current) && !isOpenInRollup(updatedTask)) {
+    await noteProjectReadyToClose(updatedTask, actor, opts.query);
+  }
+  return updatedTask;
+}
+
+/**
+ * TASK-4005: when a task change leaves no open task in its project, record one
+ * project.close_prompt event for the owner (the project screen shows the same
+ * prompt). It never closes the project; only its owner does. It runs inside the
+ * caller's transaction (the compliance projection's merges included) behind a
+ * savepoint, so a failure here is logged and never undoes the task change.
+ */
+async function noteProjectReadyToClose(task: Task, actor: string, q: TxQuery): Promise<void> {
+  try {
+    await q("SAVEPOINT project_close_prompt");
+    const buckets = await repo.getBuckets(q);
+    const projectId = buckets.find((b) => b.id === task.bucket)?.project;
+    const project = projectId ? (await repo.getProjects(q)).find((p) => p.id === projectId) : undefined;
+    if (project) {
+      const bucketIds = buckets.filter((b) => b.project === project.id).map((b) => b.id);
+      if (projectReadyToClose(project, await repo.getTaskStagesInBuckets(bucketIds, q))) {
+        const { appendEventTx } = await import("@/lib/compliance/repo");
+        await appendEventTx(q, {
+          kind: "project.close_prompt",
+          actor,
+          taskId: task.id,
+          payload: { projectId: project.id, owner: project.owner, closedBy: task.id, stage: task.stage },
+        });
+      }
+    }
+    await q("RELEASE SAVEPOINT project_close_prompt");
+  } catch (err) {
+    await q("ROLLBACK TO SAVEPOINT project_close_prompt").catch(() => undefined);
+    console.warn(`[project-close-prompt] skipped for ${task.id}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // Apply one comment operation to a task's thread (TASK-3043), the rules of

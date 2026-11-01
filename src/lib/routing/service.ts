@@ -41,6 +41,7 @@ import {
   creationIntentHash,
   mintId,
 } from "./mutations/preconditions";
+import { assertBucketHasProject } from "@/lib/sync/bucket-project";
 
 export interface ConfirmExistingInput {
   proposalId: string;
@@ -497,6 +498,8 @@ export async function createConfirmedTask(
   }
 
   const bucket = await requireExistingBucket(input.bucketId);
+  // TASK-4005: a routed task needs a bucket of a project too.
+  assertBucketHasProject(bucket, await syncRepo.getProjects());
   // Autonomy dial (TASK-635): service-actor creations honor the bucket dial;
   // repo-level is asserted below once the proposal (and its repo) is loaded.
   if (authorized.actorKind === "service") {

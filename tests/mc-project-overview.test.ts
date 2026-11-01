@@ -424,7 +424,7 @@ describe("due filter (TASK-4392)", () => {
     }
   });
 
-  it("reads a due label without a year in the year nearest today, across New Year", () => {
+  it("reads a due label without a year in the current year, rolling only at the New Year edge", () => {
     const dec30 = new Date(2026, 11, 30, 9, 0); // Wednesday: this week is Dec 28 to Jan 3
     expect(matchesDue(t("Jan 02"), "overdue", dec30)).toBe(false);
     expect(matchesDue(t("Jan 02"), "week", dec30)).toBe(true);
@@ -437,5 +437,11 @@ describe("due filter (TASK-4392)", () => {
     expect(dueDate("Jan 02", dec30)).toEqual(new Date(2027, 0, 2));
     expect(dueDate("Dec 20", jan3)).toEqual(new Date(2026, 11, 20));
     expect(dueDate("Jun 15", new Date(2026, 9, 31))).toEqual(new Date(2026, 5, 15));
+    // Months overdue stays overdue: on Jul 10, "Jan 05" is this January, not next.
+    const jul10 = new Date(2026, 6, 10, 9, 0);
+    expect(dueDate("Jan 05", jul10)).toEqual(new Date(2026, 0, 5));
+    expect(matchesDue(t("Jan 05"), "overdue", jul10)).toBe(true);
+    // A deadline months ahead stays ahead: on Jan 3, "Aug 31" is this August.
+    expect(dueDate("Aug 31", jan3)).toEqual(new Date(2027, 7, 31));
   });
 });

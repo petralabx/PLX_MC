@@ -119,21 +119,22 @@ export const DUE_FILTERS: ReadonlyArray<{ key: DueFilterKey; label: string }> = 
 
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDaysTo = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-const HALF_YEAR_MS = 183 * 86_400_000;
+const ROLL_MS = 300 * 86_400_000;
 
 /**
  * A task's due date as a local day. A label without a year ("Jan 02", the form
- * MC stores) is read in the year that puts it nearest today, so the windows
- * hold across New Year: on Dec 30 "Jan 02" is next week, and on Jan 3 "Dec 20"
- * is two weeks late.
+ * MC stores) is read in the current year, as the sync reads it (dueToIso). Only
+ * when that puts it more than 300 days away does it roll to the nearer year, so
+ * the windows hold across New Year (on Dec 30 "Jan 02" is next week, and on
+ * Jan 3 "Dec 20" is two weeks late) and a task months overdue stays overdue.
  */
 export function dueDate(raw: string | null | undefined, today: Date): Date | null {
   const year = today.getFullYear();
   const due = parseMcDate(raw, year);
   if (!due || /\d{4}/.test(raw ?? "")) return due;
   const gap = due.getTime() - today.getTime();
-  if (gap > HALF_YEAR_MS) return parseMcDate(raw, year - 1);
-  if (gap < -HALF_YEAR_MS) return parseMcDate(raw, year + 1);
+  if (gap > ROLL_MS) return parseMcDate(raw, year - 1);
+  if (gap < -ROLL_MS) return parseMcDate(raw, year + 1);
   return due;
 }
 

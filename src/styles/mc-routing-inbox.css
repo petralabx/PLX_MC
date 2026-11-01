@@ -123,7 +123,7 @@
 }
 
 .ri-sla.hot {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 .ri-meta,

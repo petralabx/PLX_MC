@@ -27,7 +27,7 @@
 }
 
 .gs-pill.doctrine { color: var(--p-ink-2); }
-.gs-pill.ro { color: var(--p-hot); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
+.gs-pill.ro { color: var(--p-hot-text); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
 
 /* ─── Degraded banner ─────────────────────────────────────────────────────── */
 
@@ -59,7 +59,7 @@
 }
 
 .gs-banner-body { flex: 1; color: var(--p-ink-2); line-height: 1.5; }
-.gs-banner-ct { font-weight: 700; color: var(--p-hot); }
+.gs-banner-ct { font-weight: 700; color: var(--p-hot-text); }
 
 /* ─── Stat strip ──────────────────────────────────────────────────────────── */
 
@@ -86,7 +86,7 @@
   color: var(--p-ink);
 }
 
-.gs-stat-n.hot { color: var(--p-hot); }
+.gs-stat-n.hot { color: var(--p-hot-text); }
 
 .gs-stat-label {
   font-family: var(--mono);
@@ -307,7 +307,7 @@
   border: 1px solid color-mix(in srgb, var(--p-hot) 40%, transparent);
   border-left: 3px solid var(--p-hot);
   border-radius: var(--p-radius);
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   font-family: var(--mono);
   font-size: var(--p-text-small);
   background: color-mix(in srgb, var(--p-hot) 5%, transparent);
@@ -390,7 +390,7 @@
   color: var(--p-ink-2);
 }
 
-.gs-nocontent.degraded .gs-nocontent-code { color: var(--p-hot); }
+.gs-nocontent.degraded .gs-nocontent-code { color: var(--p-hot-text); }
 
 .gs-nocontent-note {
   margin: var(--p-space-2) 0 0;

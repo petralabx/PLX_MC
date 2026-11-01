@@ -737,7 +737,7 @@
 }
 
 .mc .filterbar .fb-dirty {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   font-weight: 700;
 }
 
@@ -779,7 +779,7 @@
 }
 
 .mc .filterbar .fb-viewdel:hover {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 .mc .filterbar .fb-viewsave {
@@ -837,7 +837,7 @@
 }
 
 .mc .filterbar .fb-due-pop .fb-due-clear:hover:not(:disabled) {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 /* Disabled = no range to clear (kept in the layout + tab order, never hidden). */

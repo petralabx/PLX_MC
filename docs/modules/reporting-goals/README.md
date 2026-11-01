@@ -119,7 +119,7 @@ traceable to a refresh run and a named query.
 8. **Page** — `src/components/mc/goals/` (styles `src/styles/mc-goals.css`,
    `mc.screens` layer). One read of the page model, so every section comes
    from the same snapshot.
-   - Header: the month's title, "Data as of" with both cutoffs, the amber
+   - Header: the month's title, "Data as of" with both cutoffs, the violet
      legend, the revenue rate switch ("US dollars at": Today's rate or Sage
      rate), the takeaway, Export to Excel and, for Editors, Refresh, Import
      manual entries and Add entry. Refresh follows the run through
@@ -148,8 +148,12 @@ traceable to a refresh run and a named query.
    - Charts: `StackedColumns` and `RunningLines` in
      `src/components/mc/charts/column-chart.tsx` (native SVG; HTML labels).
      Each has a one-sentence summary and its numbers in a table under it.
-   - Amber (`--p-warn` / `--p-warn-text`) marks only what was entered by hand.
-     The PLX palette has no red, so Behind uses the brand's alarm tone (hot).
+   - Violet (`--p-hand` / `--p-hand-text`, tokens v1.7.0, decision 9) marks only
+     what was entered by hand, with a diagonal hatch on the card bar and the
+     legend. Status chips show their shape and their word: On track a green
+     circle, Behind a red triangle; on the forecast, Planned a blue outlined
+     circle and Not planned an amber square. Amber means at risk only. Notes on
+     the data use the information blue. The size bands are one forest ramp.
    - Loading shows skeletons. A failed read, or a section that can't render,
      shows "Failed to load" + Retry in the same box. A section's figures name
      their query and run in tooltips and in a source line under the section.
@@ -173,7 +177,7 @@ traceable to a refresh run and a named query.
     names and order, the file name and the "Manual entries" columns come from
     `excel/layout.ts`, the contract shared with the import.
     - House styles: Arial 10, 14-pt bold titles, header rows bold on light
-      grey and frozen, amber (fill `FFF2CC`, font `7F6000`) for whatever was
+      grey and frozen, violet (fill `EBE8F9`, font `4B2FB8`) for whatever was
       entered by hand, real dates, `#,##0` counts and the house dollar format.
     - It recalculates on open (`fullCalcOnLoad`). Totals and derived values
       are formulas: on Goals the targets, due so far, totals, statuses and
@@ -187,7 +191,7 @@ traceable to a refresh run and a named query.
       which at 1.25 lands on a half cent for one amount in four. It is exact
       while USD cents × rate × 10⁶ stays under 2⁵³ (about US$64 million at
       1.4). LibreOffice recalculates it to the page's figures in the tests.
-    - "Manual entries" is the import template: the entries in amber, then
+    - "Manual entries" is the import template: the entries in violet, then
       formatted blank rows with the Type and Currency lists to row 200.
 11. **Manual entries and import** — `entry-input.ts` (validation, pure),
     `entries.ts` (writes), `excel/import.ts` (reading the workbook and planning)
@@ -327,7 +331,7 @@ manual entries (live) ────────────────┴──�
 "Shipments this month" (`shipment-list.ts`, `src/components/mc/goals/shipments.tsx`)
 lists one row per Sage invoice shipped this month (query `shipments`, the
 invoices the Revenue card adds up) and one per counted shipment entered by hand
-(amber, source "By hand"), by ship date, then invoice. The page model carries
+(violet, source "By hand"), by ship date, then invoice. The page model carries
 the rows (`shipments`), built from the same snapshot and entries as the cards.
 
 - **CAD.** A CAD invoice's net as it is; a USD invoice's net at the revenue
@@ -746,7 +750,7 @@ goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
   card matches it), else it is Unclassified, and the note says how much.
 - **Rows.** The shipments list's rows: this month's Sage invoices and the
   counted shipments entered by hand. Each class shows invoices, CAD, USD (US$),
-  USD in CAD, by hand (amber), total and share.
+  USD in CAD, by hand (violet), total and share.
 - **To the cent.** The month's USD is converted once, as on the card, and
   shared across the classes by largest remainder, so the classes add up to the
   card and a class can be a cent off its own USD converted alone.

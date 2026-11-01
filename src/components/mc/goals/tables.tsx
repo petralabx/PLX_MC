@@ -3,7 +3,7 @@
 // Goals & Production tables and tiles (brief §Screens 5–10): revenue by
 // customer class (TASK-3781), truckloads by customer, the entries made by hand,
 // batches completed and scheduled by size, the searchable batch list and the
-// rules in plain words. Amber (class "hand") marks everything entered by hand;
+// rules in plain words. Violet (class "hand") marks everything entered by hand;
 // entries that no longer count are dimmed.
 
 import { useState } from "react";

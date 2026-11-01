@@ -51,8 +51,8 @@ interface Row {
 interface Note {
   key: string;
   text: string;
-  /** Data the run couldn't read or a refresh that moved under it: the card's amber, unchanged (TASK-4373 changes no colours). */
-  amber?: boolean;
+  /** Data the run couldn't read or a refresh that moved under it: shown in the information blue (decision 9: amber means at risk only). */
+  flag?: boolean;
   testId?: string;
 }
 
@@ -168,18 +168,18 @@ export function RevenueBreakdown({ page, scope = "all" }: { page: ReadyPage; sco
       notes.push({
         key: "returns-missing",
         text: `Returns not deducted: Sage’s credit notes can’t be read yet (needs ${creditNotes.missing.join(", ")}).`,
-        amber: true,
+        flag: true,
         testId: "goals-revenue-returns",
       });
     }
     if (pending && pending.access !== "read") {
-      notes.push({ key: "pending-missing", text: "Shipped, not invoiced: not included (needs access)", amber: true, testId: "goals-revenue-pending" });
+      notes.push({ key: "pending-missing", text: "Shipped, not invoiced: not included (needs access)", flag: true, testId: "goals-revenue-pending" });
     }
     if (!goal.matchesCard) {
       notes.push({
         key: "moved",
         text: `Sage changed during this refresh, so this can be off from the ${mfg ? "class table" : "card"} until the next one.`,
-        amber: true,
+        flag: true,
       });
     }
   } else {
@@ -195,7 +195,7 @@ export function RevenueBreakdown({ page, scope = "all" }: { page: ReadyPage; sco
   const split = page.revenueByBusinessLine;
   let lines: Row[] | null = null;
   if (split?.state === "waiting") {
-    notes.push({ key: "lines-waiting", text: `Business lines: ${split.waiting}`, amber: true, testId: "goals-revenue-lines" });
+    notes.push({ key: "lines-waiting", text: `Business lines: ${split.waiting}`, flag: true, testId: "goals-revenue-lines" });
   } else if (split) {
     const block = scope === "mfg" ? split.mfg : split.all;
     // When the headline includes shipped-not-invoiced, the estimate folds into the three lines.
@@ -221,12 +221,12 @@ export function RevenueBreakdown({ page, scope = "all" }: { page: ReadyPage; sco
       notes.push({
         key: "fg",
         text: "The MRP finished-good list can’t be read, so nothing is counted as Manufacturing. 3PL charges still count as Services.",
-        amber: true,
+        flag: true,
         testId: "goals-finished-goods-unavailable",
       });
     }
     if (split.ambiguousCodes.length > 0) {
-      notes.push({ key: "ambiguous", text: `Counted as Manufacturing (also a 3PL code): ${split.ambiguousCodes.join(", ")}.`, amber: true });
+      notes.push({ key: "ambiguous", text: `Counted as Manufacturing (also a 3PL code): ${split.ambiguousCodes.join(", ")}.`, flag: true });
     }
     if (split.unitemizedInvoices > 0) {
       notes.push({
@@ -315,7 +315,7 @@ export function RevenueBreakdown({ page, scope = "all" }: { page: ReadyPage; sco
         ) : (
           <ul className="gp-details" aria-labelledby="goals-bd-notes">
             {notes.map((n) => (
-              <li key={n.key} className={n.amber ? "gp-amber" : undefined} data-testid={n.testId}>
+              <li key={n.key} className={n.flag ? "gp-note-flag" : undefined} data-testid={n.testId}>
                 {n.text}
               </li>
             ))}

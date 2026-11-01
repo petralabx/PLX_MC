@@ -385,7 +385,7 @@ describe("the page model and the section", () => {
     expect(empty.shipments).toEqual([]);
   });
 
-  it("renders every row, the ones by hand in amber, chips with counts and the totals", () => {
+  it("renders every row, the ones by hand in violet, chips with counts and the totals", () => {
     const markup = renderToStaticMarkup(createElement(ShipmentList, { page }));
     const text = markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
     expect(text).toContain("Showing 72 of 72 shipments");

@@ -1,17 +1,17 @@
 {
   "name": "plx-design-system",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "channel": "staging",
-  "sourceCommit": "00fe1abc6",
+  "sourceCommit": "81997e0f4",
   "authority": "petralabx/plx-customer-portal",
   "artifacts": [
     {
       "path": "tokens.css",
-      "sha256": "19774f70b4073ffa72e813a8e06c14cea4c0b6ad18ba5dbf73a6161d0e2cfd0a"
+      "sha256": "19fe9674c17440554c98f1daeabbd8530babb5437fdc754d236a261774c6fa32"
     },
     {
       "path": "tokens.ts",
-      "sha256": "ce82aeb349b5a51449d524fc7f886768adc2870a84f743fd77e4cfb700c6f7b5"
+      "sha256": "0584bafac98d3fe2e816390ecca3e75d16dd416868370e109d2b06401681dee8"
     },
     {
       "path": "fonts/MaziusDisplay-Regular.woff2",
@@ -102,5 +102,5 @@
       "sha256": "f3c23212b5d43fe476c52bc75dc76a6b6c72c44741a2beadb214a29e9bad6211"
     }
   ],
-  "integrity": "sha256-7b96dd22f77aaad5e2cab39e3ed663fb65f915785d71eafe5e00e54edd4684a0"
+  "integrity": "sha256-fd05768c541a921f0ee000e70fffd24097fdae7a15ad05329aa1b20779c2eefd"
 }

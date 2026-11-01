@@ -14,14 +14,21 @@ import { amount, compactDollars, compactKg, count, day, dollars, oneDecimal, who
 
 const C = {
   done: "var(--p-accent)",
-  hand: "var(--p-warn)",
+  hand: "var(--p-hand)",
   scheduled: "var(--p-accent-soft)",
   target: "var(--p-ink-2)",
   lastMonth: "var(--p-muted)",
 };
 
-// One colour per size band, in the model's band order; amber stays reserved for entries by hand.
-const BAND_COLORS = ["var(--p-accent)", "var(--p-info)", "var(--p-accent-soft)", "var(--p-hot)"];
+// One colour per size band, in the model's band order (~10,000 · 5,000–8,999 · Under 5,000 · Over 11,000).
+// The bands are sizes, so one forest ramp, darker for bigger batches: status colours mean statuses
+// only (decision 9), and violet stays reserved for entries by hand.
+const BAND_COLORS = [
+  "color-mix(in srgb, var(--p-accent) 72%, var(--p-paper))",
+  "color-mix(in srgb, var(--p-accent) 45%, var(--p-paper))",
+  "var(--p-accent-soft)",
+  "var(--p-accent)",
+];
 
 function dayAxis(page: ReadyPage): ColumnAxis[] {
   return page.model.daily.map((d, i) => {
@@ -74,7 +81,7 @@ export function DailyLine1Chart({ page }: { page: ReadyPage }) {
             <b>{day(d.day)}</b>
             {d.isWorkingDay ? null : <span> · not a working day</span>}
             <span>Completed: {wholeKg(d.line1DoneKg)} kg</span>
-            {d.line1ByHandKg > 0 ? <span className="gp-amber">By hand: {wholeKg(d.line1ByHandKg)} kg</span> : null}
+            {d.line1ByHandKg > 0 ? <span className="gp-hand">By hand: {wholeKg(d.line1ByHandKg)} kg</span> : null}
             <span>Still scheduled: {wholeKg(d.line1ScheduledKg)} kg</span>
           </>
         );
@@ -119,7 +126,7 @@ export function DailyRevenueChart({ page }: { page: ReadyPage }) {
           <>
             <b>{day(d.day)}</b>
             {d.isFuture ? null : <span>Sage: {dollars(d.sageToDateCents)}</span>}
-            {d.isFuture ? null : <span className="gp-amber">With entries by hand: {dollars(d.withHandToDateCents)}</span>}
+            {d.isFuture ? null : <span className="gp-hand">With entries by hand: {dollars(d.withHandToDateCents)}</span>}
             {d.lastMonthToDateCents === null ? null : <span>Last month, same day: {dollars(d.lastMonthToDateCents)}</span>}
             {noTarget ? null : <span>Target to date: {dollars(d.targetToDateCents)}</span>}
           </>

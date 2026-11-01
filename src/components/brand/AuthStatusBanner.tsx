@@ -11,13 +11,13 @@ export type AuthStatusBannerProps = React.HTMLAttributes<HTMLDivElement> & {
 
 const toneClassName: Record<AuthStatusTone, string> = {
   danger:
-    "border-[var(--p-hot)] bg-[var(--p-paper-2)] text-[var(--p-hot)]",
+    "border-[var(--p-hot)] bg-[var(--p-paper-2)] text-[var(--p-hot-text)]",
   info:
-    "border-[var(--p-info)] bg-[var(--p-paper-2)] text-[var(--p-info)]",
+    "border-[var(--p-info)] bg-[var(--p-paper-2)] text-[var(--p-info-text)]",
   success:
-    "border-[var(--p-ok)] bg-[var(--p-paper-2)] text-[var(--p-ok)]",
+    "border-[var(--p-ok)] bg-[var(--p-paper-2)] text-[var(--p-ok-text)]",
   warning:
-    "border-[var(--p-warn)] bg-[var(--p-paper-2)] text-[var(--p-warn)]",
+    "border-[var(--p-warn)] bg-[var(--p-paper-2)] text-[var(--p-warn-text)]",
 };
 
 export function AuthStatusBanner({

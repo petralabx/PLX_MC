@@ -1,7 +1,7 @@
 "use client";
 
 // Goals & Production — shipments this month (TASK-3143): every Sage invoice
-// shipped this month and every counted shipment entered by hand (amber), with
+// shipped this month and every counted shipment entered by hand (violet), with
 // the batch list's search box and filter chips, and totals for the rows shown,
 // worked out as the Revenue card works out revenue. The page model carries
 // the rows; the filter and the totals are pure (lib/reporting/goals/

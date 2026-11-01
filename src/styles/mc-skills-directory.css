@@ -21,7 +21,7 @@
 
 .sk-pill.catalog { color: var(--p-ink-2); }
 .sk-pill.ready { color: var(--p-ok-text); border-color: color-mix(in srgb, var(--p-ok) 30%, transparent); }
-.sk-pill.degraded { color: var(--p-hot); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
+.sk-pill.degraded { color: var(--p-hot-text); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
 
 .sk-banner {
   display: flex;
@@ -45,7 +45,7 @@
 }
 
 .sk-banner-body { flex: 1; color: var(--p-ink-2); line-height: 1.5; }
-.sk-banner-ct { font-weight: 700; color: var(--p-hot); }
+.sk-banner-ct { font-weight: 700; color: var(--p-hot-text); }
 
 .sk-meta-strip {
   display: grid;
@@ -171,12 +171,12 @@
 }
 
 .sk-form-ok {
-  color: var(--p-ok);
+  color: var(--p-ok-text);
   font-size: var(--p-text-small);
 }
 
 .sk-form-error {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   font-size: var(--p-text-small);
 }
 

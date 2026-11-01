@@ -469,7 +469,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
       <div className="insights goals">
         <p className="gp-legend">
           <span className="sw" aria-hidden="true" />
-          Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.
+          Violet marks figures your team entered by hand that aren’t in FileMaker or Sage yet.
         </p>
         {ready ? (
           <div className="gp-tools gp-rate" data-testid="goals-rate">

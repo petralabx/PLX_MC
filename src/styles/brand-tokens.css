@@ -40,19 +40,24 @@
   --p-accent:       #244A39;
   --p-accent-soft:  #BCCFBF;
 
-  --p-ok:           #5C7A55;
-  --p-warn:         #C99340;
-  --p-info:         #5B7B91;
-  --p-hot:          #52606E;
+  /* Status: the vibrant set (v1.7.0, decision 9). Every status shows its
+     shape and its word too. Amber means at risk only; forest never means a
+     status; --p-hot is behind / late and destructive. */
+  --p-ok:           #2BB062;
+  --p-warn:         #D97A00;
+  --p-info:         #2F6FDB;
+  --p-hot:          #A61B1B;
+  --p-hand:         #5B3FD1;
 
   /* Status FOREGROUND shades (CONTRAST-FINDINGS-2026-06-19 remediation):
      the base status tokens double as pill/chip FILL colors, so text use gets
      dedicated darker shades that hold WCAG AA 4.5:1 on every brand surface
      AND on the 12% color-mix chip fills. Keep the base tokens for fills. */
-  --p-ok-text:      #48603F;
-  --p-warn-text:    #7E5C0F;
-  --p-info-text:    #476378;
-  --p-hot-text:     #46535F;
+  --p-ok-text:      #16723C;
+  --p-warn-text:    #8A4B00;
+  --p-info-text:    #1F56B8;
+  --p-hot-text:     #A61B1B;
+  --p-hand-text:    #4B2FB8;
 
   /* Inter, JetBrains Mono, and Mazius Display are self-hosted (next/font/local
      or a runtime @font-face). All are exposed on <html> by app/layout.tsx. */
@@ -98,6 +103,28 @@
 
   --p-field-label-w: 160px;
 
+  /* Navigation shell sizes (ADR-011). */
+  --p-shell-topbar:     48px;
+  --p-shell-sidebar:    248px;
+  --p-shell-sidebar-min:  232px;
+  --p-shell-sidebar-max:  400px;
+  --p-shell-sidebar-snap: 160px;
+  --p-shell-col-count:    40px;
+  --p-shell-col-action:   24px;
+  --p-shell-rail:       56px;
+  --p-shell-rail-touch: 64px;
+  --p-shell-rail-floor: 84px;
+  --p-shell-row:        28px;
+  --p-shell-row-touch:  44px;
+  --p-shell-row-floor:  48px;
+  --p-shell-row-child:  26px;
+  --p-shell-indent:     34px;
+  --p-shell-group-head: 20px;
+  --p-shell-inset:      8px;
+  --p-shell-zone-gap:   10px;
+  --p-shell-icon-rail:  18px;
+  --p-shell-flyout:     264px;
+
   --p-z-drawer:     60;
   --p-z-scrim:      59;
 
@@ -128,12 +155,13 @@
      states (dropdown-menu, command, combobox, badge, ghost buttons) — so dark
      menu hovers were forest-on-forest at 3.80:1. Now 4.51:1. */
   --p-accent-soft:  #264132;
-  /* Lightened from #7A9E6F (2026-08-12): was 4.33:1 on the lightest dark
-     surface (MRP forked paper-2 #2A3329), now 4.59:1. */
-  --p-ok:           #7EA372;
-  --p-warn:         #D9A85C;
-  --p-info:         #7A9DB3;
-  --p-hot:          #8FA0B0;
+  /* The vibrant status set, dark pass (v1.7.0): at least 4.5:1 on every dark
+     surface (MRP forked paper-2 #2A3329 included) and on its own 12% chip. */
+  --p-ok:           #9BE9BB;
+  --p-warn:         #FFC57E;
+  --p-info:         #61B0FF;
+  --p-hot:          #FE828D;
+  --p-hand:         #EDBDFC;
 
   /* Dark scheme: the base status colors are already light-on-dark text-safe,
      so the *-text shades collapse to the base tokens. */
@@ -141,6 +169,7 @@
   --p-warn-text:    var(--p-warn);
   --p-info-text:    var(--p-info);
   --p-hot-text:     var(--p-hot);
+  --p-hand-text:    var(--p-hand);
 
   --p-scrim:        rgba(0, 0, 0, 0.6);
 }

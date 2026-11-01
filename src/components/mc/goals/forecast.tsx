@@ -36,8 +36,8 @@ import { amount, count, day, dollars, plural, price, type ReadyPage } from "./he
 /** Quantities to two places at most ("6,000", "12.5"). */
 const qty = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
-/** Ready reads as done, Planned in time as on the way, Late and Not planned as at risk (never amber: that means "by hand"). */
-const CHIP: Record<ForecastBucket, string> = { ready: "ok", planned: "info", late: "hot", not_planned: "hot" };
+/** Decision 9: Ready is on track (green), Planned in time is information (blue), Late is behind (red), Not planned is at risk (amber). */
+const CHIP: Record<ForecastBucket, string> = { ready: "ok", planned: "info", late: "hot", not_planned: "warn" };
 
 export function ForecastSection({ page }: { page: ReadyPage }) {
   const forecast: ForecastView | null = page.forecast;

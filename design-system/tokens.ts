@@ -34,17 +34,19 @@ export const lightTokens = {
   accent:       '#244A39',
   accentSoft:   '#BCCFBF',
 
-  // status
-  ok:           '#5C7A55',
-  warn:         '#C99340',
-  info:         '#5B7B91',
-  hot:          '#52606E',
+  // status — the vibrant set (v1.7.0, decision 9); each also shows its shape and word
+  ok:           '#2BB062',
+  warn:         '#D97A00',
+  info:         '#2F6FDB',
+  hot:          '#A61B1B',
+  hand:         '#5B3FD1',   // figures entered by hand (diagonal hatch)
 
   // status foreground shades (AA text on surfaces + 12% chip fills)
-  okText:       '#48603F',
-  warnText:     '#7E5C0F',
-  infoText:     '#476378',
-  hotText:      '#46535F',
+  okText:       '#16723C',
+  warnText:     '#8A4B00',
+  infoText:     '#1F56B8',
+  hotText:      '#A61B1B',
+  handText:     '#4B2FB8',
 
   // scrim — drawer/sheet backdrop wash
   scrim:        'rgba(27, 26, 23, 0.5)',
@@ -63,14 +65,16 @@ export const darkTokens = {
   grid2:        'rgba(241, 236, 224, 0.06)',
   accent:       '#7AB18C',
   accentSoft:   '#264132',   // darkened 2026-08-12 so --p-accent reads AA on it (was #2D4D3B)
-  ok:           '#7EA372',   // lightened 2026-08-12 for AA on MRP dark paper-2 (was #7A9E6F)
-  warn:         '#D9A85C',
-  info:         '#7A9DB3',
-  hot:          '#8FA0B0',
+  ok:           '#9BE9BB',   // v1.7.0 dark pass: >= 4.5:1 on every dark surface and its 12% chip
+  warn:         '#FFC57E',
+  info:         '#61B0FF',
+  hot:          '#FE828D',
+  hand:         '#EDBDFC',
   okText:       'var(--p-ok)',
   warnText:     'var(--p-warn)',
   infoText:     'var(--p-info)',
   hotText:      'var(--p-hot)',
+  handText:     'var(--p-hand)',
   scrim:        'rgba(0, 0, 0, 0.6)',
 } as const;
 
@@ -134,6 +138,30 @@ export const layout = {
   fieldLabelW: '160px',
 } as const;
 
+/** Navigation shell sizes both apps implement (ADR-011). Breakpoints stay literal. */
+export const shell = {
+  topbar:     '48px',
+  sidebar:    '248px',
+  sidebarMin: '232px',
+  sidebarMax: '400px',
+  sidebarSnap: '160px',
+  colCount:   '40px',
+  colAction:  '24px',
+  rail:       '56px',
+  railTouch:  '64px',
+  railFloor:  '84px',
+  row:        '28px',
+  rowTouch:   '44px',
+  rowFloor:   '48px',
+  rowChild:   '26px',
+  indent:     '34px',
+  groupHead:  '20px',
+  inset:      '8px',
+  zoneGap:    '10px',
+  iconRail:   '18px',
+  flyout:     '264px',
+} as const;
+
 /** Layering — chrome contract (drawer above backdrop; see CONTRIBUTING §2). */
 export const layer = {
   drawer: '60',
@@ -156,6 +184,7 @@ export const cssVar = {
   warn:        'var(--p-warn)',
   info:        'var(--p-info)',
   hot:         'var(--p-hot)',
+  hand:        'var(--p-hand)',
   fontSerif:   'var(--p-font-serif)',
   fontSans:    'var(--p-font-sans)',
   fontMono:    'var(--p-font-mono)',

@@ -32,7 +32,7 @@
 }
 
 .arch-pill.ro {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   border-color: color-mix(in srgb, var(--p-hot) 30%, transparent);
 }
 
@@ -220,7 +220,7 @@
   padding: var(--p-space-3) var(--p-space-4);
   border: 1px solid color-mix(in srgb, var(--p-hot) 40%, transparent);
   background: color-mix(in srgb, var(--p-hot) 8%, var(--p-canvas));
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   font-family: var(--mono);
   font-size: var(--p-text-small);
   line-height: 1.5;
@@ -550,12 +550,12 @@
 
 .arch-badge-ok {
   background: color-mix(in srgb, var(--p-ok) 15%, var(--p-paper));
-  color: var(--p-ok);
+  color: var(--p-ok-text);
 }
 
 .arch-badge-warn {
   background: color-mix(in srgb, var(--p-warn) 15%, var(--p-paper));
-  color: var(--p-warn);
+  color: var(--p-warn-text);
 }
 
 .arch-badge-info {
@@ -730,7 +730,7 @@
 }
 
 .arch-detail-claim-link {
-  color: var(--p-info);
+  color: var(--p-info-text);
   font-size: var(--p-text-meta);
 }
 

@@ -123,7 +123,7 @@
 }
 
 .mc .feed .frow .fchip.live {
-  color: var(--p-ok);
+  color: var(--p-ok-text);
   border-color: var(--p-ok);
   display: inline-flex;
   align-items: center;
@@ -131,7 +131,7 @@
 }
 
 .mc .feed .frow .fchip.warn {
-  color: var(--p-warn);
+  color: var(--p-warn-text);
   border-color: var(--p-warn);
 }
 
@@ -2124,7 +2124,7 @@
   font-size: var(--p-text-cap);
   letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
-  color: var(--p-warn);
+  color: var(--p-warn-text);
   border: 1px solid var(--p-warn);
   padding: 3px 7px;
 }
@@ -2134,7 +2134,7 @@
   font-size: var(--p-text-cap);
   letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
-  color: var(--p-ok);
+  color: var(--p-ok-text);
   border: 1px solid var(--p-ok);
   padding: 3px 7px;
 }

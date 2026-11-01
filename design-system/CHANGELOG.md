@@ -1,5 +1,109 @@
 # PLX Design System changelog
 
+## 1.7.0 — 2026-10-31
+
+**The vibrant status set, and violet for figures entered by hand.** Decision 9
+(Vince, TASK-4387) replaces the earth-toned status palette. Each colour has one
+meaning, and every status shows its shape and its word as well. Amber means at
+risk and nothing else; forest stays the brand accent and never means a status.
+[ADR-012](../docs/design-system/decisions/ADR-012-vibrant-status-set.md)
+supersedes ADR-001 §3. Ten value changes and two new tokens, `--p-hand` and
+`--p-hand-text`, in `tokens.css` and `tokens.ts`. No renames or removals.
+
+| Token | Was | Now | Shape · meaning |
+|---|---|---|---|
+| `--p-ok` / `-text` | `#5C7A55` / `#48603F` | `#2BB062` / `#16723C` | circle · on track, ready |
+| `--p-warn` / `-text` | `#C99340` / `#7E5C0F` | `#D97A00` / `#8A4B00` | square · at risk, not planned |
+| `--p-hot` / `-text` | `#52606E` / `#46535F` | `#A61B1B` / `#A61B1B` | triangle · behind, late; destructive |
+| `--p-info` / `-text` | `#5B7B91` / `#476378` | `#2F6FDB` / `#1F56B8` | outlined circle · information, planned |
+| `--p-hand` / `-text` | new | `#5B3FD1` / `#4B2FB8` | diagonal hatch · entered by hand |
+| `.dark --p-ok` | `#7EA372` | `#9BE9BB` | |
+| `.dark --p-warn` | `#D9A85C` | `#FFC57E` | |
+| `.dark --p-hot` | `#8FA0B0` | `#FE828D` | |
+| `.dark --p-info` | `#7A9DB3` | `#61B0FF` | |
+| `.dark --p-hand` | new | `#EDBDFC` | |
+
+Dark text shades stay `var(--p-<status>)`, and `--p-hand-text` follows the same
+rule.
+
+**Checks.**
+
+- **Light text.** Every text shade holds 4.5:1 on every light surface and on its
+  own 12% chip fill. `--p-ok-text` is one step darker than the proposed
+  `#17733D`, which read 4.48:1 on its chip over `--p-rail`.
+- **Dark.** Every dark value holds 4.5:1 on every dark surface, MRP's
+  `#2A3329` included, and on its own chip. White on the dark destructive
+  button's 60% `--p-hot` fill holds 4.54:1 over each of those surfaces.
+- **Colour blindness.**
+  - Under deuteranopia, violet and blue are ΔE 5.5 apart in light mode, and
+    the worst dark pair is ΔE 7.6 (OKLab ×100).
+  - The light green and amber fills are 2.7:1 and 3.0:1 on paper.
+  - So a status is never colour alone: its shape and its word carry it.
+
+**What changes on screen.** Every surface that uses the status tokens changes
+colour. In the portal, 108 places in 23 files coloured text with a base status
+token (`color: var(--p-ok)`, `text-[var(--p-ok)]`); they now use the `-text`
+shades, as the token comments always said, because green text on the new fill
+would read 2.68:1. Fills, borders and marks keep the base tokens. Five solid
+badges and buttons that carried a label on a status fill now fill with the
+`-text` shade and set the label in `--p-paper`; white on the new green fill is
+2.8:1. The chief-of-staff panel and the SoapBox deck pin their own palettes and
+keep them. `npm run audit:tokens` now fails on a base status token used as a
+text colour outside those pinned files. Inside `.brand-plx`, shadcn's `--destructive` maps to `--p-hot`, so
+destructive buttons and errors turn red. Hard-coded status hex values, such as
+the email theme, keep their old colours until they move to the tokens. Medium
+severity (ADR-003) and Open tickets (ADR-004) still render amber; they move in
+follow-ups.
+
+## 1.6.0 — 2026-10-29
+
+**Sizes for the v2 sidebar.** Additive only: 5 new `--p-shell-*` size tokens,
+and the same 5 in the `shell` export of `tokens.ts`. No existing value changed,
+and no colour was added. The ADR-011 amendment for the v2 sidebar
+(`docs/design-system/decisions/ADR-011-plx-shell-contract.md`, Width and Row
+grid, revised by TASK-4010) is the contract. TASK-3959 ships it.
+
+| Token | Value | Use |
+|---|---|---|
+| `--p-shell-sidebar-min` | 232px | narrowest sidebar a person can drag to |
+| `--p-shell-sidebar-max` | 400px | widest sidebar |
+| `--p-shell-sidebar-snap` | 160px | released below this, the sidebar collapses to the rail |
+| `--p-shell-col-count` | 40px | row grid: count column |
+| `--p-shell-col-action` | 24px | row grid: action column |
+
+The default width stays `--p-shell-sidebar`, 248px. Until an app pins 1.6.0, it
+writes each value as the fallback, for example `var(--p-shell-col-count, 40px)`.
+
+**Kit fix.** In the brand kits for 1.4.0 and 1.5.0, `tokens.css` had a
+secret-scan pragma written as a comment inside the header's comment. Its `*/`
+closed the header early, so a browser dropped the first `:root` rule, the light
+palette. The 1.6.0 kit writes the pragma as plain text inside the header.
+`design-system/tokens.css` and the portal's runtime copy never had it.
+
+## 1.5.0 — 2026-10-24
+
+**Shell sizes for the shared PLX navigation shell.** Additive only: 15 new
+`--p-shell-*` size tokens, plus a matching `shell` export in `tokens.ts`. No
+existing value changed, and no colour was added. ADR-011
+(`docs/design-system/decisions/ADR-011-plx-shell-contract.md`) is the contract
+both MRP and Mission Control implement: zones, row states, behaviour, keys and
+responsive forms.
+
+| Token | Value | Use |
+|---|---|---|
+| `--p-shell-topbar` | 48px | top bar |
+| `--p-shell-sidebar` | 248px | expanded sidebar |
+| `--p-shell-rail` / `-rail-touch` / `-rail-floor` | 56 / 64 / 84px | collapsed rail: pointer, touch, floor mode |
+| `--p-shell-row` / `-row-touch` / `-row-floor` | 28 / 44 / 48px | row heights |
+| `--p-shell-row-child` / `--p-shell-indent` | 26 / 34px | work-tree child rows |
+| `--p-shell-group-head` | 20px | group heading |
+| `--p-shell-inset` / `--p-shell-zone-gap` | 8 / 10px | spacing |
+| `--p-shell-icon-rail` | 18px | rail icons (row icons keep `--p-icon`) |
+| `--p-shell-flyout` | 264px | flyout width |
+
+Consumers pick the tokens up through their pinned bundle. Nothing renders
+differently until an app's navigation phase uses them.
+
 ## 1.4.0 — 2026-09-01
 
 **Office gets the real brand faces.** No token values changed. The Office

@@ -170,14 +170,16 @@ describe("project.close_prompt event", () => {
 });
 
 describe("showProjectClosePrompt (the project screen's banner)", () => {
-  it("shows only to the project's owner", () => {
-    const project = { owner: "stephen", status: "active" as const };
+  it("shows only to the project's owner, stored as a directory id or an email in any case", () => {
     const done = [{ stage: "merged" as const }];
-    expect(showProjectClosePrompt(project, done, "stephen")).toBe(true);
-    expect(showProjectClosePrompt(project, done, "ricardo")).toBe(false);
-    expect(showProjectClosePrompt(project, done, null)).toBe(false);
-    expect(showProjectClosePrompt({ owner: null, status: "active" }, done, "stephen")).toBe(false);
-    expect(showProjectClosePrompt(project, [{ stage: "review" }], "stephen")).toBe(false);
+    const stephen = { id: "stephen", email: "stephen@petrasoap.com" };
+    for (const owner of ["stephen", "Stephen", "stephen@petrasoap.com", "STEPHEN@petrasoap.com"]) {
+      expect(showProjectClosePrompt({ owner, status: "active" }, done, stephen)).toBe(true);
+    }
+    expect(showProjectClosePrompt({ owner: "stephen", status: "active" }, done, { id: "ricardo", email: "ricardo@petrasoap.com" })).toBe(false);
+    expect(showProjectClosePrompt({ owner: "stephen", status: "active" }, done, null)).toBe(false);
+    expect(showProjectClosePrompt({ owner: null, status: "active" }, done, stephen)).toBe(false);
+    expect(showProjectClosePrompt({ owner: "stephen", status: "active" }, [{ stage: "review" }], stephen)).toBe(false);
   });
 });
 

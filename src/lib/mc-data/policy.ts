@@ -77,13 +77,20 @@ export function projectReadyToClose(
   return tasks.length > 0 && !tasks.some(isOpenInRollup);
 }
 
-/** The project screen's close prompt: shown only to the project's owner (TASK-4005). */
+/**
+ * The project screen's close prompt: shown only to the project's owner (TASK-4005).
+ * Project owners are stored as a directory id or an email, in any case ("vince",
+ * "Vince", "vince@petrasoap.com"), so the viewer matches on either, without case.
+ */
 export function showProjectClosePrompt(
   project: { owner?: string | null; status?: "active" | "closed"; archivedAt?: string | null } | null | undefined,
   tasks: readonly RollupTask[],
-  viewerId: string | null | undefined
+  viewer: { id: string; email?: string | null } | null | undefined
 ): boolean {
-  return !!viewerId && !!project?.owner && viewerId === project.owner && projectReadyToClose(project, tasks);
+  const owner = project?.owner?.trim().toLowerCase();
+  if (!owner || !viewer) return false;
+  const isOwner = owner === viewer.id.trim().toLowerCase() || owner === viewer.email?.trim().toLowerCase();
+  return isOwner && projectReadyToClose(project, tasks);
 }
 
 export function countTaskProgress(tasks: readonly RollupTask[]): TaskProgressCounts {

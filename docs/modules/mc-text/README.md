@@ -31,7 +31,10 @@ were hard to read and nothing was clickable (design review 2026-10-31, the
   `parseMarkdown` with `breaks: true`, so a single line break inside a
   paragraph stays one. An underscore inside a word never opens or closes
   emphasis (CommonMark), so `snake_case`, gate ids and underscored URLs stay
-  intact; SOP pages get the same rule.
+  intact; SOP pages get the same rule. A bare URL is masked before inline
+  Markdown, so no marker opens or closes inside it. Trailing punctuation and
+  delimiters stay outside the mask (GFM), so `**see https://x.com/a**` still
+  closes, and a backtick ends a URL, so a code span around one closes too.
 - `src/components/mc/mc-text.tsx` `McText`: renders the blocks. A paragraph
   that is only bold, and a markdown heading, render as a section heading
   (`.mct-h`); a checklist item says "Done:" or "To do:" to screen readers. In-app

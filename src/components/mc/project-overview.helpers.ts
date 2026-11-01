@@ -99,6 +99,73 @@ export function filterCounts(tasks: readonly Task[]): Record<TaskFilterKey, numb
   return { open: tasks.filter(isOutstanding).length, human: tasks.filter(needsHuman).length, all: tasks.length };
 }
 
+// ─── Due filter (TASK-4392) ─────────────────────────────────────────────────
+// The project overview filters by due date as well as status. Overdue is an
+// outstanding task (the status filter's rule, so a merged UAT fix awaiting
+// re-test still counts) past its due date; "week" is Monday to Sunday around
+// today; "next14" is today and the 13 days after; "none" has no readable due
+// date. Insights' isOverdue reads days on its fixed June demo grid, so it
+// cannot take a real today.
+
+export type DueFilterKey = "any" | "overdue" | "week" | "next14" | "none";
+
+export const DUE_FILTERS: ReadonlyArray<{ key: DueFilterKey; label: string }> = [
+  { key: "any", label: "Any date" },
+  { key: "overdue", label: "Overdue" },
+  { key: "week", label: "This week" },
+  { key: "next14", label: "Next 14 days" },
+  { key: "none", label: "No due date" },
+];
+
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDaysTo = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const ROLL_MS = 300 * 86_400_000;
+
+/**
+ * A task's due date as a local day. A label without a year ("Jan 02", the form
+ * MC stores) is read in the current year, as the sync reads it (dueToIso). Only
+ * when that puts it more than 300 days away does it roll to the nearer year, so
+ * the windows hold across New Year (on Dec 30 "Jan 02" is next week, and on
+ * Jan 3 "Dec 20" is two weeks late) and a task months overdue stays overdue.
+ */
+export function dueDate(raw: string | null | undefined, today: Date): Date | null {
+  const year = today.getFullYear();
+  const due = parseMcDate(raw, year);
+  if (!due || /\d{4}/.test(raw ?? "")) return due;
+  const gap = due.getTime() - today.getTime();
+  if (gap > ROLL_MS) return parseMcDate(raw, year - 1);
+  if (gap < -ROLL_MS) return parseMcDate(raw, year + 1);
+  return due;
+}
+
+/** The Due choices one task matches, besides "any": none, or its windows. */
+function dueKeys(task: Pick<Task, "due" | "stage" | "labels">, today: Date): DueFilterKey[] {
+  const due = dueDate(task.due, today);
+  if (due === null) return ["none"];
+  const keys: DueFilterKey[] = [];
+  if (due < today && isOutstanding(task)) keys.push("overdue");
+  const monday = addDaysTo(today, -((today.getDay() + 6) % 7));
+  if (due >= monday && due < addDaysTo(monday, 7)) keys.push("week");
+  if (due >= today && due < addDaysTo(today, 14)) keys.push("next14");
+  return keys;
+}
+
+export function matchesDue(task: Pick<Task, "due" | "stage" | "labels">, key: DueFilterKey, now: Date): boolean {
+  return key === "any" || dueKeys(task, dayStart(now)).includes(key);
+}
+
+export function filterDue<T extends Pick<Task, "due" | "stage" | "labels">>(tasks: readonly T[], key: DueFilterKey, now: Date): T[] {
+  return key === "any" ? [...tasks] : tasks.filter((t) => matchesDue(t, key, now));
+}
+
+/** Each Due choice's count, in one pass over the tasks. */
+export function dueCounts(tasks: readonly Pick<Task, "due" | "stage" | "labels">[], now: Date): Record<DueFilterKey, number> {
+  const out: Record<DueFilterKey, number> = { any: tasks.length, overdue: 0, week: 0, next14: 0, none: 0 };
+  const today = dayStart(now);
+  for (const task of tasks) for (const key of dueKeys(task, today)) out[key] += 1;
+  return out;
+}
+
 // The rows a capped TaskTable shows: the cap applies to the outstanding rows
 // and the revealed closed rows separately, so "Show closed" always shows some.
 export function cappedRows<T>(tasks: readonly T[], closed: readonly T[], cap: number): T[] {

@@ -19,6 +19,7 @@ import { useMcVersion } from "@/lib/mc-data/hooks";
 import { allRisks, allTasks, bucketsForProject, projectById, pushNotice, updateProject } from "@/lib/mc-data/store";
 
 import { Avatar, HealthPill, SyncTick } from "./atoms";
+import { McText } from "./mc-text";
 import { OverviewStrip, StripFact, StripHealthSelect } from "./overview-strip";
 import { PeoplePicker } from "./people-picker";
 import { ProjectOverview, SPEC_ICON } from "./project-overview";
@@ -113,8 +114,8 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
               </div>
             </div>
           ) : (
-            <p className="sub">
-              {project.desc || "No description yet."}{" "}
+            <div className="sub ph-desc">
+              {project.desc ? <McText text={project.desc} nav={nav} testId="project-desc" /> : <span>No description yet. </span>}
               <button
                 type="button"
                 className="tl-link"
@@ -125,7 +126,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
               >
                 {project.desc ? "Edit" : "Add description"}
               </button>
-            </p>
+            </div>
           )}
         </div>
         <div className="r">

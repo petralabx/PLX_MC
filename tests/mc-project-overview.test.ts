@@ -25,6 +25,10 @@ import {
   schedulePace,
   shortDate,
   stageChipTone,
+  dueCounts,
+  dueDate,
+  filterDue,
+  matchesDue,
 } from "@/components/mc/project-overview.helpers";
 import { ProjectOverview } from "@/components/mc/project-overview";
 import { TaskTable } from "@/components/mc/task-table";
@@ -382,5 +386,62 @@ describe("section header CSS at the phone tier", () => {
     const block = css.slice(start, css.indexOf("\n}\n", start));
     expect(block).toMatch(/\.pv-sec-r \.track \.bar \{[^}]*flex: 0 1 96px;[^}]*min-width: 48px;/);
     expect(block).toMatch(/\.pv-sec-r \.track \.ct \{[^}]*min-width: 0;[^}]*white-space: normal;/);
+  });
+});
+
+describe("due filter (TASK-4392)", () => {
+  // Saturday 31 Oct 2026: this week is Monday 26 Oct to Sunday 1 Nov.
+  const now = new Date(2026, 9, 31, 15, 0);
+  const base = TASKS[0];
+  const t = (due: string | undefined, stage: Task["stage"] = "planned"): Task => ({ ...base, due: due ?? "", stage, labels: [] });
+
+  it("sorts a task into overdue, this week, the next 14 days or no due date", () => {
+    expect(matchesDue(t("Oct 20"), "overdue", now)).toBe(true);
+    expect(matchesDue(t("Oct 20", "merged"), "overdue", now)).toBe(false); // finished work is never overdue
+    expect(matchesDue(t("Oct 31"), "overdue", now)).toBe(false); // due today is not late yet
+    expect(matchesDue(t("Oct 26"), "week", now)).toBe(true);
+    expect(matchesDue(t("Nov 01"), "week", now)).toBe(true);
+    expect(matchesDue(t("Nov 02"), "week", now)).toBe(false);
+    expect(matchesDue(t("Oct 25"), "week", now)).toBe(false);
+    expect(matchesDue(t("Oct 31"), "next14", now)).toBe(true);
+    expect(matchesDue(t("Nov 13"), "next14", now)).toBe(true);
+    expect(matchesDue(t("Nov 14"), "next14", now)).toBe(false);
+    expect(matchesDue(t("2026-11-05"), "next14", now)).toBe(true);
+    expect(matchesDue(t(undefined), "none", now)).toBe(true);
+    expect(matchesDue(t("someday"), "none", now)).toBe(true);
+    expect(matchesDue(t("Oct 20"), "none", now)).toBe(false);
+    expect(matchesDue(t(undefined), "week", now)).toBe(false);
+    expect(matchesDue(t(undefined), "any", now)).toBe(true);
+  });
+
+  it("counts every choice, and filterDue keeps what it counts", () => {
+    const tasks = [t("Oct 20"), t("Oct 27"), t("Nov 10"), t(undefined), t("Oct 20", "merged")];
+    const counts = dueCounts(tasks, now);
+    // Oct 27 is in this week and already past due, so it counts under both.
+    expect(counts).toEqual({ any: 5, overdue: 2, week: 1, next14: 1, none: 1 });
+    for (const key of ["any", "overdue", "week", "next14", "none"] as const) {
+      expect(filterDue(tasks, key, now)).toHaveLength(counts[key]);
+    }
+  });
+
+  it("reads a due label without a year in the current year, rolling only at the New Year edge", () => {
+    const dec30 = new Date(2026, 11, 30, 9, 0); // Wednesday: this week is Dec 28 to Jan 3
+    expect(matchesDue(t("Jan 02"), "overdue", dec30)).toBe(false);
+    expect(matchesDue(t("Jan 02"), "week", dec30)).toBe(true);
+    expect(matchesDue(t("Jan 05"), "next14", dec30)).toBe(true);
+    const jan3 = new Date(2027, 0, 3, 9, 0);
+    expect(matchesDue(t("Dec 20"), "overdue", jan3)).toBe(true);
+    expect(matchesDue(t("Dec 20"), "next14", jan3)).toBe(false);
+    // A written year is never moved.
+    expect(matchesDue(t("Jan 02, 2026"), "overdue", dec30)).toBe(true);
+    expect(dueDate("Jan 02", dec30)).toEqual(new Date(2027, 0, 2));
+    expect(dueDate("Dec 20", jan3)).toEqual(new Date(2026, 11, 20));
+    expect(dueDate("Jun 15", new Date(2026, 9, 31))).toEqual(new Date(2026, 5, 15));
+    // Months overdue stays overdue: on Jul 10, "Jan 05" is this January, not next.
+    const jul10 = new Date(2026, 6, 10, 9, 0);
+    expect(dueDate("Jan 05", jul10)).toEqual(new Date(2026, 0, 5));
+    expect(matchesDue(t("Jan 05"), "overdue", jul10)).toBe(true);
+    // A deadline months ahead stays ahead: on Jan 3, "Aug 31" is this August.
+    expect(dueDate("Aug 31", jan3)).toEqual(new Date(2027, 7, 31));
   });
 });

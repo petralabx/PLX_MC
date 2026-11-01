@@ -27,7 +27,8 @@
 // writing the artifact to the local offline queue
 // (artifacts/session-brain/<date>/<session_id>.json) and always exits 0.
 //
-// Kill switch: SESSION_BRAIN_ENABLED=0 disables capture and exits 0 immediately
+// Kill switch: SESSION_BRAIN_ENABLED=0 disables the artifact capture and exits 0
+// immediately (session telemetry has its own switch, below)
 // (default enabled — unlike compliance-checkout.mjs, this hook ships on by
 // default per the session-knowledge-artifact governance policy).
 //
@@ -35,6 +36,11 @@
 //   SESSION_BRAIN_ENABLED   set to "0" to disable capture (default: enabled)
 //   VMC_BASE_URL            VMC base URL (default: https://missioncontrol.tayloralton.com)
 //   VMC_API_KEY             VMC API key (required to deliver; missing -> queue)
+//
+// Session telemetry (TASK-4273): the CLI also runs reportTelemetry from
+// scripts/session-telemetry.mjs, which reports one mc_report_session_telemetry
+// row per session. Its own kill switch is SESSION_TELEMETRY_ENABLED=0;
+// SESSION_BRAIN_ENABLED switches only the artifact. See that file for its env.
 //
 // Node stdlib only (global fetch + node:fs/node:path/node:crypto/node:child_process).
 
@@ -51,6 +57,8 @@ const DEFAULT_VMC_BASE_URL = "https://missioncontrol.tayloralton.com";
 const DEFAULT_DEADLINE_MS = 5000;
 const GIT_TIMEOUT_MS = 1500;
 const STDIN_TIMEOUT_MS = 1000;
+// The whole hook, stdin included, ends inside the 8 s Cursor sessionEnd timeout (TASK-4273).
+const HOOK_BUDGET_MS = 7500;
 const TRANSCRIPT_HEAD_BYTES = 64 * 1024;
 const MAX_COMMITS = 50;
 const OFFLINE_QUEUE_DIR = "artifacts/session-brain";
@@ -351,12 +359,21 @@ function readStdin(timeoutMs = STDIN_TIMEOUT_MS) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const runtimeFlag = process.argv.indexOf("--runtime");
   readStdin()
-    .then((raw) =>
-      closeout({
-        payload: parseHookPayload(raw),
-        runtime: runtimeFlag >= 0 ? process.argv[runtimeFlag + 1] : "cursor",
-      })
-    )
+    .then(async (raw) => {
+      const payload = parseHookPayload(raw);
+      const runtime = runtimeFlag >= 0 ? process.argv[runtimeFlag + 1] : "cursor";
+      // The artifact and the telemetry row go out together, inside the hook timeout.
+      // Loaded here, not imported at the top, so a broken telemetry module never stops the artifact.
+      const telemetry = import("./session-telemetry.mjs").then(({ reportTelemetry }) =>
+        // The budget runs from process start, so reading stdin counts against it too, and the
+        // whole hook ends inside the shorter (8 s, Cursor) hook timeout.
+        reportTelemetry({ payload, runtime, cwd: REPO_ROOT, budgetMs: HOOK_BUDGET_MS - process.uptime() * 1000 })
+      );
+      const results = await Promise.allSettled([closeout({ payload, runtime }), telemetry]);
+      for (const r of results) {
+        if (r.status === "rejected") console.error(`[session-brain] unexpected error (fail-open, ignored): ${r.reason?.message}`);
+      }
+    })
     .catch((e) => {
       // Fail-open: a session-end hook must never break the session.
       console.error(`[session-brain] unexpected error (fail-open, ignored): ${e.message}`);

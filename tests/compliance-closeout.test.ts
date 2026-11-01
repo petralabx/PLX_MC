@@ -278,6 +278,8 @@ describe("compliance-closeout fail-open", () => {
     mkdirSync(path.join(dir, "scripts"));
     const cli = path.join(dir, "scripts", "compliance-closeout.mjs");
     copyFileSync(scriptPath, cli);
+    // The CLI imports its sibling (TASK-4273).
+    copyFileSync(path.join(path.dirname(scriptPath), "session-telemetry.mjs"), path.join(dir, "scripts", "session-telemetry.mjs"));
     const env = { ...process.env, VMC_API_KEY: "", SESSION_BRAIN_ENABLED: "1" };
     const ok = spawnSync(process.execPath, [cli, "--runtime", "claude-code"], {
       cwd: dir,

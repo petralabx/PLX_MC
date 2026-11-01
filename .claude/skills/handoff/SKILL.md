@@ -32,7 +32,9 @@ Bring this branch's workstream note up to date. The note is the agents' working 
 5. Commit the note on this branch with the work it describes, using the repo's commit rules
    (Mission Control trailers included).
 6. If this hands the workstream to another team or agent family, or closes it, also file the
-   handoff in SharePoint `Agent Handoffs/` as the repo's rules describe. SharePoint wins when
-   the two disagree.
+   handoff in SharePoint, on the PLX site (https://petrasoap.sharepoint.com/sites/PLXSite),
+   library `Systems`, folder `Agent Handoffs/{agent}/`, named
+   `YYYY-MM-DD_COR_PLX <Title>_v01.md`. Never write to the retired VincePersonal
+   `Agent_Handoffs` folders. SharePoint wins when the two disagree.
 
 Report the note path and the three most important next steps to the user.

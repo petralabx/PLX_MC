@@ -16,5 +16,7 @@ alwaysApply: false
 - Replace stale text instead of appending a diary. Git history keeps the old versions.
 - Change the index row in `README.md` only when a workstream opens, closes or changes status.
 - SharePoint `Agent Handoffs/` is the system of record. When it disagrees with a note, fix the
-  note.
+  note. It lives on the PLX site (https://petrasoap.sharepoint.com/sites/PLXSite), library
+  `Systems`, folder `Agent Handoffs/{agent}/`, file `YYYY-MM-DD_COR_PLX <Title>_v01.md`; the
+  VincePersonal `Agent_Handoffs` folders are retired.
 - Run `node scripts/workstream-note.mjs check` after editing.

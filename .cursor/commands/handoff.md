@@ -14,4 +14,6 @@ pick it up.
 3. Update the index row only if the status changed or the workstream opened or closed.
 4. Run `node scripts/workstream-note.mjs check`, then commit the note with the work.
 5. SharePoint `Agent Handoffs/` is the system of record for durable handoffs; file there too when
-   the workstream closes or changes hands.
+   the workstream closes or changes hands. File on the PLX site (https://petrasoap.sharepoint.com/sites/PLXSite), library `Systems`, folder
+   `Agent Handoffs/{agent}/`, named `YYYY-MM-DD_COR_PLX <Title>_v01.md`. Never write to the retired
+   VincePersonal `Agent_Handoffs` folders.

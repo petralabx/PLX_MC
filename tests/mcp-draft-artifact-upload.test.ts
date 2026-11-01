@@ -255,6 +255,14 @@ describe("mc_upload_draft_artifact", () => {
     expect((await read("DRF-1")).body.data.draft.working.research.artifacts).toEqual([]);
   });
 
+  // TASK-4421: the envelope carries Graph's Retry-After to the caller.
+  it("returns retryAfterMs in the error envelope when SharePoint throttles", async () => {
+    await newDraft();
+    h.uploadError = new GraphError(429, "slow down", "https://graph.microsoft.com/v1.0/drives/drive-mc", 4_000);
+    const res = await upload(diagram);
+    expect(res).toMatchObject({ status: 503, body: { error: { code: "evidence_store_unavailable", retryAfterMs: 4_000 } } });
+  });
+
   it("runs over HTTP MCP too", async () => {
     await newDraft();
     const res = await mcpPost(

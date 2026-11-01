@@ -349,6 +349,35 @@ describe("mc_upload_evidence", () => {
     await expect(upload()).rejects.toBeInstanceOf(TypeError);
     expect(h.patched).toHaveLength(0);
   });
+
+  // TASK-4421: throttling tells the caller when to retry; MC does not retry itself.
+  it("returns Graph's Retry-After as retryAfterMs on a 429 or 503, without retrying", async () => {
+    h.siteError = new GraphError(429, "slow down", "https://graph/sites", 7_000);
+    await expect(upload()).rejects.toMatchObject({
+      code: "evidence_store_unavailable",
+      status: 503,
+      retryAfterMs: 7_000,
+      message: expect.stringMatching(/Try again after 7 s/),
+    });
+    expect(driveIdByName).not.toHaveBeenCalled();
+    h.siteError = new GraphError(503, "busy", "https://graph/sites", 1_500);
+    await expect(upload()).rejects.toMatchObject({ retryAfterMs: 1_500 });
+    h.siteError = new GraphError(500, "boom", "https://graph/sites", 1_500);
+    await expect(upload()).rejects.toMatchObject({ retryAfterMs: undefined });
+  });
+
+  it("forgets the cached drive id on a 404, so a recreated library is found again", async () => {
+    await upload();
+    const graph = await import("@/lib/sync/graph");
+    vi.mocked(graph.uploadSmallDriveFile).mockRejectedValueOnce(new GraphError(404, "gone", "https://graph/drives/drive-mc"));
+    h.task = { ...h.task, evidence: { summary: "s", items: [], artifacts: [] } };
+    await expect(upload({ fileName: "second.svg", contentBase64: Buffer.from(svg + " ").toString("base64") })).rejects.toMatchObject({
+      code: "evidence_store_unavailable",
+    });
+    h.driveId = "drive-new";
+    await upload({ fileName: "third.svg", contentBase64: Buffer.from(svg + "  ").toString("base64") });
+    expect(h.uploads.at(-1)?.driveId).toBe("drive-new");
+  });
 });
 
 // TASK-3167: a video too big to send inline goes in an upload session. MC opens

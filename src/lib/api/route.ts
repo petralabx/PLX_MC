@@ -14,7 +14,9 @@ export class ApiError extends Error {
   constructor(
     public code: string,
     message: string,
-    public status = 400
+    public status = 400,
+    /** How long the caller should wait before retrying (an upstream Retry-After), when known. */
+    public retryAfterMs?: number
   ) {
     super(message);
   }

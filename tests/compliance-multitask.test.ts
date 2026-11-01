@@ -73,7 +73,21 @@ vi.mock("@/lib/sync/repo", () => ({
   },
 }));
 
+// The evidence store probe (TASK-4421) looks the library up over Graph.
+const graph = vi.hoisted(() => ({ driveId: "drive-mc" as string | null, siteError: null as Error | null, lookups: 0 }));
+vi.mock("@/lib/sync/graph", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sync/graph")>()),
+  siteIdByPath: vi.fn(async (path: string) => {
+    graph.lookups += 1;
+    if (graph.siteError) throw graph.siteError;
+    return `site:${path}`;
+  }),
+  driveIdByName: vi.fn(async () => graph.driveId),
+}));
+
 import { checkout, verifyPr } from "@/lib/compliance/service";
+import { __resetEvidenceStoreForTests, evidenceStoreDriveId } from "@/lib/compliance/evidence-store";
+import { GraphError } from "@/lib/sync/graph";
 
 const taskish = (over: Partial<Task>): Task => ({
   id: "TASK-900",
@@ -112,6 +126,10 @@ beforeEach(() => {
   db.checks.length = 0;
   db.tasks.clear();
   db.dedupKeys.clear();
+  graph.driveId = "drive-mc";
+  graph.siteError = null;
+  graph.lookups = 0;
+  __resetEvidenceStoreForTests();
 });
 
 describe("verifyPr — multi-task PRs (checkoutIds)", () => {
@@ -305,5 +323,75 @@ describe("verifyPr — visual evidence (TASK-3166)", () => {
     const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 42, headSha: "sha42", changedPaths: ["src/lib/x.ts"], checkoutIds: [secret.checkoutId] });
     expect(r.verdict).toBe("pass");
     expect(r.reasons.join(" ")).toMatch(/no visual evidence: .*Warning only: evidence uploads are off for this task\./);
+  });
+});
+
+// TASK-4421: the flag says a person set the store up; the probe says it works now.
+// Uploads on but the probe failing: the requirement only warns, naming the failure.
+describe("verifyPr — evidence store probe (TASK-4421)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  const human = async (id: string, pr: number) => {
+    db.tasks.set(id, taskish({ id, labels: ["verify:human"], evidence: complete }));
+    const c = await checkout({ taskId: id, runtime: "claude", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    return verifyPr({ repo: "petralabx/PLX_MC", prNumber: pr, headSha: `sha${pr}`, changedPaths: ["src/lib/x.ts"], checkoutIds: [c.checkoutId] });
+  };
+  const afterWeek = () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
+  };
+
+  it("only warns when uploads are on but the library lookup fails, and names the failure", async () => {
+    afterWeek();
+    vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
+    graph.driveId = null;
+    const r = await human("TASK-10", 70);
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).toMatch(
+      /no visual evidence: .*Warning only: the evidence store failed its health check \(the "Mission Control" library does not exist on \/sites\/PLXSite\)\./
+    );
+  });
+
+  it("only warns when Graph refuses the site lookup", async () => {
+    afterWeek();
+    vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
+    graph.siteError = new GraphError(403, "denied", "https://graph/sites");
+    const r = await human("TASK-11", 71);
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).toMatch(/health check \(SharePoint returned 403 for the site or library lookup\)/);
+  });
+
+  it("still blocks when uploads are on and the probe is healthy, and caches the healthy probe", async () => {
+    afterWeek();
+    vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
+    const r = await human("TASK-12", 72);
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toMatch(/no visual evidence/);
+    expect(r.reasons.join(" ")).not.toMatch(/Warning only/);
+    await human("TASK-13", 73);
+    expect(graph.lookups).toBe(1);
+  });
+
+  it("with uploads off, warns as before and never probes", async () => {
+    afterWeek();
+    vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "0");
+    graph.driveId = null;
+    const r = await human("TASK-14", 74);
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).toMatch(/no visual evidence: .*Warning only: evidence uploads are off for this task\./);
+    expect(graph.lookups).toBe(0);
+  });
+
+  it("a failed probe forgets the cached drive id, so a recreated library is found again", async () => {
+    afterWeek();
+    vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
+    expect(await evidenceStoreDriveId()).toBe("drive-mc");
+    graph.driveId = null;
+    await human("TASK-15", 75);
+    graph.driveId = "drive-new";
+    expect(await evidenceStoreDriveId()).toBe("drive-new");
   });
 });

@@ -46,7 +46,9 @@ import { approvalPathClasses, pathApprovalMode } from "./approval-paths";
 import { approvalDeciderAllowlist, checkApproval } from "./approval-signature";
 import { bucketPrdForTask } from "./bucket-prd";
 import { assertCreatorApprovedForCheckout } from "./creator-approval";
-import { ownEvidenceSite } from "./evidence-artifacts";
+import { hasVideoArtifact, hasVisualArtifact, ownEvidenceSite } from "./evidence-artifacts";
+import { requiresHumanVerification } from "./evidence-standard";
+import { evidenceStoreHealth } from "./evidence-store";
 import type { EventsQuery } from "./events";
 import {
   boundPr,
@@ -1142,6 +1144,17 @@ export async function verifyPr(
       evidenceStoreEnabled() &&
       !ownEvidenceSite(d?.repo ?? "") &&
       !(await isBucketInRestrictedProject(task.bucket));
+    // The flag says a person set the store up, not that it works now (TASK-4421).
+    // Probe it (cached) only when a missing artifact could block. The merge queue
+    // probes too: P16 bars GitHub reads, not Graph, and a queue run on the flag
+    // alone would block a head the pull_request run passed with a warning.
+    const storeHealth =
+      canUploadEvidence &&
+      requiresHumanVerification(task.labels, tier) &&
+      (!hasVisualArtifact(task.evidence) || !hasVideoArtifact(task.evidence))
+        ? await evidenceStoreHealth()
+        : null;
+    const storeProblem = storeHealth && !storeHealth.ok ? storeHealth.problem : undefined;
     const result: VerifyResult = blockReason
       ? { verdict: "block", reasons: [checkoutBlockReason(blockReason)] }
       : !task
@@ -1155,7 +1168,8 @@ export async function verifyPr(
                 actor: "agent",
                 tier,
                 bucketPrd,
-                evidenceStoreEnabled: canUploadEvidence,
+                evidenceStoreEnabled: canUploadEvidence && !storeProblem,
+                evidenceStoreProblem: storeProblem,
               });
     const trailerCheck = d ? await checkoutTrailerCheck(d, stamped, task, isRefreshMerge) : { reasons: [], notes: [] };
     // A released checkout's SHA chain is never extended or bound (reuse is read-only).

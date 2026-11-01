@@ -13,7 +13,7 @@ export type McRef =
   | { kind: "task"; id: string }
   | { kind: "project"; id: string }
   | { kind: "bucket"; id: string }
-  | { kind: "draft"; id: string }
+  | { kind: "draft"; id: string; version?: string }
   | { kind: "gate"; id: string; label: string }
   | { kind: "pr"; repo: string; number: number; label: string; href: string }
   | { kind: "url"; href: string; label: string };
@@ -67,6 +67,19 @@ export function urlLabel(href: string): string {
   }
 }
 
+/**
+ * A Mission Control path alias ("/tasks/TASK-1", "/projects/PRJ-X", "/buckets/BKT-Y"), the
+ * deep links the app redirects into its shell: the reference it names, else null.
+ */
+export function pathRef(pathname: string): Extract<McRef, { kind: "task" | "project" | "bucket" }> | null {
+  const m = /^\/(tasks|projects|buckets)\/([A-Z0-9-]+)\/?$/.exec(pathname);
+  if (!m) return null;
+  const [, kind, id] = m;
+  if (kind === "tasks") return /^TASK-\d{1,6}$/.test(id) ? { kind: "task", id } : null;
+  if (kind === "projects") return id.startsWith("PRJ-") ? { kind: "project", id } : null;
+  return id.startsWith("BKT-") ? { kind: "bucket", id } : null;
+}
+
 /** A URL as a reference: a Mission Control page collapses to its chip, a GitHub pull request to its short name. */
 function urlRef(href: string): McRef {
   let url: URL;
@@ -76,8 +89,8 @@ function urlRef(href: string): McRef {
     return { kind: "text", value: href };
   }
   if (url.host === MC_HOST) {
-    const task = /^\/tasks\/(TASK-\d{1,6})\/?$/.exec(url.pathname)?.[1];
-    if (task) return { kind: "task", id: task };
+    const alias = pathRef(url.pathname);
+    if (alias) return alias;
     const q = url.searchParams;
     const taskId = q.get("taskId");
     if (taskId && /^TASK-\d{1,6}$/.test(taskId)) return { kind: "task", id: taskId };
@@ -86,7 +99,11 @@ function urlRef(href: string): McRef {
     const projectId = q.get("projectId");
     if (projectId && /^PRJ-[A-Z0-9-]+$/.test(projectId)) return { kind: "project", id: projectId };
     const draftId = q.get("draftId");
-    if (draftId && /^DRF-\d{1,6}$/.test(draftId)) return { kind: "draft", id: draftId };
+    if (draftId && /^DRF-\d{1,6}$/.test(draftId)) {
+      // A frozen version (the link Accept writes as the PRD) keeps its version.
+      const version = q.get("version");
+      return version && /^\d{1,6}$/.test(version) ? { kind: "draft", id: draftId, version } : { kind: "draft", id: draftId };
+    }
     const gate = q.get("gate");
     if (gate && /^apg_[0-9a-f]{8,32}$/.test(gate)) return { kind: "gate", id: gate, label: gateLabel(gate) };
   }

@@ -284,8 +284,11 @@ export function parseInline(src: string): MdInline[] {
       }
     }
 
-    if (c === "*" || c === "_") {
-      const re = c === "*" ? /^\*([^*\s][\s\S]*?)\*/ : /^_([^_\s][\s\S]*?)_/;
+    // An underscore inside a word never opens or closes emphasis (CommonMark), so
+    // snake_case words, ids like apg_4d3a… and underscored URLs stay intact.
+    const intraword = c === "_" && i > 0 && /[A-Za-z0-9]/.test(src[i - 1]);
+    if (c === "*" || (c === "_" && !intraword)) {
+      const re = c === "*" ? /^\*([^*\s][\s\S]*?)\*/ : /^_([^_\s][\s\S]*?)_(?![A-Za-z0-9])/;
       const m = src.slice(i).match(re);
       if (m) {
         flush();

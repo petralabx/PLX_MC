@@ -15,7 +15,7 @@
 
 import { useMemo, type ReactNode } from "react";
 
-import { parseMcText, splitRefs, type McRef, type MdInline, type MdNode } from "@/lib/mc-text";
+import { parseMcText, pathRef, splitRefs, type McRef, type MdInline, type MdNode } from "@/lib/mc-text";
 
 import { isPlainLeftClick, navHref } from "./nav-model";
 import { urlToRoute, type Nav, type Route } from "./route";
@@ -32,7 +32,7 @@ function refRoute(ref: InApp): Route {
     case "bucket":
       return { screen: "bucket", bucketId: ref.id };
     case "draft":
-      return { screen: "drafts", draftId: ref.id };
+      return ref.version ? { screen: "drafts", draftId: ref.id, version: ref.version } : { screen: "drafts", draftId: ref.id };
     case "gate":
       return { screen: "approvals", gate: ref.id };
   }
@@ -78,16 +78,24 @@ function Ref({ refItem, nav }: { refItem: McRef; nav: Nav }) {
             nav(screen, extra);
           }}
         >
-          {refItem.kind === "gate" ? refItem.label : refItem.id}
+          {refItem.kind === "gate" ? refItem.label : refItem.kind === "draft" && refItem.version ? `${refItem.id} v${refItem.version}` : refItem.id}
         </a>
       );
     }
   }
 }
 
-/** A relative Mission Control link ("/?screen=task&taskId=TASK-1"): its route, else null. */
+/**
+ * A relative Mission Control link: its route, else null. The shell's own links
+ * ("/?screen=task&taskId=TASK-1") read their query; a path alias ("/tasks/TASK-1")
+ * resolves to the page it redirects to. Any other path is not an in-app route.
+ */
 function inAppRoute(href: string): Route | null {
-  return href.startsWith("/") && !href.startsWith("//") ? urlToRoute(href) : null;
+  if (!href.startsWith("/") || href.startsWith("//")) return null;
+  const path = href.split(/[?#]/)[0];
+  if (path === "/") return urlToRoute(href);
+  const alias = pathRef(path);
+  return alias ? refRoute(alias) : null;
 }
 
 /** `inLink`: inside a markdown link's label, where text stays text (a reference there would nest a link in a link). */

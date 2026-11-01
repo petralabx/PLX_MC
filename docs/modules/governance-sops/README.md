@@ -40,7 +40,8 @@ unverified/stale content is badged — no false authority.
    A numbered item after bullets, or the reverse, starts a new list. Mission
    Control text (`docs/modules/mc-text/README.md`) reuses the parser with
    `{ breaks: true }`, which keeps a single line break inside a paragraph; the
-   SOP reader still joins those lines with a space.
+   SOP reader still joins those lines with a space. An underscore inside a word
+   never opens or closes emphasis (CommonMark), so `snake_case` stays plain.
 4. **Loader** — `listSopSummaries` / `getSopDetail` derive each row's state:
    `ready` (source readable), `planned` (no source → calm "coming soon"), or
    `degraded` (configured but missing/empty/unreadable → loud). One bad SOP

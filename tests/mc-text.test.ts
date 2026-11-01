@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { McText } from "@/components/mc/mc-text";
 import { parseMarkdown } from "@/lib/governance-sops/markdown";
-import { gateLabel, parseMcText, splitRefs, urlLabel } from "@/lib/mc-text";
+import { gateLabel, parseMcText, pathRef, splitRefs, urlLabel } from "@/lib/mc-text";
 
 const nav = () => {};
 const html = (text: string) => renderToStaticMarkup(createElement(McText, { text, nav }));
@@ -83,6 +83,18 @@ describe("splitRefs", () => {
     expect(other).toHaveLength(1);
     expect(other[0].kind).toBe("url");
   });
+
+  it("collapses every Mission Control path alias, and keeps a draft's frozen version", () => {
+    expect(splitRefs("https://mc.plxcustomer.io/projects/PRJ-PORTAL-GOLIVE")).toEqual([{ kind: "project", id: "PRJ-PORTAL-GOLIVE" }]);
+    expect(splitRefs("https://mc.plxcustomer.io/buckets/BKT-WMS")).toEqual([{ kind: "bucket", id: "BKT-WMS" }]);
+    expect(splitRefs("https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-12&version=3")).toEqual([
+      { kind: "draft", id: "DRF-12", version: "3" },
+    ]);
+    expect(splitRefs("https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-12")).toEqual([{ kind: "draft", id: "DRF-12" }]);
+    expect(pathRef("/tasks/TASK-4002")).toEqual({ kind: "task", id: "TASK-4002" });
+    expect(pathRef("/tasks/nope")).toBeNull();
+    expect(pathRef("/welcome")).toBeNull();
+  });
 });
 
 describe("parseMcText", () => {
@@ -137,6 +149,24 @@ describe("McText", () => {
   it("opens a relative Mission Control link in place", () => {
     const out = html("[Open the gate](/?screen=approvals&gate=apg_4d3a38538a1955b8)");
     expect(out).toContain('<a class="mct-link" href="/?screen=approvals&amp;gate=apg_4d3a38538a1955b8">Open the gate</a>');
+  });
+
+  it("resolves a relative path alias to the page it names, not the home screen", () => {
+    expect(html("[the task](/tasks/TASK-4002)")).toContain('<a class="mct-link" href="/?screen=task&amp;taskId=TASK-4002">the task</a>');
+    expect(html("[the project](/projects/PRJ-PORTAL-GOLIVE)")).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE"');
+  });
+
+  it("shows a frozen draft version on its chip and links to that version", () => {
+    const out = html("Accepted https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-12&version=3");
+    expect(out).toContain('href="/?screen=drafts&amp;draftId=DRF-12&amp;version=3">DRF-12 v3</a>');
+  });
+
+  it("keeps ids and words with underscores intact: an underscore inside a word is not emphasis", () => {
+    const out = html("Gates apg_1234abcd5678 and apg_9abcdef01234 for snake_case_name; _this_ is emphasis.");
+    expect(out.match(/class="mct-chip"/g)).toHaveLength(2);
+    expect(out).toContain("snake_case_name");
+    expect(out).toContain("<em>this</em>");
+    expect(out.match(/<em>/g)).toHaveLength(1);
   });
 
   it("renders nothing for empty text", () => {

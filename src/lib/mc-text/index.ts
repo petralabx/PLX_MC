@@ -5,7 +5,7 @@
 import { parseMarkdown } from "@/lib/governance-sops/markdown";
 import type { MdNode } from "@/lib/governance-sops/types";
 
-export { gateLabel, MC_HOST, splitRefs, urlLabel, type McRef } from "./refs";
+export { gateLabel, MC_HOST, pathRef, splitRefs, urlLabel, type McRef } from "./refs";
 export type { MdInline, MdListItem, MdNode } from "@/lib/governance-sops/types";
 
 /** The text's blocks. A single line break inside a paragraph stays one. */

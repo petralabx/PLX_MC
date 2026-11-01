@@ -19,8 +19,19 @@
   "transitionalRoles": [
     {
       "role": "Sites.ReadWrite.All",
-      "$comment": "Broad legacy role the sync engine and the evidence store run on today. Retire after Sites.Selected + both site grants above are verified in production. retireBy has passed and is deliberately not extended: removing this role is a Graph app permission change that needs a flags approval from Vince (via CoS), tracked in TASK-4422; until then a credentialed audit run fails on it by design. Removal plan: docs/runbooks/graph-least-privilege.md (PLXSite section).",
+      "$comment": "Broad legacy role the sync engine and the evidence store run on. retireBy has passed and is not extended: Vince decided on 2026-11-01 to keep the role as an accepted exception (see acceptedExceptions), so the audit warns on it until that record's reviewBy and fails after. Removal plan, if the decision changes: docs/runbooks/graph-least-privilege.md (PLXSite section).",
       "retireBy": "2026-08-21"
+    }
+  ],
+  "acceptedExceptions": [
+    {
+      "role": "Sites.ReadWrite.All",
+      "decidedBy": "vince@petrasoap.com",
+      "decidedAt": "2026-11-01",
+      "reason": "Decision as answered in MC: \"Keep Sites.ReadWrite.All; record it as an accepted exception.\" The sync engine and the evidence store keep running on the broad role.",
+      "reviewBy": "2027-11-01",
+      "source": "MC question on TASK-4422",
+      "$comment": "A person's decision to keep a transitional role past its retireBy. The audit allows the role until reviewBy, then fails again; renew with a new decision or remove the role."
     }
   ],
   "forbiddenRoles": [

@@ -27,7 +27,8 @@
 // writing the artifact to the local offline queue
 // (artifacts/session-brain/<date>/<session_id>.json) and always exits 0.
 //
-// Kill switch: SESSION_BRAIN_ENABLED=0 disables capture and exits 0 immediately
+// Kill switch: SESSION_BRAIN_ENABLED=0 disables the artifact capture and exits 0
+// immediately (session telemetry has its own switch, below)
 // (default enabled — unlike compliance-checkout.mjs, this hook ships on by
 // default per the session-knowledge-artifact governance policy).
 //
@@ -36,30 +37,19 @@
 //   VMC_BASE_URL            VMC base URL (default: https://missioncontrol.tayloralton.com)
 //   VMC_API_KEY             VMC API key (required to deliver; missing -> queue)
 //
-// Session telemetry (TASK-4273): the same hook also reports one
-// mc_report_session_telemetry row per session (POST /api/cursor/session-telemetry),
-// so the evaluation loop gets real token counts. Claude Code: the sum of the
-// assistant `usage` blocks in the transcript at transcript_path, one count per
-// message id. Cursor: token counts in the hook payload when it has them; its
-// sessionEnd payload has none today, so a Cursor session reports nothing.
-// tokensIn counts every input token (input + cache creation + cache read).
-// Fail-open like the artifact: no credentials, no counts, an HTTP error or a
-// timeout logs one line and exits 0. Nothing is queued, and no key is printed.
-//   SESSION_TELEMETRY_ENABLED  set to "0" to disable telemetry (default: enabled)
-//   MC_BASE_URL, MC_MCP_API_KEY, MC_OPERATOR_EMAIL (or MC_ACCOUNTABLE)
-//                              Mission Control credentials, read the way
-//                              scripts/compliance-checkout.mjs reads them
-//   MC_CHECKOUT_ID             dsp_* checkout of this session (default: the
-//                              MC-Checkout trailer of the newest session commit)
+// Session telemetry (TASK-4273): the CLI also runs reportTelemetry from
+// scripts/session-telemetry.mjs, which reports one mc_report_session_telemetry
+// row per session. Its own kill switch is SESSION_TELEMETRY_ENABLED=0;
+// SESSION_BRAIN_ENABLED switches only the artifact. See that file for its env.
 //
 // Node stdlib only (global fetch + node:fs/node:path/node:crypto/node:child_process).
 
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { closeSync, createReadStream, mkdirSync, openSync, readSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { reportTelemetry } from "./session-telemetry.mjs";
 
 const SCHEMA_VERSION = 1;
 const SESSION_ARTIFACT_ROUTE = "/api/vmc/knowledge/session-artifact";
@@ -346,199 +336,6 @@ export async function closeout({
   }
 }
 
-// ---------------------------------------------------------------- session telemetry (TASK-4273)
-
-const TELEMETRY_ROUTE = "/api/cursor/session-telemetry";
-const TELEMETRY_DEADLINE_MS = 4000;
-const TRANSCRIPT_SCAN_MS = 3000;
-const TRANSCRIPT_MAX_BYTES = 256 * 1024 * 1024;
-const CHECKOUT_ID = /^dsp_[A-Za-z0-9]+$/;
-
-function telemetryEnabled(env) {
-  return (env.SESSION_TELEMETRY_ENABLED ?? "1").trim() !== "0";
-}
-
-function tokenCount(value) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
-}
-
-/**
- * Token usage of a Claude Code JSONL transcript: { tokensIn, tokensOut, model, messages }.
- * A message's content blocks repeat its usage on several lines, so each message id
- * counts once. null when the file is unreadable, larger than maxBytes, holds no
- * usage, or takes longer than deadlineMs to read (a partial sum is never reported).
- */
-export async function sumTranscriptUsage(
-  transcriptPath,
-  { deadlineMs = TRANSCRIPT_SCAN_MS, maxBytes = TRANSCRIPT_MAX_BYTES } = {}
-) {
-  if (!nonEmpty(transcriptPath)) return null;
-  try {
-    if (statSync(transcriptPath).size > maxBytes) return null;
-  } catch {
-    return null;
-  }
-  const stop = Date.now() + deadlineMs;
-  const seen = new Set();
-  const models = new Map();
-  let tokensIn = 0;
-  let tokensOut = 0;
-  const stream = createReadStream(transcriptPath, { encoding: "utf8" });
-  const lines = createInterface({ input: stream, crlfDelay: Infinity });
-  try {
-    for await (const line of lines) {
-      if (Date.now() > stop) return null;
-      if (!line.includes('"usage"')) continue;
-      let entry;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue; // a truncated last line
-      }
-      const message = entry?.type === "assistant" ? entry.message : null;
-      const usage = message && typeof message === "object" ? message.usage : null;
-      if (!usage || typeof usage !== "object") continue;
-      const id = nonEmpty(message.id) || nonEmpty(entry.requestId);
-      if (id) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-      }
-      tokensIn +=
-        tokenCount(usage.input_tokens) +
-        tokenCount(usage.cache_creation_input_tokens) +
-        tokenCount(usage.cache_read_input_tokens);
-      tokensOut += tokenCount(usage.output_tokens);
-      const model = nonEmpty(message.model);
-      if (model && model !== "<synthetic>") models.set(model, (models.get(model) ?? 0) + 1);
-    }
-  } catch {
-    return null;
-  } finally {
-    lines.close();
-    stream.destroy();
-  }
-  if (seen.size === 0 && tokensIn === 0 && tokensOut === 0) return null;
-  const model = [...models.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  return { tokensIn, tokensOut, model, messages: seen.size };
-}
-
-/** Token counts a hook payload carries (top level or under `usage`), else null. */
-export function payloadTokens(payload) {
-  for (const source of [payload, payload?.usage]) {
-    if (!source || typeof source !== "object") continue;
-    if (source.input_tokens === undefined && source.output_tokens === undefined) continue;
-    return {
-      tokensIn: tokenCount(source.input_tokens),
-      tokensOut: tokenCount(source.output_tokens),
-      model: nonEmpty(payload?.model) || null,
-    };
-  }
-  return null;
-}
-
-/** MC_CHECKOUT_ID, else the last MC-Checkout trailer of the newest session commit that has one. */
-function sessionCheckoutId(cwd, env) {
-  const fromEnv = nonEmpty(env.MC_CHECKOUT_ID);
-  if (CHECKOUT_ID.test(fromEnv)) return fromEnv;
-  const base = defaultBaseRef(cwd);
-  if (!base) return null;
-  const out = git(cwd, [
-    "log",
-    `--max-count=${MAX_COMMITS}`,
-    "--format=%(trailers:key=MC-Checkout,valueonly,separator=%x2C)",
-    "HEAD",
-    "--not",
-    base,
-  ]);
-  for (const line of out.split("\n")) {
-    const ids = line
-      .split(",")
-      .map((id) => id.trim())
-      .filter((id) => CHECKOUT_ID.test(id));
-    if (ids.length > 0) return ids.at(-1);
-  }
-  return null;
-}
-
-/**
- * Reports one telemetry row for this session to Mission Control. Never throws.
- * @param {{
- *   env?: Record<string, string | undefined>,
- *   fetch?: typeof globalThis.fetch,
- *   log?: (msg: string) => void,
- *   payload?: Record<string, unknown> | null,
- *   runtime?: string,
- *   cwd?: string,
- * }} [opts]
- */
-export async function reportTelemetry({
-  env = process.env,
-  fetch = globalThis.fetch,
-  log = console.log,
-  payload = null,
-  runtime = "cursor",
-  cwd = REPO_ROOT,
-} = {}) {
-  const skip = (reason) => {
-    log(`[session-telemetry] not reported: ${reason}`);
-    return { reported: false, reason };
-  };
-  if (!telemetryEnabled(env)) return skip("disabled (SESSION_TELEMETRY_ENABLED=0)");
-  const sessionId = (nonEmpty(payload?.session_id) || nonEmpty(payload?.conversation_id)).slice(0, 120);
-  if (!sessionId) return skip("the hook payload has no session id");
-  const baseUrl = nonEmpty(env.MC_BASE_URL).replace(/\/$/, "");
-  const apiKey = (env.MC_MCP_API_KEY || "").replace(/\$\{.*\}/, "").trim();
-  const operatorEmail = nonEmpty(env.MC_OPERATOR_EMAIL || env.MC_ACCOUNTABLE).toLowerCase();
-  if (!baseUrl || !apiKey || !operatorEmail) {
-    return skip("MC_BASE_URL, MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set");
-  }
-  const usage =
-    runtime === "claude-code" ? await sumTranscriptUsage(payload?.transcript_path) : payloadTokens(payload);
-  if (!usage) {
-    return skip(
-      runtime === "claude-code" ? "no token usage in the transcript" : "the hook payload has no token counts"
-    );
-  }
-  const repo = repoFromRemoteUrl(git(cwd, ["remote", "get-url", "origin"]))?.slug;
-  if (!repo) return skip("no origin remote to name the repo");
-  const checkoutId = sessionCheckoutId(cwd, env);
-  const body = {
-    sessionId,
-    tokensIn: usage.tokensIn,
-    tokensOut: usage.tokensOut,
-    ...(usage.model ? { model: usage.model.slice(0, 120) } : {}),
-    ...(checkoutId ? { checkoutId } : {}),
-  };
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TELEMETRY_DEADLINE_MS);
-    let res;
-    try {
-      res = await fetch(`${baseUrl}${TELEMETRY_ROUTE}`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": apiKey,
-          "x-mc-operator-email": operatorEmail,
-          "x-mc-runtime": RUNTIMES.has(runtime) ? runtime : "other",
-          "x-mc-worker-id": `session-end-${process.pid}`,
-          "x-mc-repo": repo,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!res.ok) return skip(`HTTP ${res.status}`);
-  } catch (err) {
-    return skip(err?.name === "AbortError" ? "timed out" : "request failed");
-  }
-  log(`[session-telemetry] reported ${sessionId}: ${body.tokensIn} in, ${body.tokensOut} out`);
-  return { reported: true, body };
-}
-
 function readStdin(timeoutMs = STDIN_TIMEOUT_MS) {
   if (process.stdin.isTTY) return Promise.resolve("");
   return new Promise((resolve) => {
@@ -565,7 +362,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const payload = parseHookPayload(raw);
       const runtime = runtimeFlag >= 0 ? process.argv[runtimeFlag + 1] : "cursor";
       // The artifact and the telemetry row go out together, inside the hook timeout.
-      const results = await Promise.allSettled([closeout({ payload, runtime }), reportTelemetry({ payload, runtime })]);
+      const results = await Promise.allSettled([
+        closeout({ payload, runtime }),
+        reportTelemetry({ payload, runtime, cwd: REPO_ROOT }),
+      ]);
       for (const r of results) {
         if (r.status === "rejected") console.error(`[session-brain] unexpected error (fail-open, ignored): ${r.reason?.message}`);
       }

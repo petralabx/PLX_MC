@@ -21,8 +21,7 @@ const scriptPath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "../scripts/compliance-closeout.mjs"
 );
-const { closeout, parseHookPayload, payloadTokens, reportTelemetry, repoFromRemoteUrl, sumTranscriptUsage } =
-  await import(pathToFileURLSafe(scriptPath));
+const { closeout, parseHookPayload, repoFromRemoteUrl } = await import(pathToFileURLSafe(scriptPath));
 
 function pathToFileURLSafe(filePath: string): string {
   const normalized = path.resolve(filePath);
@@ -279,6 +278,8 @@ describe("compliance-closeout fail-open", () => {
     mkdirSync(path.join(dir, "scripts"));
     const cli = path.join(dir, "scripts", "compliance-closeout.mjs");
     copyFileSync(scriptPath, cli);
+    // The CLI imports its sibling (TASK-4273).
+    copyFileSync(path.join(path.dirname(scriptPath), "session-telemetry.mjs"), path.join(dir, "scripts", "session-telemetry.mjs"));
     const env = { ...process.env, VMC_API_KEY: "", SESSION_BRAIN_ENABLED: "1" };
     const ok = spawnSync(process.execPath, [cli, "--runtime", "claude-code"], {
       cwd: dir,
@@ -294,157 +295,6 @@ describe("compliance-closeout fail-open", () => {
 
     const garbage = spawnSync(process.execPath, [cli], { cwd: dir, env, encoding: "utf8", input: "not json{" });
     expect(garbage.status).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------- session telemetry (TASK-4273)
-
-const KEY = "mc-test-key-SHOULD-NEVER-PRINT";
-const MC_ENV = { MC_BASE_URL: "http://mc.test/", MC_MCP_API_KEY: KEY, MC_OPERATOR_EMAIL: "Agent@Example.com" };
-
-function assistant(id: string, usage: Record<string, unknown>, model = "claude-test-1") {
-  return JSON.stringify({ type: "assistant", requestId: `req-${id}`, message: { id, model, usage } });
-}
-
-/** Two messages; m1's content blocks repeat its usage on two lines, as Claude Code writes them. */
-function usageTranscript(dir: string): string {
-  const file = path.join(dir, "usage.jsonl");
-  const m1 = { input_tokens: 3, cache_creation_input_tokens: 100, cache_read_input_tokens: 1000, output_tokens: 50 };
-  writeFileSync(
-    file,
-    [
-      JSON.stringify({ type: "user", message: { content: "hi", usage: { input_tokens: 999 } } }),
-      assistant("m1", m1),
-      assistant("m1", m1),
-      assistant("m2", { input_tokens: 7, output_tokens: 20 }, "claude-other-2"),
-      assistant("m3", { input_tokens: 0, output_tokens: 0 }, "<synthetic>"),
-      assistant("m4", { input_tokens: 5, output_tokens: 5 }),
-      '{"type":"assistant","message":{"usage":', // a truncated last line
-    ].join("\n")
-  );
-  return file;
-}
-
-function logSink() {
-  const lines: string[] = [];
-  return { log: (m: string) => lines.push(m), lines };
-}
-
-describe("compliance-closeout session telemetry", () => {
-  it("sums each Claude Code message once and names the model it used most", async () => {
-    const u = await sumTranscriptUsage(usageTranscript(tempDir()));
-    expect(u).toEqual({ tokensIn: 3 + 100 + 1000 + 7 + 5, tokensOut: 50 + 20 + 5, model: "claude-test-1", messages: 4 });
-  });
-
-  it("reports no sum for a missing, oversized or usage-free transcript", async () => {
-    const dir = tempDir();
-    expect(await sumTranscriptUsage(path.join(dir, "missing.jsonl"))).toBeNull();
-    expect(await sumTranscriptUsage(usageTranscript(dir), { maxBytes: 10 })).toBeNull();
-    expect(await sumTranscriptUsage(transcript(dir, C1_AT))).toBeNull();
-    expect(await sumTranscriptUsage("")).toBeNull();
-  });
-
-  it("reads token counts from a hook payload only when it has them", () => {
-    expect(payloadTokens({ session_id: "s", reason: "completed", duration_ms: 5 })).toBeNull();
-    expect(payloadTokens({ input_tokens: 12, output_tokens: 3, model: "m" })).toEqual({ tokensIn: 12, tokensOut: 3, model: "m" });
-    expect(payloadTokens({ usage: { input_tokens: 4 } })).toEqual({ tokensIn: 4, tokensOut: 0, model: null });
-    expect(payloadTokens(null)).toBeNull();
-  });
-
-  it("posts one Claude Code row with the repo, the runtime and the newest session commit's checkout", async () => {
-    const dir = sessionRepo();
-    const git = gitIn(dir);
-    git(["add", "."]);
-    git(["commit", "-qm", "feat: stamp\n\nAgent: claude-code/x\nMC-Checkout: dsp_old1\nMC-Checkout: dsp_new2"], C2_AT);
-    const { fetch, calls } = recorder();
-    const { log, lines } = logSink();
-    const r = await reportTelemetry({
-      env: MC_ENV,
-      fetch,
-      log,
-      cwd: dir,
-      runtime: "claude-code",
-      payload: { session_id: "sess-1", transcript_path: usageTranscript(dir) },
-    });
-    expect(r.reported).toBe(true);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe("http://mc.test/api/cursor/session-telemetry");
-    expect(calls[0].headers).toMatchObject({
-      "x-api-key": KEY,
-      "x-mc-operator-email": "agent@example.com",
-      "x-mc-runtime": "claude-code",
-      "x-mc-repo": "acme/widget",
-    });
-    expect(calls[0].body).toEqual({
-      sessionId: "sess-1",
-      tokensIn: 1115,
-      tokensOut: 75,
-      model: "claude-test-1",
-      checkoutId: "dsp_new2",
-    });
-    expect(lines.join("\n")).not.toContain(KEY);
-  });
-
-  it("prefers MC_CHECKOUT_ID and sends no checkout when none is known", async () => {
-    const dir = sessionRepo();
-    const payload = { session_id: "s", transcript_path: usageTranscript(dir) };
-    const a = recorder();
-    await reportTelemetry({ env: { ...MC_ENV, MC_CHECKOUT_ID: "dsp_env9" }, fetch: a.fetch, log: quiet, cwd: dir, runtime: "claude-code", payload });
-    expect(a.calls[0].body.checkoutId).toBe("dsp_env9");
-    const b = recorder();
-    await reportTelemetry({ env: { ...MC_ENV, MC_CHECKOUT_ID: "pending" }, fetch: b.fetch, log: quiet, cwd: dir, runtime: "claude-code", payload });
-    expect(b.calls[0].body).not.toHaveProperty("checkoutId");
-  });
-
-  it("reports a Cursor session only when its payload carries token counts", async () => {
-    const dir = sessionRepo();
-    const none = recorder();
-    const { log, lines } = logSink();
-    const r = await reportTelemetry({ env: MC_ENV, fetch: none.fetch, log, cwd: dir, payload: { conversation_id: "c-1", duration_ms: 9 } });
-    expect(r).toEqual({ reported: false, reason: "the hook payload has no token counts" });
-    expect(none.calls).toHaveLength(0);
-    expect(lines).toEqual(["[session-telemetry] not reported: the hook payload has no token counts"]);
-    const some = recorder();
-    await reportTelemetry({ env: MC_ENV, fetch: some.fetch, log: quiet, cwd: dir, payload: { conversation_id: "c-2", input_tokens: 9, output_tokens: 4 } });
-    expect(some.calls[0].headers["x-mc-runtime"]).toBe("cursor");
-    expect(some.calls[0].body).toMatchObject({ sessionId: "c-2", tokensIn: 9, tokensOut: 4 });
-  });
-
-  it("fails open: kill switch, missing credentials, HTTP errors and network errors never throw or print the key", async () => {
-    const dir = sessionRepo();
-    const payload = { session_id: "s", transcript_path: usageTranscript(dir) };
-    const cases: Array<[Record<string, string>, typeof globalThis.fetch, string]> = [
-      [{ ...MC_ENV, SESSION_TELEMETRY_ENABLED: "0" }, recorder().fetch, "disabled (SESSION_TELEMETRY_ENABLED=0)"],
-      [{ ...MC_ENV, MC_MCP_API_KEY: "${MC_MCP_API_KEY}" }, recorder().fetch, "MC_BASE_URL, MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set"],
-      [{ MC_BASE_URL: "http://mc.test", MC_MCP_API_KEY: KEY }, recorder().fetch, "MC_BASE_URL, MC_MCP_API_KEY or MC_OPERATOR_EMAIL is not set"],
-      [MC_ENV, recorder(false).fetch, "HTTP 500"],
-      [MC_ENV, (async () => { throw new Error(`boom ${KEY}`); }) as unknown as typeof globalThis.fetch, "request failed"],
-    ];
-    for (const [env, fetch, reason] of cases) {
-      const { log, lines } = logSink();
-      const r = await reportTelemetry({ env, fetch, log, cwd: dir, runtime: "claude-code", payload });
-      expect(r).toEqual({ reported: false, reason });
-      expect(lines.join("\n")).not.toContain(KEY);
-    }
-    const noId = await reportTelemetry({ env: MC_ENV, fetch: recorder().fetch, log: quiet, cwd: dir, runtime: "claude-code", payload: {} });
-    expect(noId.reason).toBe("the hook payload has no session id");
-  });
-
-  it("CLI sends the telemetry next to the artifact and exits 0 when Mission Control is unreachable", () => {
-    const dir = sessionRepo();
-    mkdirSync(path.join(dir, "scripts"));
-    const cli = path.join(dir, "scripts", "compliance-closeout.mjs");
-    copyFileSync(scriptPath, cli);
-    const env = { ...process.env, VMC_API_KEY: "", ...MC_ENV, MC_BASE_URL: "http://127.0.0.1:9" };
-    const run = spawnSync(process.execPath, [cli, "--runtime", "claude-code"], {
-      cwd: dir,
-      env,
-      encoding: "utf8",
-      input: JSON.stringify({ session_id: "cli-tel", transcript_path: usageTranscript(dir) }),
-    });
-    expect(run.status).toBe(0);
-    expect(run.stdout).toContain("[session-telemetry] not reported: request failed");
-    expect(`${run.stdout}${run.stderr}`).not.toContain(KEY);
   });
 });
 

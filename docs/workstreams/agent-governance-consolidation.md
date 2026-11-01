@@ -2,13 +2,13 @@
 
 - Slug: `agent-governance-consolidation` (this file is `docs/workstreams/agent-governance-consolidation.md`)
 - Owner: Vince Alton (accountable) · agents: claude-code/claude-code
-- Branches: `claude/nice-albattani-rand8f` and its `-ci`, `-adopt`, `-notes`, `-ts7`, `-prepush` and
-  `-owner` siblings, one per PR
-- MC tasks in flight (the SessionStart hook reads the first 20 ids a note names): note tooling
-  TASK-4378 and its sync TASK-4386; handshake adoption TASK-4352, TASK-4353, TASK-4354, TASK-4355,
-  TASK-4356, TASK-4357, TASK-4358, TASK-4380, TASK-4383; CI speed TASK-4359, TASK-4360, TASK-4382,
-  TASK-4384, TASK-4389; owner decides agent-raised gates TASK-4168; W03's signed approval
-  TASK-4205. Draft DRF-4. Finished tasks are under Done.
+- Branches: `claude/nice-albattani-rand8f` and its `-ci`, `-adopt`, `-notes`, `-ts7`, `-prepush`,
+  `-owner`, `-review-lane` and `-isa` siblings, one per PR
+- MC tasks in flight (the SessionStart hook reads the first 20 ids a note names): review lane for
+  every repo TASK-4397; internal-seller-api enrollment TASK-4398; note tooling TASK-4378 and its
+  sync TASK-4386; handshake adoption TASK-4352, TASK-4353, TASK-4354, TASK-4355, TASK-4356,
+  TASK-4357, TASK-4380, TASK-4383; CI speed TASK-4359, TASK-4360. Draft DRF-4. Finished tasks are
+  under Done.
 - SharePoint handoff: n/a. The plan is the Agent Governance Handoff bundle of 2026-10-30. The
   zero-drift and CI speed plans are on the Governance Handoff Status page:
   https://claude.ai/artifact/Fv26Dp57T5pa1bE1Vcftyv
@@ -22,8 +22,9 @@ and every other copy is generated from it or not written.
 
 ## Status
 
-active, as of 2026-10-31. Zero-drift items 3 and 4 (TASK-4378) are being built; the other plan
-items wait on the people named under Open questions. This note names PRs and tasks only: the
+active, as of 2026-11-01. The open PRs in the eight non-portal repos wait on `ai-review/verdict`,
+which no lane reviews there yet; TASK-4397 fixes that. The other plan items wait on the people
+named under Open questions. This note names PRs and tasks only: the
 SessionStart hook prints their live stage, PRs and gates from Mission Control.
 
 ## Done
@@ -42,16 +43,22 @@ SessionStart hook prints their live stage, PRs and gates from Mission Control.
   local-inference#70, plx_secondbrain#10, agentic-swarm#1810, plx-customer-portal#3235.
 - Every ask for a person is an MC question or gate (zero-drift item 6), listed under Open
   questions.
+- 2026-10-31: TASK-4389 (PLX_MC#544, pre-push checks the changed files), TASK-4168 (PLX_MC#545,
+  the owner decides an agent-raised gate), TASK-4358 (portal#3235), TASK-4382 (portal#3250) and
+  TASK-4384 (portal#3251) merged. TASK-4205: Vince approved W03's gate.
 
 ## Next steps
 
-1. CIP lands the open PRs; skills#50 before the seven TASK-4386 sync PRs, so source and copies
-   agree. test-perms-check's TASK-4383 commit waits for the session user to allow the push.
-2. Monday 2026-11-02: open the portal's weekly workflow PR for TASK-4360. After #3250 lands, move
-   the portal's CI typecheck and the pre-push hook to TypeScript 7 in the same PR (CI item 8).
-3. After Vince approves `apg_8cae3b889f2cfdca` (PLX_MC#545), complete TASK-4168; then he or Stephen
-   declines the superseded gate `apg_5dcd1e94e89f3226`.
-4. internal-seller-api: act on Vince's answer to q_c567d65b5f3ddaff (TASK-4175).
+1. TASK-4397 (agentic-swarm, review lane): after it lands, Infra runs `install.sh --apply` on
+   coding-1, clones each repo to `/home/coder/repos/<name>` and enables `plx-auto-astra@<name>.timer`
+   per repo (infra/coding-1/README.md, Review lane for every repo). Then the verdicts post.
+2. CIP lands the open PRs once their verdict is green; skills#50 before the seven TASK-4386 sync
+   PRs, so source and copies agree. test-perms-check's TASK-4383 commit waits for the session user
+   to allow the push.
+3. Monday 2026-11-02: open the portal's weekly workflow PR for TASK-4360. TypeScript 7 stays out of
+   it: TS7 has no JS API yet (CI item 8).
+4. TASK-4398, internal-seller-api: PLX_MC#547 (pending_adoption) and internal-seller-api#2
+   (adoption) are open. After #2 lands and its gate runs green, a PLX_MC PR sets it active and hard.
 5. After Vince accepts DRF-4: one `mc_update_tasks` batch moves the 54 kept tasks, and W07 to
    W22 start, W13 first. W08 is done by TASK-4380, and W07 shrinks to the portal's
    mc-compliance.mdc and CONTRIBUTING.md (both noted on DRF-4). W09 replaces PLX_MC's hand-written
@@ -89,6 +96,10 @@ SessionStart hook prints their live stage, PRs and gates from Mission Control.
   a signed workflow PR per repo.
 - 2026-10-31 CI item 6: pre-push checks the changed files (portal TASK-4384, PLX_MC TASK-4389),
   and Claude Code sessions install the portal's git hooks, as Cursor's already did.
+- 2026-10-31 The plx-agents review lane reviews every repo where `ai-review/verdict` runs, one
+  auto-astra timer instance per repo (TASK-4397). Decided by: Vince (q_5b5f596b3bce35cb).
+- 2026-10-31 internal-seller-api is enrolled: pending_adoption, then an adoption PR, then active and
+  hard (TASK-4398). Decided by: Vince (q_c567d65b5f3ddaff).
 - 2026-10-31 CI item 4 (CIP arms on the event) is not built. The 25 portal PRs merged that
   afternoon waited 0 to 7 minutes beyond the 13-minute queue run. lint-typecheck-build went green
   last in 15, and the ai-review/verdict status, 4 to 23 minutes after a push, in 9. Re-measure on a
@@ -97,14 +108,13 @@ SessionStart hook prints their live stage, PRs and gates from Mission Control.
 ## Open questions
 
 - Vince: DRF-4, accept it or send it back.
-- Vince: the signed approvals `apg_387a54e46825564a` (TASK-4205, #521) and `apg_8cae3b889f2cfdca`
-  (TASK-4168, PLX_MC#545).
+- Vince: the signed approval `apg_6ce74147869971c7` (internal-seller-api#2, workflow files) and the
+  flags approval `apg_60b5f11530d77e3d` (its compliance variables and secret), both on TASK-4398.
+- An MC Owner or Admin: add internal-seller-api to MC's repo allow-list (Request repo, then approve),
+  so tasks can name it.
+- Infra: the coding-1 steps after TASK-4397 lands (Next steps 1).
 - Vince: P0-2, the production settings W15 to W19 start from. He will paste them
   (q_e2eedfb131c553ac on TASK-1166).
-- Vince: enroll internal-seller-api? q_c567d65b5f3ddaff on TASK-4175.
-- Vince: the plx-agents review lane reviews portal PRs only, so `ai-review/verdict` stays pending
-  elsewhere. q_5b5f596b3bce35cb on TASK-3907.
-- Stephen: decline the superseded gate apg_5dcd1e94e89f3226. q_8ebcb7a8e39ce1ca on TASK-4346.
 - CoS: W05, replace the bot rules list with the bundle's bot-rules.md.
 - CoS: allow the push of test-perms-check's TASK-4383 commit, or drop it.
 - Environment owner: the cloud environment's `MC_MCP_API_KEY` is invalid (`invalid_api_key`).
@@ -142,4 +152,4 @@ npx vitest run tests/mcp-complete-evidence.test.ts tests/mcp-handshake-instructi
 
 ## Last updated
 
-2026-10-31 by claude-code/claude-code (Claude Code on the web).
+2026-11-01 by claude-code/claude-code (Claude Code on the web).

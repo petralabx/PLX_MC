@@ -212,3 +212,38 @@ test("liveStateText lists ids past its limit instead of dropping them", async ()
   assert.match(text, /Not read \(over 20\): TASK-21, TASK-22\./);
 });
 
+
+test("liveStateText keeps its Not read lines inside the output cap", async () => {
+  // 120 ids: 20 are read and fail, 100 are over the limit. Each line names at most 8 ids.
+  const ids = Array.from({ length: 120 }, (_, i) => `TASK-${1000 + i}`).join(" ");
+  const text = await liveStateText("/nowhere", ids, ENV, fakeFetch([], () => ({ status: 503, body: {} })));
+  assert.match(text, /Not read \(HTTP 503\): TASK-1000, .*TASK-1007 and 12 more\. Use mc_get_task\./);
+  assert.match(text, /Not read \(over 20\): TASK-1020, .*TASK-1027 and 92 more\. Use mc_get_task\./);
+  assert.ok(text.length <= 1800 + "\n=== end of live state ===".length, `live state is ${text.length} characters`);
+});
+
+test("a read that starts near the deadline waits only for the time left, so the hook ends inside its 10 s", async () => {
+  const realNow = Date.now;
+  let first = true;
+  // The first call sets the 7 s deadline; every later call reads 6.9 s on, so the read may wait about 0.1 s, not 3 s.
+  Date.now = () => (first ? ((first = false), realNow()) : realNow() + 6900);
+  const hang = async (_url, init) =>
+    new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason)));
+  const started = realNow();
+  const keepAlive = setTimeout(() => {}, 5000); // AbortSignal.timeout does not hold the event loop open; a real socket would
+  try {
+    const text = await liveStateText("/nowhere", "TASK-1", ENV, hang);
+    assert.match(text, /Not read \(timed out\): TASK-1\./);
+  } finally {
+    Date.now = realNow;
+    clearTimeout(keepAlive);
+  }
+  assert.ok(realNow() - started < 1500, `the read waited ${realNow() - started} ms`);
+});
+
+test("liveStateText falls back to MC_ACCOUNTABLE for the operator header, as compliance-checkout.mjs does", async () => {
+  const calls = [];
+  const { MC_OPERATOR_EMAIL: _unused, ...rest } = ENV;
+  await liveStateText("/nowhere", "TASK-1", { ...rest, MC_ACCOUNTABLE: " Vince@Example.com " }, fakeFetch(calls));
+  assert.equal(calls[0].headers["x-mc-operator-email"], "vince@example.com");
+});

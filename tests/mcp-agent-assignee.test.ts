@@ -1,9 +1,11 @@
 import { legacySearchFixture } from "./helpers/task-search-fixture";
 // Fleet P8 (D15, D16): a task's assignee may name an agent as `agent:<slug>`.
-// Only a signed-in person or sp_mcp_portal may set one. Every other MCP
-// principal gets 403 through the MCP tool (POST /api/cursor/mcp) and through
-// POST /api/cursor/tasks. mc_search_tasks filters by assignee. Real per-agent
-// key auth and real grants run here; only storage seams are faked.
+// A signed-in person or sp_mcp_portal may set any slug. TASK-4005 (c): another
+// principal holding task.assign may set one only when sp_mcp_<slug> is a
+// registered agent principal. Every other MCP principal gets 403 through the
+// MCP tool (POST /api/cursor/mcp) and through POST /api/cursor/tasks.
+// mc_search_tasks filters by assignee. Real per-agent key auth and real grants
+// run here; only storage seams are faked.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
@@ -82,7 +84,7 @@ import { PATCH as sessionTaskPatch } from "@/app/api/tasks/[id]/route";
 import { ApiError } from "@/lib/api/route";
 import type { McpIdentity } from "@/lib/mcp/auth";
 import { actionCreateTask } from "@/lib/mcp/actions";
-import { MCP_AGENT_SERVICE_PRINCIPAL_IDS } from "@/lib/permissions";
+import { isRegisteredAgentAssignee, MCP_AGENT_SERVICE_PRINCIPAL_IDS, mayAssignAgent } from "@/lib/permissions";
 
 const PORTAL = "sp_mcp_portal";
 const AGENT = "agent:hasitha-fernando";
@@ -92,6 +94,7 @@ const KEYS: Record<string, string> = {
   sp_mcp_grok: "grok-key",
   sp_mcp_agent_runner: "runner-key",
   sp_mcp_portal: "portal-key",
+  sp_mcp_cos: "cos-key",
 };
 
 function headers(key: string): Record<string, string> {
@@ -279,7 +282,7 @@ describe("agent assignee through POST /api/cursor/tasks", () => {
 });
 
 describe("the rule in actionCreateTask", () => {
-  it("refuses an agent: assignee from every MCP principal except sp_mcp_portal", async () => {
+  it("refuses a slug from the portal's agent registry from every MCP principal except sp_mcp_portal", async () => {
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL);
     expect(others).toEqual(
       expect.arrayContaining(["sp_mcp_cursor", "sp_mcp_grok", "sp_mcp_agent_runner"])
@@ -354,5 +357,82 @@ describe("agent assignee through the session route PATCH /api/tasks/[id]", () =>
     );
     expect(resp.status).toBe(403);
     expect(h.patched).toHaveLength(0);
+  });
+});
+
+// TASK-4005 part (c), Vince 2026-11-01 (q_a9fe0b74e79fadee): a principal that
+// holds task.assign may name a registered agent principal, and nothing else.
+describe("agent assignees from task.assign holders (TASK-4005 c)", () => {
+  const create = (principalId: string, assignee: string) =>
+    actionCreateTask(identityFor(principalId), {
+      title: `Delegate ${assignee}`,
+      bucket: "BKT-INFRA",
+      reporter: "ignored",
+      assignee,
+    });
+
+  it("lets sp_mcp_cos and sp_mcp_ledger name a registered agent principal", async () => {
+    await create("sp_mcp_cos", "agent:cip");
+    await create("sp_mcp_ledger", "agent:lane_claude_cos");
+    expect(h.created.map((input) => input.assignee)).toEqual(["agent:cip", "agent:lane_claude_cos"]);
+  });
+
+  it("works through the MCP tool for sp_mcp_cos", async () => {
+    const result = await callTool("cos-key", "mc_create_task", {
+      title: "CoS delegates to CIP",
+      bucket: "BKT-INFRA",
+      reporter: "cos@petrasoap.com",
+      assignee: "agent:cip",
+    });
+    expect(result.isError).toBe(false);
+    expect(h.created[0]).toMatchObject({ assignee: "agent:cip" });
+  });
+
+  it("refuses a slug that names no registered agent principal, or another spelling of one", async () => {
+    for (const assignee of [
+      AGENT, // the portal's registry, not an MCP principal
+      "agent:person_greg", // a person principal
+      "agent:sp_mcp_cip",
+      "agent:CIP",
+      "Agent:cip",
+      "agent:lane-claude-cos",
+      "agent:",
+      " agent:cip",
+      "agent:cip\n",
+    ]) {
+      await expect(create("sp_mcp_cos", assignee)).rejects.toMatchObject({
+        code: "forbidden",
+        status: 403,
+        message: expect.stringContaining("registered agent principal"),
+      });
+    }
+    expect(h.created).toHaveLength(0);
+  });
+
+  it("still refuses a registered agent from a principal without task.assign", async () => {
+    for (const principalId of ["sp_mcp_grok", "sp_mcp_claude_code", "sp_mcp_cip", "sp_mcp_workbench_intake", "sp_mcp_person_greg"]) {
+      await expect(create(principalId, "agent:cip")).rejects.toMatchObject({
+        code: "forbidden",
+        status: 403,
+        message: expect.stringContaining("task.assign"),
+      });
+    }
+    expect(h.created).toHaveLength(0);
+  });
+
+  it("refuses a revoked task.assign holder", () => {
+    // Unit-level: the MCP doors refuse a revoked actor before this guard runs.
+    expect(mayAssignAgent({ kind: "service", id: "sp_mcp_cos", status: "active" }, "agent:cip")).toBe(true);
+    expect(mayAssignAgent({ kind: "service", id: "sp_mcp_cos", status: "revoked" }, "agent:cip")).toBe(false);
+    expect(mayAssignAgent(null, "agent:cip")).toBe(false);
+  });
+
+  it("counts every registered principal except the person principals", () => {
+    for (const id of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
+      const assignee = `agent:${id.slice("sp_mcp_".length)}`;
+      expect(isRegisteredAgentAssignee(assignee), assignee).toBe(!id.startsWith("sp_mcp_person_"));
+    }
+    expect(isRegisteredAgentAssignee("  agent:cip  ")).toBe(false);
+    expect(isRegisteredAgentAssignee(null)).toBe(false);
   });
 });

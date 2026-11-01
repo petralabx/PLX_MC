@@ -20,6 +20,7 @@ import {
 import {
   TERMINAL_STAGES,
   assignmentViolation,
+  isAgentExecutor,
   isAgentId,
   isOpenInRollup,
   projectReadyToClose,
@@ -588,7 +589,7 @@ export async function createTask(
     const numeric = Number((/^TASK-(\d+)$/.exec(id) ?? [])[1] ?? 0);
     // A human-only task can never carry an agent executor (EN-003 policy).
     const assignee =
-      input.humanOnly && isAgentId(input.assignee ?? null) ? null : (input.assignee ?? null);
+      input.humanOnly && isAgentExecutor(input.assignee ?? null) ? null : (input.assignee ?? null);
     const task: Task = {
       id,
       title: input.title.trim(),

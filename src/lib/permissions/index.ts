@@ -54,7 +54,7 @@ export type {
 };
 
 export { authorize, isCapability } from "./authorize";
-export { isAgentAssignee, mayAssignAgent } from "./agent-assignee";
+export { isAgentAssignee, isRegisteredAgentAssignee, mayAssignAgent } from "./agent-assignee";
 export {
   capabilitiesForRole,
   capabilitiesForServicePrincipal,

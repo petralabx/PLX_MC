@@ -68,8 +68,8 @@ export const PATCH = route(async (req, ctx) => {
       ? "task.complete"
       : "task.progress";
   const authorized = await requireSessionActor(capability, { type: "task", id });
-  // Same rule as actionCreateTask: only a signed-in person or sp_mcp_portal
-  // may set an `agent:` assignee (agent fleet P8).
+  // Same rule as actionCreateTask (agent fleet P8): a signed-in person may set
+  // any `agent:` assignee.
   assertAgentAssigneeAllowed(authorized.actor, patch.assignee, { capability });
   const principal = aclPrincipalFromAuthorized(authorized);
   await assertTaskProjectAccess(id, principal);

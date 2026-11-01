@@ -302,7 +302,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .min(1)
         .optional()
         .describe(
-          "Optional executor: a person id, or agent:<slug> for an agent. Only sp_mcp_portal may set an agent: assignee; any other MCP principal gets forbidden (403)."
+          "Optional executor: a person id, or agent:<slug> for an agent. sp_mcp_portal may set any agent: assignee. A principal holding task.assign may set agent:<slug> only when sp_mcp_<slug> is a registered agent principal. Any other MCP principal gets forbidden (403)."
         ),
       labels: z.array(z.string().trim().min(1).max(128)).max(100).optional(),
       kind: z.enum(TASK_KINDS).optional().describe("Task kind. Omitted defaults to kind:needs-review; must agree with any kind:* label."),

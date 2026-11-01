@@ -160,7 +160,8 @@ export const MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cursor" as const;
 /**
  * Portal MCP principal (agent fleet P8). The portal's COS delegate tool uses
  * its key. Its grant is least privilege (decision CG-07b): create and search
- * tasks only. It is the only MCP principal that may set an `agent:` assignee.
+ * tasks only. It may set any `agent:` assignee; another principal holding
+ * task.assign may name only a registered agent principal (TASK-4005 c).
  * TASK-3697 adds task.uat_sync: it mirrors a portal ticket onto that ticket's
  * UAT ticket task, and edits no other task.
  */

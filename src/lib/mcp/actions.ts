@@ -281,8 +281,9 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
     type: "bucket",
     id: input.bucket,
   });
-  // Only a signed-in person or sp_mcp_portal may set an `agent:` assignee
-  // (agent fleet P8, D16). This covers the MCP tool and POST /api/cursor/tasks.
+  // A signed-in person or sp_mcp_portal may set any `agent:` assignee; another
+  // principal holding task.assign may name only a registered agent principal
+  // (agent fleet P8, D16; TASK-4005 c). This covers the MCP tool and POST /api/cursor/tasks.
   assertAgentAssigneeAllowed(identity.actor, input.assignee, { capability: "task.create" });
   // POST /api/cursor/tasks takes a stage; a task is never born Verified (W02).
   if (input.stage === "verified") throw new ApiError("verified_needs_person", VERIFIED_NEEDS_PERSON, 403);

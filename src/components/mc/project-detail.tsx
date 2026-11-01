@@ -56,7 +56,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
   const rollups = rollupForProject(buckets, tasks);
   const progress = projectProgress(tasks);
   // TASK-4005: when no task is open, ask the owner to close the project. Never auto-close.
-  const askToClose = showProjectClosePrompt(project, tasks, viewer?.id);
+  const askToClose = showProjectClosePrompt(project, tasks, viewer);
   const projectSpec = docLinkFromPrd(project.prd);
   const bucketIds = new Set(buckets.map((b) => b.id));
   const milestoneCount = MILESTONES.filter((m) => bucketIds.has(m.bucket)).length;

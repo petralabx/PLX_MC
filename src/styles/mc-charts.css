@@ -49,10 +49,10 @@
 
 /* Tone cues — overdue/blocked go warm when nonzero (SPEC §3.B.6). */
 .mc .insights .kpi.hot .v {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 .mc .insights .kpi.warn .v {
-  color: var(--p-warn);
+  color: var(--p-warn-text);
 }
 
 /* A clickable KPI (Unassigned) reads as interactive; disabled when zero. */

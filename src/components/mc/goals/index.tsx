@@ -469,7 +469,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
       <div className="insights goals">
         <p className="gp-legend">
           <span className="sw" aria-hidden="true" />
-          Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.
+          Violet marks figures your team entered by hand that aren’t in FileMaker or Sage yet.
         </p>
         {ready ? (
           <div className="gp-tools gp-rate" data-testid="goals-rate">
@@ -561,7 +561,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
           ) : null}
         </p>
         {loadError && page ? (
-          <p className="gp-notice" data-testid="goals-load-error">
+          <p className="gp-notice hot" data-testid="goals-load-error">
             Couldn’t reload the page data: {loadError.message} Showing what was loaded before.
           </p>
         ) : null}
@@ -626,7 +626,7 @@ function NotReady({ page, editor }: { page: GoalsPage; editor: boolean }) {
             {editor ? ", or now with Refresh." : "."}
           </p>
           {attempt?.status === "failed" ? (
-            <p className="gp-notice">
+            <p className="gp-notice hot">
               The last refresh, at {when(attempt.startedAt)}, failed: {attempt.error ?? "no reason recorded"}.
             </p>
           ) : null}
@@ -676,7 +676,7 @@ function Body({
         </div>
       ) : null}
       {failedAttempt && page ? (
-        <p className="gp-notice" data-testid="goals-failed-run">
+        <p className="gp-notice hot" data-testid="goals-failed-run">
           The last refresh, at {when(failedAttempt.startedAt)}, failed: {failedAttempt.error ?? "no reason recorded"}. This
           page still shows run #{page.run.id} from {when(page.run.finishedAt ?? page.run.startedAt)}.
         </p>

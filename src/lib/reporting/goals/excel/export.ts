@@ -7,7 +7,7 @@
 //
 // House rules (brief, "Workbook rules"): Arial 10 throughout and 14-pt bold
 // titles; header rows bold on light grey and frozen; everything entered by hand
-// in amber; real Excel dates; #,##0 counts and the house dollar format;
+// in violet; real Excel dates; #,##0 counts and the house dollar format;
 // fullCalcOnLoad. Totals and derived values are formulas over the Goals
 // assumptions block (rows 11–21) and the detail sheets, so the file
 // recalculates by itself. Figures read from FileMaker, Sage and the manual
@@ -38,8 +38,8 @@ import { invoiceLines, linesMismatch, type InvoiceHeader } from "../shipment-lin
 import { countedManualShipmentRefs, pendingShipmentsByClass, pendingShipmentsNotEnteredByHand } from "../pending-shipments";
 import type { PendingShipmentsDataset, CreditNotesDataset, FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentLinesDataset, ShipmentRow, TruckloadRow } from "../types";
 import {
-  AMBER_FILL,
-  AMBER_FONT,
+  HAND_FILL,
+  HAND_FONT,
   COUNT_FORMAT,
   DOLLAR_FORMAT,
   ENTRIES_SHEET,
@@ -166,9 +166,9 @@ const LOAD_LABELS: Record<LoadKind, string> = { full: "Full", partial: "Partial"
 interface Look {
   numFmt?: string;
   bold?: boolean;
-  /** Entered by hand: amber fill and font. */
-  amber?: boolean;
-  /** A header cell: bold on light grey (on amber when its column is entered by hand). */
+  /** Entered by hand: violet fill and font. */
+  hand?: boolean;
+  /** A header cell: bold on light grey (on violet when its column is entered by hand). */
   header?: boolean;
   /** An explanatory note: grey italics. */
   note?: boolean;
@@ -181,16 +181,16 @@ function put(ws: ExcelJS.Worksheet, row: number, col: number, value: ExcelJS.Cel
   const font: Partial<ExcelJS.Font> = { name: FONT_NAME, size: look.title ? TITLE_SIZE : FONT_SIZE };
   if (look.bold || look.header || look.title) font.bold = true;
   if (look.note) font.italic = true;
-  if (look.amber) font.color = { argb: AMBER_FONT };
+  if (look.hand) font.color = { argb: HAND_FONT };
   else if (look.note) font.color = { argb: NOTE_COLOR };
   cell.font = font;
-  if (look.amber || look.header) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: look.amber ? AMBER_FILL : HEADER_FILL } };
+  if (look.hand || look.header) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: look.hand ? HAND_FILL : HEADER_FILL } };
   if (look.numFmt) cell.numFmt = look.numFmt;
   if (look.header) cell.alignment = { vertical: "top", wrapText: true };
 }
 
-function headerRow(ws: ExcelJS.Worksheet, row: number, headers: readonly { text: string; amber?: boolean }[]): void {
-  headers.forEach((h, i) => put(ws, row, i + 1, h.text, { header: true, amber: h.amber }));
+function headerRow(ws: ExcelJS.Worksheet, row: number, headers: readonly { text: string; hand?: boolean }[]): void {
+  headers.forEach((h, i) => put(ws, row, i + 1, h.text, { header: true, hand: h.hand }));
 }
 
 /** Column widths; the column style makes anything typed later Arial 10 too. */
@@ -289,7 +289,7 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   ].filter(Boolean);
   if (notes.length > 0) put(ws, 3, 1, notes.join(" "), { note: true });
   put(ws, 4, 1, "Colour", { bold: true });
-  put(ws, 5, 1, "Amber cells", { amber: true });
+  put(ws, 5, 1, "Violet cells", { hand: true });
   put(ws, 5, 2, "were entered by hand by your team and aren’t in FileMaker or Sage yet. Everything else comes from the system data.");
   put(ws, 7, 1, "How to add or change entries made by hand", { bold: true });
   const customers = orList(model.truckloads.customers.map((c) => c.name));
@@ -314,7 +314,7 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     { type: "Shipment", date: day, reference: "PO0104001", customer: "A1 American", product: "Hand & body wash", productValue: 24500, freight: 1250, currency: "USD", note: "Truck left today; Sage invoice pending", enteredBy: "J. Smith" },
   ];
   examples.forEach((example, i) => {
-    EXAMPLE_COLUMNS.forEach((c, j) => put(ws, titleRow + 2 + i, j + 1, example[c.key] ?? null, { amber: true, numFmt: ENTRY_FORMATS[c.key] }));
+    EXAMPLE_COLUMNS.forEach((c, j) => put(ws, titleRow + 2 + i, j + 1, example[c.key] ?? null, { hand: true, numFmt: ENTRY_FORMATS[c.key] }));
   });
 }
 
@@ -331,7 +331,7 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
     ws,
     2,
     1,
-    "In system = FileMaker (batches) or Sage (shipments and revenue). By hand = entries made by your team that the system doesn’t have yet (amber)." +
+    "In system = FileMaker (batches) or Sage (shipments and revenue). By hand = entries made by your team that the system doesn’t have yet (violet)." +
       (input.salespeople ? ` ${salespeopleNote(input.salespeople)} The targets are the whole month’s, so revenue has no status or pace.` : "") +
       (partial ? ` ${datesNote(partial)}` : ""),
     { note: true }
@@ -342,7 +342,7 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
     { text: "Due so far" },
     { text: "Due by" },
     { text: "In system" },
-    { text: "By hand", amber: true },
+    { text: "By hand", hand: true },
     { text: "Total" },
     { text: "Status" },
     { text: "Needed per working day from today" },
@@ -359,7 +359,7 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   put(ws, R.line1, 3, partial ? "—" : { formula: `B${I.perDay}*B${I.productionCovered}` }, { numFmt: COUNT_FORMAT });
   put(ws, R.line1, 4, partial ? "—" : excelDate(model.line1.dueBy), { numFmt: DATE_FORMAT });
   put(ws, R.line1, 5, { formula: `Daily!C${daily.total}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.line1, 6, { formula: `Daily!D${daily.total}` }, { numFmt: COUNT_FORMAT, amber: true });
+  put(ws, R.line1, 6, { formula: `Daily!D${daily.total}` }, { numFmt: COUNT_FORMAT, hand: true });
   put(ws, R.line1, 7, total(R.line1), { numFmt: COUNT_FORMAT, bold: true });
   put(ws, R.line1, 8, partial ? "—" : status(R.line1));
   put(ws, R.line1, 9, partial ? "—" : needed(R.line1), { numFmt: COUNT_FORMAT });
@@ -371,12 +371,12 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   else if (target === null) put(ws, R.full, 2, "No target set", { note: true });
   else put(ws, R.full, 2, target, { numFmt: COUNT_FORMAT });
   put(ws, R.full, 5, { formula: `Truckloads!B${trucks.total}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.full, 6, { formula: `Truckloads!E${trucks.total}` }, { numFmt: COUNT_FORMAT, amber: true });
+  put(ws, R.full, 6, { formula: `Truckloads!E${trucks.total}` }, { numFmt: COUNT_FORMAT, hand: true });
   put(ws, R.full, 7, total(R.full), { numFmt: COUNT_FORMAT, bold: true });
 
   put(ws, R.partial, 1, "Partial loads to the same customers");
   put(ws, R.partial, 5, { formula: `Truckloads!C${trucks.total}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.partial, 6, { formula: `Truckloads!F${trucks.total}` }, { numFmt: COUNT_FORMAT, amber: true });
+  put(ws, R.partial, 6, { formula: `Truckloads!F${trucks.total}` }, { numFmt: COUNT_FORMAT, hand: true });
   put(ws, R.partial, 7, total(R.partial), { numFmt: COUNT_FORMAT, bold: true });
 
   // Revenue in the system: CAD plus USD at the rate, rounded to the cent half to even like the model.
@@ -385,7 +385,7 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   put(ws, R.revenue, 3, partial ? "—" : { formula: `ROUND(B${I.revenueTarget}*B${I.revenueCovered}/B${I.workingDays},2)` }, { numFmt: DOLLAR_FORMAT });
   put(ws, R.revenue, 4, partial ? "—" : excelDate(model.revenue.dueBy), { numFmt: DATE_FORMAT });
   put(ws, R.revenue, 5, { formula: `Daily!F${daily.total}+${usdToCadFormula(`Daily!G${daily.total}`)}` }, { numFmt: DOLLAR_FORMAT });
-  put(ws, R.revenue, 6, { formula: `Daily!H${daily.total}` }, { numFmt: DOLLAR_FORMAT, amber: true });
+  put(ws, R.revenue, 6, { formula: `Daily!H${daily.total}` }, { numFmt: DOLLAR_FORMAT, hand: true });
   put(ws, R.revenue, 7, total(R.revenue), { numFmt: DOLLAR_FORMAT, bold: true });
   // Narrowed to some salespeople (TASK-4277): the goal is every customer's, so no status or pace, as on the page.
   put(ws, R.revenue, 8, input.salespeople || partial ? "—" : status(R.revenue));
@@ -440,11 +440,11 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
     { text: "Date" },
     { text: "Working day" },
     { text: "Line 1 kg done (FileMaker)" },
-    { text: "Line 1 kg done (by hand)", amber: true },
+    { text: "Line 1 kg done (by hand)", hand: true },
     { text: "Line 1 kg still scheduled" },
     { text: "CAD invoiced (Sage)" },
     { text: "USD invoiced (Sage)" },
-    { text: "Revenue by hand, CAD", amber: true },
+    { text: "Revenue by hand, CAD", hand: true },
     { text: "Revenue to date, CAD" },
     { text: input.range ? "Target to date (whole month only)" : "Target to date, CAD" },
     { text: input.range ? "Last month to date (whole month only)" : "Last month to date, CAD" },
@@ -455,11 +455,11 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
     put(ws, r, 1, excelDate(d.day), { numFmt: DATE_FORMAT });
     put(ws, r, 2, d.isWorkingDay ? "Yes" : "No");
     put(ws, r, 3, d.line1DoneKg, { numFmt: COUNT_FORMAT });
-    put(ws, r, 4, d.line1ByHandKg, { numFmt: COUNT_FORMAT, amber: true });
+    put(ws, r, 4, d.line1ByHandKg, { numFmt: COUNT_FORMAT, hand: true });
     put(ws, r, 5, d.line1ScheduledKg, { numFmt: COUNT_FORMAT });
     put(ws, r, 6, dollars(d.cadCents), { numFmt: DOLLAR_FORMAT });
     put(ws, r, 7, dollars(d.usdCents), { numFmt: DOLLAR_FORMAT });
-    put(ws, r, 8, dollars(d.byHandCadCents), { numFmt: DOLLAR_FORMAT, amber: true });
+    put(ws, r, 8, dollars(d.byHandCadCents), { numFmt: DOLLAR_FORMAT, hand: true });
     put(ws, r, 9, { formula: `SUM($F$2:F${r})+${usdToCadFormula(`SUM($G$2:G${r})`)}+SUM($H$2:H${r})` }, { numFmt: DOLLAR_FORMAT });
     // Blank for some days of the month: the target is the whole month's (TASK-4391).
     put(
@@ -475,7 +475,7 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
   });
   const total = 2 + input.model.daily.length;
   put(ws, total, 1, "Total", { bold: true });
-  const sums: [col: string, numFmt: string, amber: boolean][] = [
+  const sums: [col: string, numFmt: string, hand: boolean][] = [
     ["C", COUNT_FORMAT, false],
     ["D", COUNT_FORMAT, true],
     ["E", COUNT_FORMAT, false],
@@ -483,8 +483,8 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
     ["G", DOLLAR_FORMAT, false],
     ["H", DOLLAR_FORMAT, true],
   ];
-  for (const [col, numFmt, amber] of sums) {
-    put(ws, total, ws.getColumn(col).number, { formula: `SUM(${col}2:${col}${total - 1})` }, { numFmt, bold: true, amber });
+  for (const [col, numFmt, hand] of sums) {
+    put(ws, total, ws.getColumn(col).number, { formula: `SUM(${col}2:${col}${total - 1})` }, { numFmt, bold: true, hand });
   }
   return { total };
 }
@@ -500,19 +500,19 @@ function truckloadSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { tot
     { text: "Full loads (Sage)" },
     { text: "Partial loads (Sage)" },
     { text: "Product US$ (Sage)" },
-    { text: "Full loads (by hand)", amber: true },
-    { text: "Partial loads (by hand)", amber: true },
-    { text: "Product US$ (by hand)", amber: true },
+    { text: "Full loads (by hand)", hand: true },
+    { text: "Partial loads (by hand)", hand: true },
+    { text: "Product US$ (by hand)", hand: true },
     { text: "Full loads, total" },
     { text: input.range ? "Full loads last month (whole month only)" : "Full loads last month" },
     { text: input.range ? "Partial loads last month (whole month only)" : "Partial loads last month" },
     { text: input.range ? "Product US$ last month (whole month only)" : "Product US$ last month" },
   ]);
   freeze(ws, 1);
-  const tally = (r: number, col: number, t: LoadTally, amber: boolean) => {
-    put(ws, r, col, t.full, { numFmt: COUNT_FORMAT, amber });
-    put(ws, r, col + 1, t.partial, { numFmt: COUNT_FORMAT, amber });
-    put(ws, r, col + 2, dollars(t.productUsdCents), { numFmt: DOLLAR_FORMAT, amber });
+  const tally = (r: number, col: number, t: LoadTally, hand: boolean) => {
+    put(ws, r, col, t.full, { numFmt: COUNT_FORMAT, hand });
+    put(ws, r, col + 1, t.partial, { numFmt: COUNT_FORMAT, hand });
+    put(ws, r, col + 2, dollars(t.productUsdCents), { numFmt: DOLLAR_FORMAT, hand });
   };
   customers.forEach((c, i) => {
     const r = 2 + i;
@@ -532,7 +532,7 @@ function truckloadSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { tot
     put(ws, total, col, customers.length > 0 ? { formula: `SUM(${letter}2:${letter}${total - 1})` } : 0, {
       numFmt: money ? DOLLAR_FORMAT : COUNT_FORMAT,
       bold: true,
-      amber: col >= 5 && col <= 7,
+      hand: col >= 5 && col <= 7,
     });
   }
   put(
@@ -566,17 +566,17 @@ function batchSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const rows = [...input.model.batches].sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage]);
   rows.forEach((b, i) => {
     const r = 2 + i;
-    const amber = b.source === "By hand";
-    put(ws, r, 1, b.batch, { amber });
-    put(ws, r, 2, b.product, { amber });
-    put(ws, r, 3, STAGE_LABELS[b.stage], { amber });
-    put(ws, r, 4, excelDate(b.date), { amber, numFmt: DATE_FORMAT });
-    put(ws, r, 5, b.kg, { amber, numFmt: COUNT_FORMAT });
-    put(ws, r, 6, b.band, { amber });
-    put(ws, r, 7, { formula: `IF(E${r}>=${goalsInput(INPUT_ROW.line1MinKg)},"Yes","")` }, { amber });
-    put(ws, r, 8, b.line, { amber });
-    put(ws, r, 9, b.status, { amber });
-    put(ws, r, 10, b.source, { amber });
+    const hand = b.source === "By hand";
+    put(ws, r, 1, b.batch, { hand });
+    put(ws, r, 2, b.product, { hand });
+    put(ws, r, 3, STAGE_LABELS[b.stage], { hand });
+    put(ws, r, 4, excelDate(b.date), { hand, numFmt: DATE_FORMAT });
+    put(ws, r, 5, b.kg, { hand, numFmt: COUNT_FORMAT });
+    put(ws, r, 6, b.band, { hand });
+    put(ws, r, 7, { formula: `IF(E${r}>=${goalsInput(INPUT_ROW.line1MinKg)},"Yes","")` }, { hand });
+    put(ws, r, 8, b.line, { hand });
+    put(ws, r, 9, b.status, { hand });
+    put(ws, r, 10, b.source, { hand });
   });
 }
 
@@ -644,18 +644,17 @@ function shipmentSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   // reference (an invoice, shipment, order or PO number) sits under Invoice.
   const entries = input.model.entries.filter((e) => e.type === "Shipment").sort(byDateThenEntry);
   for (const e of entries) {
-    const amber = true;
-    put(ws, r, 1, excelDate(e.date), { amber, numFmt: DATE_FORMAT });
-    put(ws, r, 2, e.reference, { amber });
-    for (const col of [3, 4, 5]) put(ws, r, col, null, { amber });
-    put(ws, r, 6, e.customer, { amber });
-    put(ws, r, 7, e.currency, { amber });
-    put(ws, r, 8, decimal(e.productValue), { amber, numFmt: DOLLAR_FORMAT });
-    put(ws, r, 9, decimal(e.freight), { amber, numFmt: DOLLAR_FORMAT });
-    put(ws, r, 10, { formula: `H${r}+I${r}` }, { amber, numFmt: DOLLAR_FORMAT });
-    put(ws, r, 11, e.truckload ? LOAD_LABELS[e.truckload.kind] : null, { amber });
-    put(ws, r, 12, `By hand (${e.entryId})`, { amber });
-    put(ws, r, 13, e.statusLabel, { amber });
+    put(ws, r, 1, excelDate(e.date), { hand: true, numFmt: DATE_FORMAT });
+    put(ws, r, 2, e.reference, { hand: true });
+    for (const col of [3, 4, 5]) put(ws, r, col, null, { hand: true });
+    put(ws, r, 6, e.customer, { hand: true });
+    put(ws, r, 7, e.currency, { hand: true });
+    put(ws, r, 8, decimal(e.productValue), { hand: true, numFmt: DOLLAR_FORMAT });
+    put(ws, r, 9, decimal(e.freight), { hand: true, numFmt: DOLLAR_FORMAT });
+    put(ws, r, 10, { formula: `H${r}+I${r}` }, { hand: true, numFmt: DOLLAR_FORMAT });
+    put(ws, r, 11, e.truckload ? LOAD_LABELS[e.truckload.kind] : null, { hand: true });
+    put(ws, r, 12, `By hand (${e.entryId})`, { hand: true });
+    put(ws, r, 13, e.statusLabel, { hand: true });
     r += 1;
   }
 }
@@ -705,17 +704,17 @@ function listValidation(ws: ExcelJS.Worksheet, key: EntryColumnKey, label: strin
 function entriesSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const entries = input.allEntries ?? input.model.entries;
   columns(ws, [10, 10, 12, 18, 22, 32, 10, 14, 12, 10, 36, 14, 26]);
-  // The import reads only this sheet; the status column is computed, so it is not amber.
-  headerRow(ws, ENTRY_HEADER_ROW, ENTRY_COLUMNS.map((c) => ({ text: c.header, amber: c.key !== "status" })));
+  // The import reads only this sheet; the status column is computed, so it is not violet.
+  headerRow(ws, ENTRY_HEADER_ROW, ENTRY_COLUMNS.map((c) => ({ text: c.header, hand: c.key !== "status" })));
   freeze(ws, ENTRY_HEADER_ROW);
-  // Existing entries in amber, then blank formatted rows, so typed values get the same formats and lists.
+  // Existing entries in violet, then blank formatted rows, so typed values get the same formats and lists.
   const last = Math.max(ENTRY_LAST_FORMATTED_ROW, ENTRY_FIRST_ROW + entries.length - 1);
   for (let r = ENTRY_FIRST_ROW; r <= last; r += 1) {
     const entry = entries[r - ENTRY_FIRST_ROW] ?? null;
     ENTRY_COLUMNS.forEach((c, i) => {
       put(ws, r, i + 1, entry ? ENTRY_VALUES[c.key](entry) : null, {
         numFmt: ENTRY_FORMATS[c.key],
-        amber: entry !== null && c.key !== "status",
+        hand: entry !== null && c.key !== "status",
       });
     });
   }
@@ -1048,7 +1047,7 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     { text: "CAD invoiced (Sage)" },
     { text: "USD invoiced, US$ (Sage)" },
     { text: "USD in CAD" },
-    { text: "Revenue by hand, CAD", amber: true },
+    { text: "Revenue by hand, CAD", hand: true },
     { text: "Total, CAD" },
     { text: "Share" },
     { text: "Freight & other charges, CAD" },
@@ -1056,8 +1055,8 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     { text: "Credit notes (Sage)" },
     { text: "Returns, CAD" },
     { text: "Credited charges, CAD" },
-    { text: "Shipped, not invoiced (shipments)", amber: true },
-    { text: "Shipped, not invoiced, CAD (estimate)", amber: true },
+    { text: "Shipped, not invoiced (shipments)" },
+    { text: "Shipped, not invoiced, CAD (estimate)" },
   ]);
   freeze(ws, CLASS_HEADER_ROW);
   const first = CLASS_HEADER_ROW + 1;
@@ -1069,7 +1068,7 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     put(ws, r, 3, dollars(c.cad.cents), { numFmt: AMOUNT_FORMAT });
     put(ws, r, 4, dollars(c.usd.cents), { numFmt: AMOUNT_FORMAT });
     put(ws, r, 5, dollars(c.usd.cadCents), { numFmt: AMOUNT_FORMAT });
-    put(ws, r, 6, dollars(c.byHand.cadCents), { numFmt: AMOUNT_FORMAT, amber: true });
+    put(ws, r, 6, dollars(c.byHand.cadCents), { numFmt: AMOUNT_FORMAT, hand: true });
     put(ws, r, 7, { formula: `C${r}+E${r}+F${r}` }, { numFmt: AMOUNT_FORMAT, bold: true });
     put(ws, r, 8, { formula: `IF($G${total}>0,G${r}/$G${total},"")` }, { numFmt: PERCENT_FORMAT });
     // TASK-3952: charges are inside Total; the goal counts Total less them.
@@ -1080,8 +1079,8 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     put(ws, r, 12, dollars(c.returns.productCadCents), { numFmt: AMOUNT_FORMAT });
     put(ws, r, 13, dollars(c.returns.chargesCadCents), { numFmt: AMOUNT_FORMAT });
     const p = pending?.rows[c.customerClass];
-    put(ws, r, 14, p ? p.shipments : "", { numFmt: COUNT_FORMAT, amber: true });
-    put(ws, r, 15, p ? dollars(p.totalCadCents) : "", { numFmt: AMOUNT_FORMAT, amber: true });
+    put(ws, r, 14, p ? p.shipments : "", { numFmt: COUNT_FORMAT });
+    put(ws, r, 15, p ? dollars(p.totalCadCents) : "", { numFmt: AMOUNT_FORMAT });
   });
   put(ws, total, 1, "All classes", { bold: true });
   for (let col = 2; col <= 7; col += 1) {
@@ -1089,7 +1088,7 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     put(ws, total, col, { formula: `SUM(${letter}${first}:${letter}${total - 1})` }, {
       numFmt: col === 2 ? COUNT_FORMAT : AMOUNT_FORMAT,
       bold: true,
-      amber: col === 6,
+      hand: col === 6,
     });
   }
   for (const col of [9, 10, 11, 12, 13, ...(pending ? [14, 15] : [])]) {
@@ -1209,7 +1208,7 @@ function pendingShipmentsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput)
     put(ws, r, 6, excelDate(s.shipDate), { numFmt: DATE_FORMAT });
     put(ws, r, 7, s.currency);
     put(ws, r, 8, s.lines, { numFmt: COUNT_FORMAT });
-    put(ws, r, 9, decimal(s.productValue), { numFmt: AMOUNT_FORMAT, amber: true });
+    put(ws, r, 9, decimal(s.productValue), { numFmt: AMOUNT_FORMAT });
   });
 }
 

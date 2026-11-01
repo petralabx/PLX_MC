@@ -50,7 +50,7 @@
 }
 
 .arch-provenance-error {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 .arch-provenance-list {

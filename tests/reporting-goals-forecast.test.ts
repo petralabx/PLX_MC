@@ -748,6 +748,16 @@ describe("the section", () => {
       .replace(/\s+/g, " ");
   };
 
+  it("gives each bucket its decision-9 status chip: Ready green, Planned blue, Late red, Not planned amber", () => {
+    const page = goalsPage();
+    if (!isReady(page)) throw new Error("fixture page should be ready");
+    const markup = renderToStaticMarkup(createElement(ForecastSection, { page }));
+    expect(markup).toContain('<span class="pv-chip ok">Ready</span>');
+    expect(markup).toContain('<span class="pv-chip info">Planned in time</span>');
+    expect(markup).toContain('<span class="pv-chip hot">Late</span>');
+    expect(markup).toContain('<span class="pv-chip warn">Not planned</span>');
+  });
+
   it("shows the four numbers with their parts, the notes and every open order row", () => {
     const out = render(goalsPage());
     expect(out).toContain("Theoretical $527,018 of $1,000,000 Invoiced $408,628 + ready $53,763 + planned in time $64,628");

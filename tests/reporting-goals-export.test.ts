@@ -1,7 +1,7 @@
 // Goals & Production workbook (TASK-2898), built from the 2026-10-14 fixture
 // with and without M1–M7 and read back with exceljs: the ten sheets in the
 // shared order, the house styles, real dates and number formats, formulas
-// wherever the brief derives a value, amber for everything entered by hand,
+// wherever the brief derives a value, violet for everything entered by hand,
 // and the "Manual entries" import template. LibreOffice then recalculates it:
 // no formula errors, and the brief's totals (Goals!G8 = 367,014.16). That test
 // skips, saying why, where soffice isn't installed (CI). The route is in
@@ -45,8 +45,8 @@ vi.mock("@/lib/reporting/goals/forecast-store", async () => {
 });
 
 import {
-  AMBER_FILL,
-  AMBER_FONT,
+  HAND_FILL,
+  HAND_FONT,
   COUNT_FORMAT,
   DOLLAR_FORMAT,
   ENTRY_COLUMNS,
@@ -113,7 +113,7 @@ async function readXlsx(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
 
 const sheet = (wb: ExcelJS.Workbook, name: string) => wb.getWorksheet(name)!;
 const fillOf = (cell: ExcelJS.Cell) => (cell.fill?.type === "pattern" ? cell.fill.fgColor?.argb : undefined);
-const isAmber = (cell: ExcelJS.Cell) => fillOf(cell) === AMBER_FILL && cell.font?.color?.argb === AMBER_FONT;
+const isHand = (cell: ExcelJS.Cell) => fillOf(cell) === HAND_FILL && cell.font?.color?.argb === HAND_FONT;
 const formulaOf = (cell: ExcelJS.Cell) =>
   cell.value !== null && typeof cell.value === "object" && "formula" in cell.value ? cell.value.formula : undefined;
 const utcDay = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -145,7 +145,7 @@ describe("the workbook", () => {
     }
   });
 
-  it("puts every header row in bold on light grey (amber for columns entered by hand) and freezes it", async () => {
+  it("puts every header row in bold on light grey (violet for columns entered by hand) and freezes it", async () => {
     const { wb } = await build();
     const headerRows: Record<string, number> = { Goals: 4, Daily: 1, Truckloads: 1, Batches: 1, Shipments: 1, "Manual entries": 1 };
     for (const [name, row] of Object.entries(headerRows)) {
@@ -153,21 +153,21 @@ describe("the workbook", () => {
       expect(ws.views[0], name).toMatchObject({ state: "frozen", ySplit: row });
       ws.getRow(row).eachCell((cell) => {
         expect(cell.font?.bold, `${name}!${cell.address}`).toBe(true);
-        expect([HEADER_FILL, AMBER_FILL], `${name}!${cell.address}`).toContain(fillOf(cell));
+        expect([HEADER_FILL, HAND_FILL], `${name}!${cell.address}`).toContain(fillOf(cell));
       });
     }
-    const amberHeaders = (name: string, row: number) => {
+    const handHeaders = (name: string, row: number) => {
       const out: string[] = [];
       sheet(wb, name).getRow(row).eachCell((cell) => {
-        if (isAmber(cell)) out.push(String(cell.value));
+        if (isHand(cell)) out.push(String(cell.value));
       });
       return out;
     };
-    expect(amberHeaders("Goals", 4)).toEqual(["By hand"]);
-    expect(amberHeaders("Daily", 1)).toEqual(["Line 1 kg done (by hand)", "Revenue by hand, CAD"]);
-    expect(amberHeaders("Truckloads", 1)).toEqual(["Full loads (by hand)", "Partial loads (by hand)", "Product US$ (by hand)"]);
+    expect(handHeaders("Goals", 4)).toEqual(["By hand"]);
+    expect(handHeaders("Daily", 1)).toEqual(["Line 1 kg done (by hand)", "Revenue by hand, CAD"]);
+    expect(handHeaders("Truckloads", 1)).toEqual(["Full loads (by hand)", "Partial loads (by hand)", "Product US$ (by hand)"]);
     // The import template: every column is entered by hand except the computed status.
-    expect(amberHeaders("Manual entries", 1)).toEqual(ENTRY_COLUMNS.filter((c) => c.key !== "status").map((c) => c.header));
+    expect(handHeaders("Manual entries", 1)).toEqual(ENTRY_COLUMNS.filter((c) => c.key !== "status").map((c) => c.header));
   });
 
   it("uses real dates and the house number formats", async () => {
@@ -227,8 +227,8 @@ describe("Goals", () => {
     };
     for (const row of [5, 6, 7, 8]) {
       formulas[`G${row}`] = `E${row}+F${row}`;
-      expect(isAmber(goals.getCell(`F${row}`)), `F${row}`).toBe(true);
-      expect(isAmber(goals.getCell(`E${row}`)), `E${row}`).toBe(false);
+      expect(isHand(goals.getCell(`F${row}`)), `F${row}`).toBe(true);
+      expect(isHand(goals.getCell(`E${row}`)), `E${row}`).toBe(false);
     }
     for (const row of [5, 8]) {
       formulas[`H${row}`] = `IF(G${row}>=C${row},"On track","Behind")`;
@@ -312,8 +312,8 @@ describe("Daily, Truckloads and Batches", () => {
       expect(daily.getCell(`D${r}`).value).toBe(day.line1ByHandKg);
       expect(daily.getCell(`E${r}`).value).toBe(day.line1ScheduledKg);
       expect(daily.getCell(`H${r}`).value).toBe(day.byHandCadCents / 100);
-      expect(isAmber(daily.getCell(`D${r}`)) && isAmber(daily.getCell(`H${r}`))).toBe(true);
-      expect(isAmber(daily.getCell(`C${r}`)) || isAmber(daily.getCell(`F${r}`))).toBe(false);
+      expect(isHand(daily.getCell(`D${r}`)) && isHand(daily.getCell(`H${r}`))).toBe(true);
+      expect(isHand(daily.getCell(`C${r}`)) || isHand(daily.getCell(`F${r}`))).toBe(false);
       expect(formulaOf(daily.getCell(`I${r}`))).toBe(`SUM($F$2:F${r})+${usdToCadFormula(`SUM($G$2:G${r})`)}+SUM($H$2:H${r})`);
       expect(formulaOf(daily.getCell(`J${r}`))).toBe(`ROUND(Goals!$B$16*COUNTIF($B$2:B${r},"Yes")/Goals!$B$11,2)`);
     });
@@ -338,7 +338,7 @@ describe("Daily, Truckloads and Batches", () => {
         c.lastMonth.full,
       ]);
       expect(formulaOf(trucks.getCell(`H${r}`))).toBe(`B${r}+E${r}`);
-      for (const col of ["E", "F", "G"]) expect(isAmber(trucks.getCell(`${col}${r}`)), `${col}${r}`).toBe(true);
+      for (const col of ["E", "F", "G"]) expect(isHand(trucks.getCell(`${col}${r}`)), `${col}${r}`).toBe(true);
     });
     const total = 2 + customers.length;
     for (const col of ["B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]) {
@@ -366,7 +366,7 @@ describe("Daily, Truckloads and Batches", () => {
     }
   });
 
-  it("Batches: the model's batch list grouped by stage, Line 1 as a formula, hand entries in amber", async () => {
+  it("Batches: the model's batch list grouped by stage, Line 1 as a formula, hand entries in violet", async () => {
     const { wb, model } = await build();
     const batches = sheet(wb, "Batches");
     expect((batches.getRow(1).values as unknown[]).slice(1)).toEqual([
@@ -390,7 +390,7 @@ describe("Daily, Truckloads and Batches", () => {
       expect(formulaOf(batches.getCell(`G${r}`))).toBe(`IF(E${r}>=Goals!$B$14,"Yes","")`);
       const hand = batches.getCell(`J${r}`).value === "By hand";
       if (hand) byHand.push(String(batches.getCell(`A${r}`).value));
-      for (const col of ["A", "E", "G", "J"]) expect(isAmber(batches.getCell(`${col}${r}`)), `${col}${r}`).toBe(hand);
+      for (const col of ["A", "E", "G", "J"]) expect(isHand(batches.getCell(`${col}${r}`)), `${col}${r}`).toBe(hand);
     }
     expect(stages).toEqual(["Completed", "Completed (by hand)", "Open past date", "Scheduled"]);
     expect(byHand.sort()).toEqual(["BC-26286C", "BC-26290X"]);
@@ -408,7 +408,7 @@ describe("Shipments", () => {
       expect(ships.getCell(`B${r}`).value).toBe(s.invoice);
       expect(ships.getCell(`A${r}`).value).toEqual(utcDay(s.shipDate));
       expect(ships.getCell(`L${r}`).value).toBe("Sage");
-      expect(isAmber(ships.getCell(`B${r}`))).toBe(false);
+      expect(isHand(ships.getCell(`B${r}`))).toBe(false);
       if (ships.getCell(`K${r}`).value === "Full") full.add(`${s.customerCode}|${s.shipment}`);
       else expect(ships.getCell(`K${r}`).value, s.invoice).toBeNull();
     });
@@ -418,12 +418,12 @@ describe("Shipments", () => {
     expect(ships.getCell("F54").value).toBe("Tiger Hospitality LLC DBA of A1 American");
   });
 
-  it("then every shipment entered by hand, counted or not, with its status, in amber", async () => {
+  it("then every shipment entered by hand, counted or not, with its status, in violet", async () => {
     const { wb } = await build();
     const ships = sheet(wb, "Shipments");
     const rows = [];
     for (let r = 2 + DATASETS.shipments.length; r <= ships.rowCount; r += 1) {
-      for (let col = 1; col <= 13; col += 1) expect(isAmber(ships.getCell(r, col)), `${r}:${col}`).toBe(true);
+      for (let col = 1; col <= 13; col += 1) expect(isHand(ships.getCell(r, col)), `${r}:${col}`).toBe(true);
       expect(formulaOf(ships.getCell(`J${r}`))).toBe(`H${r}+I${r}`);
       rows.push([ships.getCell(`L${r}`).value, ships.getCell(`B${r}`).value, ships.getCell(`K${r}`).value, ships.getCell(`M${r}`).value]);
     }
@@ -437,7 +437,7 @@ describe("Shipments", () => {
 });
 
 describe("Manual entries (the import template)", () => {
-  it("has exactly the shared columns, the entries in amber, then formatted rows with the lists to row 200", async () => {
+  it("has exactly the shared columns, the entries in violet, then formatted rows with the lists to row 200", async () => {
     const { wb, model } = await build();
     const ws = sheet(wb, "Manual entries");
     expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual(ENTRY_COLUMNS.map((c) => c.header));
@@ -456,7 +456,7 @@ describe("Manual entries (the import template)", () => {
       expect(ws.getCell(r, col("currency")).value).toBe(entry.currency);
       expect(ws.getCell(r, col("enteredBy")).value).toBe(entry.enteredBy);
       expect(ws.getCell(r, col("status")).value).toBe(entry.statusLabel);
-      for (const c of ENTRY_COLUMNS) expect(isAmber(ws.getCell(r, col(c.key))), `${c.key} ${r}`).toBe(c.key !== "status");
+      for (const c of ENTRY_COLUMNS) expect(isHand(ws.getCell(r, col(c.key))), `${c.key} ${r}`).toBe(c.key !== "status");
     });
     expect(ws.getCell("A2").value).toBe("M001");
     expect(ws.getCell("M5").value).toBe("In Sage now");
@@ -464,7 +464,7 @@ describe("Manual entries (the import template)", () => {
     const blank = 2 + model.entries.length;
     for (const r of [blank, ENTRY_LAST_FORMATTED_ROW]) {
       expect(ws.getCell(r, col("entryId")).value, `row ${r}`).toBeNull();
-      expect(isAmber(ws.getCell(r, col("type"))), `row ${r}`).toBe(false);
+      expect(isHand(ws.getCell(r, col("type"))), `row ${r}`).toBe(false);
       expect(ws.getCell(r, col("date")).numFmt).toBe(DATE_FORMAT);
       expect(ws.getCell(r, col("kg")).numFmt).toBe(COUNT_FORMAT);
       expect(ws.getCell(r, col("productValue")).numFmt).toBe(DOLLAR_FORMAT);
@@ -483,7 +483,7 @@ describe("Manual entries (the import template)", () => {
     const { wb } = await build([]);
     const ws = sheet(wb, "Manual entries");
     expect(ws.getCell("A2").value).toBeNull();
-    expect(isAmber(ws.getCell("A2"))).toBe(false);
+    expect(isHand(ws.getCell("A2"))).toBe(false);
     expect(ws.getCell("B2").dataValidation).toMatchObject({ formulae: ['"Batch,Shipment"'] });
     expect(ws.getCell(`J${ENTRY_LAST_FORMATTED_ROW}`).dataValidation).toMatchObject({ formulae: ['"CAD,USD"'] });
   });
@@ -498,7 +498,7 @@ describe("Read me", () => {
     expect(text(2)).toBe(
       "Exported 2026-10-14 10:42 (Toronto time) from refresh run #41 of 2026-10-14 06:00. FileMaker data through 2026-10-14, Sage through 2026-10-14."
     );
-    expect(isAmber(ws.getCell("A5"))).toBe(true);
+    expect(isHand(ws.getCell("A5"))).toBe(true);
     const lines = [...Array(ws.rowCount)].map((_, i) => text(i + 1));
     expect(lines.filter((l) => /^\d\. /.test(l)).map((l) => l.slice(0, 2))).toEqual(["1.", "2.", "3.", "4.", "5."]);
     expect(lines.join("\n")).toContain("Import manual entries");
@@ -508,7 +508,7 @@ describe("Read me", () => {
     const header = (ws.getRow(examples + 1).values as unknown[]).slice(1);
     expect(header).toEqual(ENTRY_COLUMNS.filter((c) => c.key !== "status").map((c) => c.header));
     expect([ws.getCell(examples + 2, 2).value, ws.getCell(examples + 3, 2).value]).toEqual(["Batch", "Shipment"]);
-    expect(isAmber(ws.getCell(examples + 2, 4)) && isAmber(ws.getCell(examples + 3, 8))).toBe(true);
+    expect(isHand(ws.getCell(examples + 2, 4)) && isHand(ws.getCell(examples + 3, 8))).toBe(true);
     expect(ws.rowCount).toBe(examples + 3);
   });
 });
@@ -639,8 +639,12 @@ describe("at the Sage rate", () => {
         c.byHand.cadCents / 100,
       ]);
       expect(formulaOf(ws.getCell(`G${r}`))).toBe(`C${r}+E${r}+F${r}`);
-      expect(isAmber(ws.getCell(`F${r}`))).toBe(true);
+      expect(isHand(ws.getCell(`F${r}`))).toBe(true);
+      // Shipped-not-invoiced is an estimate from Sage, not an entry by hand.
+      expect(isHand(ws.getCell(`N${r}`)) || isHand(ws.getCell(`O${r}`))).toBe(false);
     });
+    expect(isHand(ws.getCell("F4"))).toBe(true);
+    expect(isHand(ws.getCell("N4")) || isHand(ws.getCell("O4"))).toBe(false);
     expect(ws.getCell("A9").value).toBe("All classes");
     expect(formulaOf(ws.getCell("G9"))).toBe("SUM(G5:G8)");
     expect(ws.getCell("A11").value).toBe("Revenue card (on the page)");

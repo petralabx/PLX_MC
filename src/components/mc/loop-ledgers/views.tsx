@@ -333,7 +333,7 @@ export function IndexView({
                 <span className="ll-cell ll-mono">{artCount}</span>
                 <span className="ll-cell ll-mono">
                   {redCount > 0 ? (
-                    <span style={{ color: "var(--p-hot)", fontWeight: 700 }}>
+                    <span style={{ color: "var(--p-hot-text)", fontWeight: 700 }}>
                       {redCount} red
                     </span>
                   ) : (
@@ -370,14 +370,8 @@ export function DetailView({
   onBack: () => void;
 }) {
   const hc = result.ok ? result.validationResult.healthCode : result.reason;
-  const tone =
-    !result.ok
-      ? "hot"
-      : hc === "valid"
-      ? "valid"
-      : hc === "partial" || hc === "no_ledgers"
-      ? "warn"
-      : "hot";
+  // The list's tone for the same code: a disabled or empty source is grey; a failed read is red.
+  const tone = healthTone(hc);
 
   const ghUrl =
     result.ok && result.ref
@@ -464,7 +458,7 @@ export function DetailView({
       {/* Loud health panel */}
       <div className={`ll-health-panel ${tone}`} data-testid="ll-health-panel">
         <div className="ll-health-panel-hd">
-          <span className={`ll-row-dot ${tone === "valid" ? "valid" : tone === "warn" ? "warn" : "degraded"}`} aria-hidden />
+          <span className={`ll-row-dot ${tone === "hot" ? "degraded" : tone}`} aria-hidden />
           <span className={`ll-health-panel-code ${tone}`}>{healthLabel(hc)}</span>
           {result.ok && ledger && (
             <span style={{ fontFamily: "var(--mono)", fontSize: "var(--p-text-small)", color: "var(--p-muted)" }}>
@@ -474,7 +468,7 @@ export function DetailView({
         </div>
 
         {!result.ok && (
-          <p style={{ fontFamily: "var(--mono)", fontSize: "var(--p-text-small)", color: "var(--p-hot)", marginTop: "var(--p-space-2)" }}>
+          <p style={{ fontFamily: "var(--mono)", fontSize: "var(--p-text-small)", color: tone === "hot" ? "var(--p-hot-text)" : "var(--p-ink-2)", marginTop: "var(--p-space-2)" }}>
             {result.note}
           </p>
         )}
@@ -515,10 +509,10 @@ export function DetailView({
               <span className="ll-artifact-id">{i + 1}</span>
               <span className="ll-artifact-title">{a.title}</span>
               <span className="ll-mono" style={{ fontSize: "var(--p-text-small)", color: "var(--p-muted)" }}>{a.status}</span>
-              <span className="ll-mono" style={{ fontSize: "var(--p-text-small)", color: a.severity === "critical" ? "var(--p-hot)" : "var(--p-ink-2)" }}>
+              <span className="ll-mono" style={{ fontSize: "var(--p-text-small)", color: a.severity === "critical" ? "var(--p-hot-text)" : "var(--p-ink-2)" }}>
                 {a.severity}
               </span>
-              <span className="ll-mono" style={{ fontSize: "var(--p-text-small)", color: a.safety_class === "red" ? "var(--p-hot)" : "var(--p-ink-2)" }}>
+              <span className="ll-mono" style={{ fontSize: "var(--p-text-small)", color: a.safety_class === "red" ? "var(--p-hot-text)" : "var(--p-ink-2)" }}>
                 {a.safety_class}
               </span>
               <span className="ll-mono" style={{ fontSize: "var(--p-text-small)", color: "var(--p-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -661,7 +655,7 @@ export function DegradedGallery({ rows }: { rows: LoaderSummaryRow[] }) {
                       textTransform: "none",
                       letterSpacing: 0,
                       fontWeight: 400,
-                      color: "var(--p-hot)",
+                      color: "var(--p-hot-text)",
                       marginLeft: "auto",
                     }}
                   >

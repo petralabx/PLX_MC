@@ -23,7 +23,7 @@
 }
 
 .vs-pill.hot {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   border-color: color-mix(in srgb, var(--p-hot) 30%, transparent);
 }
 .vs-pill.warn {
@@ -89,7 +89,12 @@
 }
 
 .vs-banner-body { flex: 1; color: var(--p-ink-2); }
-.vs-banner-ct { font-weight: 700; color: var(--p-hot); }
+.vs-banner-ct { font-weight: 700; color: var(--p-hot-text); }
+
+/* Only vendors at their warn threshold: at risk, so amber (decision 9). Red stays for over budget or critical. */
+.vs-banner.warn { border-left-color: var(--p-warn); }
+.vs-banner.warn .dot { background: var(--p-warn); }
+.vs-banner-ct.warn { color: var(--p-warn-text); }
 
 /* ─── Stat cards ──────────────────────────────────────────────────────────── */
 
@@ -124,7 +129,7 @@
   white-space: nowrap;
 }
 
-.vs-stat-n.hot { color: var(--p-hot); }
+.vs-stat-n.hot { color: var(--p-hot-text); }
 .vs-stat-n.warn { color: var(--p-warn-text); }
 
 .vs-stat-label {
@@ -319,7 +324,7 @@
 .vs-hpill.hot {
   background: color-mix(in srgb, var(--p-hot) 12%, transparent);
   border-color: color-mix(in srgb, var(--p-hot) 28%, transparent);
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 .vs-hpill.muted {
   background: color-mix(in srgb, var(--p-muted) 8%, transparent);
@@ -459,7 +464,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: var(--p-track-tick);
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 .vs-degraded-hint { color: var(--p-muted); }
@@ -540,7 +545,7 @@
 }
 
 .vs-form-ok { color: var(--p-ok-text); font-size: var(--p-text-small); }
-.vs-form-err { color: var(--p-hot); font-size: var(--p-text-small); }
+.vs-form-err { color: var(--p-hot-text); font-size: var(--p-text-small); }
 
 /* ─── Snapshots + refresh log ─────────────────────────────────────────────── */
 
@@ -625,7 +630,7 @@
   border: 1px solid color-mix(in srgb, var(--p-hot) 40%, transparent);
   border-left: 3px solid var(--p-hot);
   border-radius: var(--p-radius);
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   font-family: var(--mono);
   font-size: var(--p-text-small);
   background: color-mix(in srgb, var(--p-hot) 5%, transparent);

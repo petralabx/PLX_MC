@@ -1,7 +1,9 @@
 /* Goals & Production screen (TASK-2896) — imported into the mc.screens layer
    (ADR-005): phone-first, wider tiers by @container main, hover under
-   (hover: hover), --p-* tokens only. Amber is the theme's warning colour and
-   marks only what was entered by hand (fills --p-warn, text --p-warn-text).
+   (hover: hover), --p-* tokens only. Violet (tokens v1.7.0, decision 9) marks
+   only what was entered by hand: text --p-hand-text, chart segments --p-hand,
+   and a diagonal hatch (--gp-hand-fill) on the card bar and the legend swatch.
+   Amber means at risk and nothing else.
    The KPI/chart-card look comes from the Insights lane through the .insights
    wrapper; this file adds the goal cards, the column charts
    (charts/column-chart.tsx, first used here), tables, tiles, skeletons and the
@@ -43,12 +45,17 @@
   color: var(--p-ink-2);
 }
 
+/* The by-hand hatch: violet stripes at 135°, used on the legend swatch and the card bar. */
+.mc .goals {
+  --gp-hand-fill: repeating-linear-gradient(135deg, var(--p-hand) 0 2px, color-mix(in srgb, var(--p-hand) 40%, transparent) 2px 4px);
+}
+
 .mc .goals .gp-legend .sw {
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
   border-radius: 2px;
-  background: var(--p-warn);
+  background: var(--gp-hand-fill);
 }
 
 .mc .goals .gp-status {
@@ -57,7 +64,7 @@
   color: var(--p-ink-2);
 }
 
-/* The revenue rate switch (TASK-3780): never amber, which means "by hand". Its
+/* The revenue rate switch (TASK-3780): never violet, which means "by hand". Its
    status stays rendered while empty, so screen readers announce what fills it. */
 .mc .goals .gp-rate {
   margin: 0;
@@ -65,12 +72,19 @@
   color: var(--p-ink-2);
 }
 
+/* A note about the data or the page: information (blue). A problem the reader
+   must act on (a failed load or refresh, rows that will be deleted, figures
+   that don't add up) adds .hot (decision 9: red means failed or behind). */
 .mc .goals .gp-notice {
   margin: 0;
   padding: 8px 12px;
-  border-left: 3px solid var(--p-hot);
+  border-left: 3px solid var(--p-info);
   background: var(--p-paper-2);
   color: var(--p-ink);
+}
+
+.mc .goals .gp-notice.hot {
+  border-left-color: var(--p-hot);
 }
 
 .mc .goals .gp-banner {
@@ -83,8 +97,42 @@
   color: var(--p-ink);
 }
 
-.mc .goals .gp-amber {
-  color: var(--p-warn-text);
+.mc .goals .gp-hand {
+  color: var(--p-hand-text);
+}
+
+/* A note about the data (needs access, lines waiting, ambiguous codes):
+   information, not a status, so the blue text shade. */
+.mc .goals .gp-note-flag {
+  color: var(--p-info-text);
+}
+
+/* Status chips show their shape as well as their word (decision 9): on track
+   a circle, at risk a square, behind a triangle, information an outlined
+   circle. The shape is decorative; the word carries the meaning. */
+.mc .goals .pv-chip:is(.ok, .warn, .hot, .info)::before {
+  content: "";
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-right: 0.45em;
+  vertical-align: 0.05em;
+  background: currentColor;
+}
+.mc .goals .pv-chip.ok::before {
+  border-radius: 50%;
+}
+.mc .goals .pv-chip.warn::before {
+  border-radius: 1px;
+}
+.mc .goals .pv-chip.hot::before {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.mc .goals .pv-chip.info::before {
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
 }
 
 /* ─── Pinned KPI header and section tabs (TASK-4094) ──────────────────────── */
@@ -375,7 +423,7 @@
   background: var(--p-accent);
 }
 .mc .goals .gp-bar .hand {
-  background: var(--p-warn);
+  background: var(--gp-hand-fill);
 }
 .mc .goals .gp-bar .sched {
   background: var(--p-accent-soft);
@@ -646,8 +694,8 @@
   transform: translateX(calc(-100% - 10px));
 }
 
-.mc .colchart-tip .gp-amber {
-  color: var(--p-warn-text);
+.mc .colchart-tip .gp-hand {
+  color: var(--p-hand-text);
 }
 
 .mc .colchart-x {
@@ -831,19 +879,19 @@
   color: var(--p-muted);
 }
 
-/* Entered by hand: amber text on a light amber tint; whole rows get a left rule. */
+/* Entered by hand: violet text on a light violet tint; whole rows get a left rule. */
 .mc .goals .gp-table :is(td, th).hand,
 .mc .goals .gp-table tr.hand :is(td, th) {
-  color: var(--p-warn-text);
-  background: color-mix(in srgb, var(--p-warn) 10%, var(--p-card));
+  color: var(--p-hand-text);
+  background: color-mix(in srgb, var(--p-hand) 10%, var(--p-card));
 }
 
 .mc .goals .gp-table thead th.hand {
-  color: var(--p-warn-text);
+  color: var(--p-hand-text);
 }
 
 .mc .goals .gp-table tr.hand > :first-child {
-  box-shadow: inset 3px 0 0 var(--p-warn);
+  box-shadow: inset 3px 0 0 var(--p-hand);
 }
 
 /* Entries that no longer count: dimmed to muted text, never hidden. */
@@ -1501,7 +1549,7 @@
   position: absolute;
 }
 
-/* Problems: the alarm tone, never amber (amber means "entered by hand"). */
+/* Problems: the alarm tone, never violet (violet means "entered by hand"). */
 .mc .goals .gp-alert:not(:empty) {
   padding: 10px 12px;
   border-left: 3px solid var(--p-hot);

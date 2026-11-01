@@ -8,7 +8,7 @@ import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { niceMax, ticksFor } from "@/components/mc/charts";
+import { StackedColumns, niceMax, ticksFor } from "@/components/mc/charts";
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "@/components/mc/goals/charts";
 import { GoalCards } from "@/components/mc/goals/goal-cards";
 import { RevenueBreakdown } from "@/components/mc/goals/revenue-breakdown";
@@ -276,14 +276,14 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
     expect(bd).not.toContain("-$");
   });
 
-  it("marks the by-hand figures amber and names query and run in the tooltips", () => {
+  it("marks the by-hand figures violet and names query and run in the tooltips", () => {
     const markup = html(GoalCards, { page: READY });
-    expect(markup).toContain('<span class="gp-amber">19,050 kg entered by hand</span>');
+    expect(markup).toContain('<span class="gp-hand">19,050 kg entered by hand</span>');
     expect(markup).toContain('title="From query batches · run #41, Oct 14, 6:00 AM"');
     expect(markup).toContain('title="From queries revenue-by-currency, credit-notes · run #41, Oct 14, 6:00 AM"');
   });
 
-  it("hides the amber part at zero and flags a stored exchange rate", () => {
+  it("hides the by-hand part at zero and flags a stored exchange rate", () => {
     const plain = goalsPage({}, []);
     if (!isReady(plain)) throw new Error("ready");
     const stale = { ...plain, fx: { ...plain.fx, source: "stored" as const, stale: true } };
@@ -295,7 +295,7 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
 });
 
 describe("tables and tiles", () => {
-  it("lists truckloads by customer with amber by-hand columns and a total", () => {
+  it("lists truckloads by customer with violet by-hand columns and a total", () => {
     const markup = html(TruckloadTable, { page: READY });
     const out = text(markup);
     expect(out).toContain("A1 American A1TEXT11 1 0 31,394.40 1 0 24,500.00 3 1 88,512.70");
@@ -331,7 +331,7 @@ describe("tables and tiles", () => {
     expect(scheduled).toContain("Plus 19 batches of every size still open past their scheduled date.");
   });
 
-  it("lists every batch, by-hand rows in amber", () => {
+  it("lists every batch, by-hand rows in violet", () => {
     const markup = html(BatchList, { page: READY });
     expect(text(markup)).toContain(`Showing ${READY.model.batches.length} of ${READY.model.batches.length} batches`);
     expect(markup.match(/<tr class="hand">/g)).toHaveLength(2);
@@ -359,6 +359,29 @@ describe("tables and tiles", () => {
 });
 
 describe("charts", () => {
+  it("keeps a sliver of a stacked column visible: no surface gap touches a segment under 2% of the plot", () => {
+    type Seg = { key: string; value: number; colorVar: string };
+    const chart = (stack: Seg[]) =>
+      renderToStaticMarkup(createElement(StackedColumns, { summary: "One day", axis: [{ key: "d1", label: "1" }], stacks: [stack], keys: [] }));
+    const gaps = (out: string) => out.match(/<line [^>]*stroke="var\(--p-paper\)"[^>]*>/g) ?? [];
+    // Two thick segments: one surface gap between them, and no segment outline.
+    const thick = chart([
+      { key: "a", value: 5_000, colorVar: "var(--p-accent)" },
+      { key: "b", value: 4_000, colorVar: "var(--p-ok)" },
+    ]);
+    expect(gaps(thick)).toHaveLength(1);
+    expect(thick).not.toMatch(/<rect [^>]*stroke=/);
+    // 40 kg on a 10,000 kg axis is 0.4% of the plot: no gap on either side of it, so nothing covers it.
+    const sliver = chart([
+      { key: "fm", value: 9_000, colorVar: "var(--p-accent)" },
+      { key: "hand", value: 40, colorVar: "var(--p-hand)" },
+      { key: "late", value: 900, colorVar: "var(--p-ok)" },
+    ]);
+    expect(sliver).toContain('fill="var(--p-hand)"');
+    expect(gaps(sliver)).toHaveLength(0);
+    expect(sliver).not.toMatch(/<rect [^>]*stroke=/);
+  });
+
   it("picks round axes that don't waste the plot", () => {
     expect([niceMax(6, true), niceMax(7, true), niceMax(42, true), niceMax(1.0074e8), niceMax(0)]).toEqual([6, 8, 50, 1.2e8, 1]);
     expect(ticksFor(8, true)).toEqual([0, 2, 4, 6, 8]);
@@ -381,7 +404,7 @@ describe("charts", () => {
     expect(markup.match(/class="shade"/g)).toHaveLength(10);
   });
 
-  it("lists Line 1 kg per day in the chart table, by hand in amber", () => {
+  it("lists Line 1 kg per day in the chart table, by hand in violet", () => {
     const markup = html(DailyTable, { page: READY });
     expect(text(markup)).toContain("Line 1 kg done Line 1 kg by hand Line 1 kg scheduled");
     // Oct 13: M1's 10,050 kg by hand; BC-26286G and BC-26286H (18,000 kg) still open.
@@ -405,7 +428,7 @@ describe("charts", () => {
     if (!isReady(firstDay)) throw new Error("ready");
     firstDay.model.daily = firstDay.model.daily.map((d, i) => ({ ...d, isToday: i === 0, isFuture: i > 0 }));
     const markup = html(DailyRevenueChart, { page: firstDay });
-    const points = [...markup.matchAll(/<polyline class="line" points="([^"]+)" stroke="var\(--p-(accent|warn)\)"/g)].map((m) => m[1].split(" ").length);
+    const points = [...markup.matchAll(/<polyline class="line" points="([^"]+)" stroke="var\(--p-(accent|hand)\)"/g)].map((m) => m[1].split(" ").length);
     // Sage and Sage + by hand each draw a short flat segment on day 1.
     expect(points).toEqual([2, 2]);
   });
@@ -430,7 +453,7 @@ describe("page shell", () => {
     expect(markup.match(/role="tab"/g)).toHaveLength(12);
     expect(markup.match(/aria-selected="true"/g)).toHaveLength(1);
     expect(markup.match(/class="gp-skel"/g)).toHaveLength(markup.match(/<section /g)?.length ?? -1);
-    expect(text(markup)).toContain("Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.");
+    expect(text(markup)).toContain("Violet marks figures your team entered by hand that aren’t in FileMaker or Sage yet.");
 
     const forecast = html(GoalsView, { route: { screen: "goals", tab: "forecast" }, nav: () => {} });
     expect(forecast).toContain('data-testid="goals-forecast"');

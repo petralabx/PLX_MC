@@ -3,7 +3,7 @@
 - Slug: `goals-design-refresh` (this file is `docs/workstreams/goals-design-refresh.md`)
 - Owner: Vince · operator: CoS (cos@petrasoap.com) · agents: claude/friendly-gates-2br59z
 - Branches: `claude/friendly-gates-2br59z`
-- MC tasks: TASK-4373, TASK-4385, TASK-4391; decision TASK-4387; project page TASK-4390, TASK-4392, TASK-4393; follow-ups TASK-4414, TASK-4426; slice 4 TASK-4395 (portal), TASK-4415, TASK-4416 (portal)
+- MC tasks: TASK-4373, TASK-4385, TASK-4391; decision TASK-4387; project page TASK-4390, TASK-4392, TASK-4393; follow-ups TASK-4414, TASK-4426, TASK-4476, TASK-4478; slice 4 TASK-4395 (portal), TASK-4415, TASK-4416 (portal)
 - SharePoint handoff: n/a
 
 ## Goal
@@ -12,7 +12,7 @@ Build the 2026-10-31 design canvas for Goals & production and the project page, 
 
 ## Status
 
-active, as of 2026-11-01. Slices 1 to 3 landed in PLX_MC #543 and the project page in #546. The open PLX_MC PR carries the project-page follow-ups (TASK-4414 save rollback, TASK-4426 rich-text review fixes). Slice 4's portal half (tokens v1.7.0, TASK-4395) is plx-customer-portal #3256, in the merge queue. Slice 4's Mission Control half (TASK-4415) and the portal email colours (TASK-4416) are committed on local worktree branches and go up when their repo's branch is free.
+active, as of 2026-11-01. Slices 1 to 3 landed in PLX_MC #543, the project page in #546 and its follow-ups in #549, #556 and #557. Tokens v1.7.0 landed in plx-customer-portal #3256. Open: the portal colours that follow the tokens (TASK-4416, plx-customer-portal #3268), and in PLX_MC Mission Control's slice 4 (TASK-4415).
 
 ## Done
 
@@ -21,13 +21,16 @@ active, as of 2026-11-01. Slices 1 to 3 landed in PLX_MC #543 and the project pa
 - Slice 3, TASK-4391: a date range for the whole report (`dates=mtd|week|7d|from..to`), narrowed like the salesperson filter. Partial pages show figures without the goal; the forecast and potential revenue stay the whole month's. The workbook follows the days.
 - Slices 1 to 3 landed in PLX_MC #543.
 - Project page, TASK-4390, TASK-4392, TASK-4393: rich text for descriptions and approval summaries, the Due filter, and a deterministic wiring e2e. Landed in PLX_MC #546.
+- Follow-ups, TASK-4414 and TASK-4426: a project's saves go to the server one at a time, and bare URLs are masked before inline Markdown. Landed in PLX_MC #549.
+- TASK-4476: a delimiter or code span right after a bare URL closes again. Landed in PLX_MC #556.
+- TASK-4478: a URL's tail is found in one pass and never opens emphasis, and code spans stay literal. Landed in PLX_MC #557.
+- Slice 4, portal half, TASK-4395: tokens v1.7.0 (ADR-012), the text-shade sweep and `audit:tokens` rule. Landed in plx-customer-portal #3256.
 
 ## Next steps
 
-1. Land the project-page follow-ups PR (TASK-4414, TASK-4426).
-2. When plx-customer-portal #3256 merges: re-run `PLX_PORTAL_ROOT=… bash scripts/plx-ds-sync.sh` so the parity file names the merged portal commit, then open the Mission Control slice-4 PR from `local/tokens-v170` (TASK-4415). It pins 1.7.0, moves text to the `-text` shades, and turns Goals' by-hand figures violet with status shapes.
-3. Then the portal email PR from `local/email-tokens` (TASK-4416): emails and the pipeline aging colours on v1.7.0, with a test that holds the email theme to the runtime tokens.
-4. Ask CoS (for Vince) how the remaining amber meanings move: Medium severity (portal ADR-003), Open tickets (portal ADR-004), and "doing" in Mission Control's charts.
+1. Land the Mission Control slice-4 PR (TASK-4415). It pins 1.7.0, moves text to the `-text` shades, turns Goals' by-hand figures violet, gives charts grey, blue and green, and keeps `--p-hot` for behind, late, failed or destructive.
+2. Land plx-customer-portal #3268 (TASK-4416): emails, pipeline aging and UAT ticket colours on v1.7.0.
+3. When both land, close the workstream (status `done`).
 
 ## Decisions and why
 
@@ -42,10 +45,12 @@ active, as of 2026-11-01. Slices 1 to 3 landed in PLX_MC #543 and the project pa
 - 2026-11-01 Text takes the `-text` shade; the base status token is for fills, borders and marks. A solid labelled fill uses the `-text` shade with `--p-paper` text. The portal's `audit:tokens` enforces the first rule. Why: the v1.7.0 green fill reads 2.68:1 as text. Decided by: claude/friendly-gates-2br59z, sweep authorised by CoS as one batch with the tokens.
 - 2026-11-01 Dark `--p-hot` is `#FE828D` and `--p-ok-text` is `#16723C` (one step darker than proposed), so every value holds WCAG AA on every surface. Decided by: claude/friendly-gates-2br59z (contrast checks in ADR-012).
 - 2026-11-01 A failed project save rolls back only its own fields (TASK-4414). Decided by: claude/friendly-gates-2br59z (review of TASK-4393).
+- 2026-11-01 Amber means at risk only. Medium severity stays amber (portal ADR-003). Open and pending UAT tickets are information, blue (portal ADR-004). Mission Control charts show to-do grey, doing blue and done green. Decided by: CoS.
+- 2026-11-01 `--p-hot` means behind, late, failed or destructive. Read-only pills, dirty-filter marks, notices and gallery codes that only label something move to neutral or blue. Decided by: claude/friendly-gates-2br59z (slice 4 review, under decision 9).
 
 ## Open questions
 
-- Which colours replace amber for Medium severity (portal ADR-003), Open tickets (portal ADR-004) and "doing" in Mission Control's charts, now that amber means at risk only: CoS for Vince.
+- None.
 
 ## Files / areas touched
 
@@ -53,7 +58,8 @@ active, as of 2026-11-01. Slices 1 to 3 landed in PLX_MC #543 and the project pa
 - `src/lib/reporting/goals/` (class-totals, date-filter, view, rules, the workbook export)
 - `src/components/mc/mc-text.tsx`, `src/lib/mc-text/`, and the project, bucket, task and approvals screens that use it
 - `src/components/mc/project-overview.tsx` and `task-filter.tsx` (the Due filter)
-- `src/styles/mc-goals.css`, `mc-text.css`, `mc-overview.css`
+- `src/styles/mc-goals.css`, `mc-text.css`, `mc-overview.css`, and for slice 4 `brand-tokens.css`, `mc-app.css`, `mc-loop-ledgers.css` and the chart tokens
+- `plx-brand.json` and `config/brand-portal-parity.json` (the v1.7.0 pin)
 - The Goals, project and approvals tests and Playwright specs
 
 ## How to run the tests
@@ -69,7 +75,7 @@ node scripts/run-playwright.mjs --project=chromium e2e/mc-text.spec.ts e2e/proje
 
 ## Blockers or dependencies on other workstreams
 
-- None. The PLX_MC part of slice 4 follows the portal tokens v1.7.0 PR.
+- None. The portal tokens v1.7.0 PR (#3256) has landed.
 
 ## Last updated
 

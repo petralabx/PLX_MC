@@ -71,16 +71,16 @@
   letter-spacing:0.12em; text-transform:uppercase; color:var(--p-muted); }
 .mc .sync .d { width:5px; height:5px; border-radius:50%; background:var(--p-ok); flex:0 0 auto; }
 .mc .sync.pending .d { background:var(--p-muted); }
-.mc .sync.conflict { color:var(--p-warn); }
+.mc .sync.conflict { color:var(--p-warn-text); }
 .mc .sync.conflict .d { background:var(--p-warn); border-radius:1px; }
-.mc .sync.error { color:var(--p-hot); }
+.mc .sync.error { color:var(--p-hot-text); }
 .mc .sync.error .d { background:var(--p-hot); border-radius:1px; }
 .mc .sync .ts { color:var(--p-muted); }
 
 /* ─── Chips: REQ · repo · label · priority · estimate ─────────────────────── */
 .mc .reqchip { font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:0.1em; color:var(--p-accent);
   border:1px solid var(--p-accent-soft); padding:2px 6px; background:transparent; white-space:nowrap; }
-.mc .reqchip.gap { color:var(--p-warn); border-color:var(--p-warn); }
+.mc .reqchip.gap { color:var(--p-warn-text); border-color:var(--p-warn); }
 .mc .repochip { font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:0.06em; color:var(--p-ink-2);
   border:1px solid var(--p-grid); padding:2px 6px; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
 .mc .repochip::before { content:""; width:5px; height:5px; background:var(--p-muted); flex:0 0 auto; }
@@ -88,8 +88,8 @@
   background:var(--p-paper-2); padding:2px 6px; white-space:nowrap; }
 .mc .prio { font-family:var(--mono); font-size:var(--p-text-tick); letter-spacing:var(--p-track-data); display:inline-flex; align-items:center; gap:5px; }
 .mc .prio .bars { letter-spacing:-1px; font-size:var(--p-text-cap-2); }
-.mc .prio.hot { color:var(--p-hot); } .mc .prio.warn { color:var(--p-warn); }
-.mc .prio.info { color:var(--p-info); } .mc .prio.muted { color:var(--p-muted); }
+.mc .prio.hot { color:var(--p-hot-text); } .mc .prio.warn { color:var(--p-warn-text); }
+.mc .prio.info { color:var(--p-info-text); } .mc .prio.muted { color:var(--p-muted); }
 .mc .est { font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:0.08em; color:var(--p-muted); border:1px solid var(--p-grid); padding:1px 5px; }
 
 /* ─── Lifecycle mini-spine (cards / rows) ─────────────────────────────────── */
@@ -103,12 +103,9 @@
 .mc .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border:1px solid currentColor;
   font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:var(--p-track-meta); text-transform:uppercase; }
 .mc .pill .dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
-/* .pill.ok text is nudged toward ink for WCAG AA at the pill's 8.5px mono size:
-   --p-ok #5C7A55 is 4.32:1 on --p-canvas (needs 4.5:1). The mix stays token-only
-   (ADR-004 pattern) — the parity-locked portal token itself is untouched. In
-   dark mode --p-ink is light, so the same mix brightens and still passes. */
-.mc .pill.ok { color:color-mix(in srgb, var(--p-ok) 82%, var(--p-ink)); } .mc .pill.warn { color:var(--p-warn); }
-.mc .pill.info { color:var(--p-info); } .mc .pill.hot { color:var(--p-hot); }
+/* Status pills use the -text shades, which hold WCAG AA (tokens v1.7.0). */
+.mc .pill.ok { color:var(--p-ok-text); } .mc .pill.warn { color:var(--p-warn-text); }
+.mc .pill.info { color:var(--p-info-text); } .mc .pill.hot { color:var(--p-hot-text); }
 .mc .pill.acc { color:var(--p-accent); } .mc .pill.muted { color:var(--p-muted); }
 
 /* ─── Slate placeholder ───────────────────────────────────────────────────── */
@@ -168,10 +165,10 @@
 .mc .conf .ring { width:11px; height:11px; border-radius:50%; flex:0 0 auto; position:relative;
   background:conic-gradient(currentColor var(--pct,0%), var(--p-grid-2) 0); }
 .mc .conf .ring::after { content:""; position:absolute; inset:2.5px; border-radius:50%; background:var(--p-paper); }
-.mc .conf.ready   { color:var(--p-ok); }
-.mc .conf.building{ color:var(--p-info); }
-.mc .conf.gap     { color:var(--p-warn); }
-.mc .conf.blocked { color:var(--p-hot); }
+.mc .conf.ready   { color:var(--p-ok-text); }
+.mc .conf.building{ color:var(--p-info-text); }
+.mc .conf.gap     { color:var(--p-warn-text); }
+.mc .conf.blocked { color:var(--p-hot-text); }
 
 /* ─── PMark glyph ─────────────────────────────────────────────────────────── */
 .mc .pm { width:24px; height:24px; border:1px solid currentColor; position:relative; display:inline-block; color:var(--p-ink); flex:0 0 auto; }
@@ -196,9 +193,9 @@
 .mc .nrow .dot { width:7px; height:7px; border-radius:50%; background:transparent; flex:0 0 auto; }
 .mc .nrow.unread .dot { background:var(--p-accent); }
 .mc .nrow .tag { font-family:var(--mono); font-size:var(--p-text-cap-2); letter-spacing:0.14em; text-transform:uppercase; padding:2px 6px; border:1px solid var(--p-grid); color:var(--p-muted); }
-.mc .nrow .tag.approval { color:var(--p-ok); border-color:var(--p-ok); }
-.mc .nrow .tag.conflict { color:var(--p-warn); border-color:var(--p-warn); }
-.mc .nrow .tag.review { color:var(--p-info); border-color:var(--p-info); }
+.mc .nrow .tag.approval { color:var(--p-ok-text); border-color:var(--p-ok); }
+.mc .nrow .tag.conflict { color:var(--p-warn-text); border-color:var(--p-warn); }
+.mc .nrow .tag.review { color:var(--p-info-text); border-color:var(--p-info); }
 .mc .nrow .body { font-size:var(--p-text-lede); color:var(--p-ink-2); }
 .mc .nrow .body b { color:var(--p-ink); font-weight:500; }
 .mc .nrow .age { font-family:var(--mono); font-size:var(--p-text-cap); color:var(--p-muted); }

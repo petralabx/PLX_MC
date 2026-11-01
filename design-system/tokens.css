@@ -58,19 +58,25 @@
   --p-accent:       #244A39;          /* primary action, active state */
   --p-accent-soft:  #BCCFBF;          /* tints, accent backgrounds */
 
-  /* status — muted earth-tones, NOT saturated alarm colors */
-  --p-ok:           #5C7A55;          /* sage — approved / live / signed */
-  --p-warn:         #C99340;          /* amber — pending / in review / open flag */
-  --p-info:         #5B7B91;          /* steel — informational */
-  --p-hot:          #52606E;          /* mineral — destructive ONLY (was rust #B84E32) */
+  /* status — the vibrant set (v1.7.0, decision 9, TASK-4387). One meaning per
+     colour, and every status shows its shape and its word as well, because
+     red and green stay close under deuteranopia. Amber means at risk and
+     nothing else. Forest (--p-accent) never means a status. See ADR-001
+     §Amendment 2026-10-31. */
+  --p-ok:           #2BB062;          /* green, circle — on track / ready / approved */
+  --p-warn:         #D97A00;          /* amber, square — at risk / not planned */
+  --p-info:         #2F6FDB;          /* blue, outlined circle — information / planned */
+  --p-hot:          #A61B1B;          /* red, triangle — behind / late; also destructive */
+  --p-hand:         #5B3FD1;          /* violet, diagonal hatch — figures entered by hand */
 
   /* status FOREGROUND shades — the base status tokens double as pill/chip
      FILLS, so text use gets darker shades holding WCAG AA 4.5:1 on every
      surface and 12% chip fill (CONTRAST-FINDINGS-2026-06-19 remediation) */
-  --p-ok-text:      #48603F;          /* sage text on ok-tinted chips */
-  --p-warn-text:    #7E5C0F;          /* amber text on warn-tinted chips */
-  --p-info-text:    #476378;          /* steel text on info-tinted chips */
-  --p-hot-text:     #46535F;          /* mineral text on hot-tinted chips (7.5:1 on paper, 6.4:1 on 12% fill) */
+  --p-ok-text:      #16723C;          /* 5.73:1 on paper; worst 4.55:1 (12% chip on rail) */
+  --p-warn-text:    #8A4B00;          /* 6.51:1 on paper; worst 5.09:1 */
+  --p-info-text:    #1F56B8;          /* 6.52:1 on paper; worst 4.94:1 */
+  --p-hot-text:     #A61B1B;          /* 7.20:1 on paper; worst 5.16:1 */
+  --p-hand-text:    #4B2FB8;          /* 8.39:1 on paper; worst 6.15:1 */
 
   /* type stacks — load fonts in app/layout.tsx, see MIGRATION-PLAN §4
      Mazius Display is loaded via next/font/local; Inter and JetBrains Mono are
@@ -124,6 +130,31 @@
   /* layout — ticket detail key/value grids */
   --p-field-label-w: 160px;           /* label column in two-column field grids */
 
+  /* shell — the PLX navigation shell both apps implement (sizes only; colours
+     come from the palette above). Contract: docs/design-system/decisions/
+     ADR-011-plx-shell-contract.md. Breakpoints stay literal (641 / 1025 /
+     1600 / 2200): media queries cannot read custom properties. */
+  --p-shell-topbar:     48px;         /* top bar: app switcher, breadcrumb, search */
+  --p-shell-sidebar:    248px;        /* expanded sidebar */
+  --p-shell-sidebar-min:  232px;      /* narrowest sidebar a person can drag to */
+  --p-shell-sidebar-max:  400px;      /* widest sidebar */
+  --p-shell-sidebar-snap: 160px;      /* released below this, the sidebar collapses to the rail */
+  --p-shell-col-count:    40px;       /* row grid: count column */
+  --p-shell-col-action:   24px;       /* row grid: action column (star, +, ›) */
+  --p-shell-rail:       56px;         /* collapsed rail, pointer */
+  --p-shell-rail-touch: 64px;         /* collapsed rail, touch (641–1024) */
+  --p-shell-rail-floor: 84px;         /* floor-mode rail with labels */
+  --p-shell-row:        28px;         /* row, pointer */
+  --p-shell-row-touch:  44px;         /* row, touch */
+  --p-shell-row-floor:  48px;         /* row, floor mode */
+  --p-shell-row-child:  26px;         /* child row in the work tree */
+  --p-shell-indent:     34px;         /* child row indent */
+  --p-shell-group-head: 20px;         /* group heading */
+  --p-shell-inset:      8px;          /* row inset from the sidebar edge */
+  --p-shell-zone-gap:   10px;         /* gap between zones */
+  --p-shell-icon-rail:  18px;         /* rail icon (row icons use --p-icon) */
+  --p-shell-flyout:     264px;        /* footer and rail flyouts */
+
   /* layering — chrome contract (CONTRIBUTING §2: drawer above backdrop,
      nothing else above z=50 over the sidebar drawer) */
   --p-z-drawer:     60;
@@ -165,19 +196,24 @@
      The FILL moved rather than --p-accent, which is the brand forest used as
      text across every surface and has the wider blast radius. */
   --p-accent-soft:  #264132;
-  /* Lightened from #7A9E6F (2026-08-12): 4.33:1 on the lightest dark surface
-     (MRP's forked paper-2 #2A3329) was the last sub-AA pair in the dark sweep.
-     Now 4.59:1 there, 6.21:1 on canonical dark paper, 5.18:1 on its own 12%
-     chip fill. */
-  --p-ok:           #7EA372;
-  --p-warn:         #D9A85C;
-  --p-info:         #7A9DB3;
-  --p-hot:          #8FA0B0;          /* mineral, lifted for dark mode (was #E26648) */
+  /* The vibrant status set, dark pass (v1.7.0). Each value is the light
+     colour's hue, chosen for dark: at least 4.5:1 on every dark surface
+     (MRP's forked paper-2 #2A3329 included) and on its own 12% chip fill,
+     and white on a 60% --p-hot fill (the dark destructive button) at least
+     4.5:1 over each of those surfaces. Lightness differs by status, as in light mode, so no two read alike
+     under deuteranopia or protanopia (worst pair ΔE 7.6, OKLab ×100). Violet
+     leans toward orchid here so it never reads as the blue. */
+  --p-ok:           #9BE9BB;
+  --p-warn:         #FFC57E;
+  --p-info:         #61B0FF;
+  --p-hot:          #FE828D;
+  --p-hand:         #EDBDFC;
 
   --p-ok-text:      var(--p-ok);
   --p-warn-text:    var(--p-warn);
   --p-info-text:    var(--p-info);
   --p-hot-text:     var(--p-hot);
+  --p-hand-text:    var(--p-hand);
 
   --p-scrim:        rgba(0, 0, 0, 0.6);
 }

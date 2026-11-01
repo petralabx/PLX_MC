@@ -1,10 +1,15 @@
-// Pure-helper unit tests for the Loop Ledgers UI screen.
-// No React rendering — vitest.config.ts has no DOM environment.
-// Tests guard: deriveIndexStats, deriveAttentionCounts, applyFilters,
-// matchesSearchText, sortScariest, encodeRef, and label helpers.
+// Unit tests for the Loop Ledgers UI screen.
+// No DOM — vitest.config.ts has no DOM environment; the detail view's tone is
+// checked as static markup. Tests guard: deriveIndexStats,
+// deriveAttentionCounts, applyFilters, matchesSearchText, sortScariest,
+// encodeRef, label helpers and the detail view's tone.
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { DegradedSourceRow, LedgerRow, LoaderSummaryRow } from "@/lib/loop-ledgers";
+import { DetailView } from "@/components/mc/loop-ledgers/views";
+
+import type { DegradedSourceRow, LedgerRow, LoaderSummaryRow, SourceDegradedReason } from "@/lib/loop-ledgers";
 
 import {
   applyFilters,
@@ -565,5 +570,38 @@ describe("rowFreshness", () => {
 
   it("returns 'unknown' for degraded-source rows", () => {
     expect(rowFreshness(makeDegradedRow())).toBe("unknown");
+  });
+});
+
+describe("DetailView tone", () => {
+  const view = (reason: SourceDegradedReason) =>
+    renderToStaticMarkup(
+      createElement(DetailView, {
+        result: {
+          ok: false,
+          ref: { repo: "org/repo-a", branch: "main", path: "docs/quality-ledger/test.artifacts.json" },
+          repo: "org/repo-a",
+          repoDisplayName: "Repo A",
+          reason,
+          note: "Source note.",
+        },
+        onBack: () => {},
+      })
+    );
+
+  it("shows a disabled or empty source grey, as the list does (decision 9: red means failed)", () => {
+    for (const reason of ["disabled", "no_ledgers"] as const) {
+      const out = view(reason);
+      expect(out, reason).toContain('class="ll-health-panel muted"');
+      expect(out, reason).toContain('class="ll-row-dot muted"');
+      expect(out, reason).not.toContain("var(--p-hot-text)");
+    }
+  });
+
+  it("shows a failed read red", () => {
+    const out = view("permission_denied");
+    expect(out).toContain('class="ll-health-panel hot"');
+    expect(out).toContain('class="ll-row-dot degraded"');
+    expect(out).toContain("var(--p-hot-text)");
   });
 });

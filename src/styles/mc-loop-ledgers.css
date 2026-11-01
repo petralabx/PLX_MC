@@ -23,7 +23,8 @@
 }
 
 .ll-pill.source { color: var(--p-ink-2); }
-.ll-pill.ro { color: var(--p-hot); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
+/* Read-only is a property of the screen, not an error: neutral, like the sibling pill (ADR-012: red means behind, failed or destructive). */
+.ll-pill.ro { color: var(--p-ink-2); border-color: var(--p-grid); }
 
 /* ─── Attention banner ────────────────────────────────────────────────────── */
 
@@ -61,7 +62,7 @@
 
 .ll-banner-ct {
   font-weight: 700;
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 /* ─── Stat cards ──────────────────────────────────────────────────────────── */
@@ -94,9 +95,9 @@
   color: var(--p-ink);
 }
 
-.ll-stat-n.hot { color: var(--p-hot); }
-.ll-stat-n.warn { color: var(--p-warn); }
-.ll-stat-n.ok  { color: var(--p-ok); }
+.ll-stat-n.hot { color: var(--p-hot-text); }
+.ll-stat-n.warn { color: var(--p-warn-text); }
+.ll-stat-n.ok  { color: var(--p-ok-text); }
 
 .ll-stat-label {
   font-family: var(--mono);
@@ -390,7 +391,7 @@
 .ll-hpill.hot {
   background: color-mix(in srgb, var(--p-hot) 12%, transparent);
   border-color: color-mix(in srgb, var(--p-hot) 28%, transparent);
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 .ll-hpill.muted {
   background: color-mix(in srgb, var(--p-muted) 8%, transparent);
@@ -451,6 +452,7 @@
 .ll-health-panel.valid { border-left-color: var(--p-ok); }
 .ll-health-panel.warn  { border-left-color: var(--p-warn); }
 .ll-health-panel.hot   { border-left-color: var(--p-hot); }
+.ll-health-panel.muted { border-left-color: var(--p-muted); }
 
 .ll-health-panel-hd {
   display: flex;
@@ -466,9 +468,9 @@
   font-weight: 700;
 }
 
-.ll-health-panel-code.valid { color: var(--p-ok); }
-.ll-health-panel-code.warn  { color: var(--p-warn); }
-.ll-health-panel-code.hot   { color: var(--p-hot); }
+.ll-health-panel-code.valid { color: var(--p-ok-text); }
+.ll-health-panel-code.warn  { color: var(--p-warn-text); }
+.ll-health-panel-code.hot   { color: var(--p-hot-text); }
 .ll-health-panel-code.muted { color: var(--p-muted); }
 
 .ll-health-panel-errors {
@@ -481,7 +483,7 @@
 .ll-health-panel-err {
   font-family: var(--mono);
   font-size: var(--p-text-small);
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   background: color-mix(in srgb, var(--p-hot) 7%, transparent);
   padding: 4px 8px;
   border-radius: var(--p-radius-sm);
@@ -573,7 +575,7 @@
   letter-spacing: var(--p-track-tick);
   text-transform: uppercase;
   font-weight: 700;
-  color: var(--p-hot);
+  color: var(--p-ink-2);
   margin-bottom: 6px;
   display: flex;
   align-items: center;
@@ -584,11 +586,17 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--p-hot);
+  background: var(--p-muted);
   flex-shrink: 0;
 }
 
+/* Only a failure mode seen now is red; the rest of the gallery is reference. */
+.ll-gcard.live .ll-gcard-code {
+  color: var(--p-hot-text);
+}
+
 .ll-gcard.live .ll-gcard-code .dot {
+  background: var(--p-hot);
   animation: ll-pulse 2s ease-in-out infinite;
 }
 
@@ -651,7 +659,7 @@
   border: 1px solid color-mix(in srgb, var(--p-hot) 40%, transparent);
   border-left: 3px solid var(--p-hot);
   border-radius: var(--p-radius);
-  color: var(--p-hot);
+  color: var(--p-hot-text);
   font-family: var(--mono);
   font-size: var(--p-text-small);
   background: color-mix(in srgb, var(--p-hot) 5%, transparent);

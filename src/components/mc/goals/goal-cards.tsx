@@ -1,7 +1,7 @@
 "use client";
 
 // The three goal cards (brief §Screens 3): a status chip, the definition, the
-// big number against its target, the system + by-hand split (amber), a
+// big number against its target, the system + by-hand split (violet), a
 // progress bar and the detail lines. Every figure's tooltip names its query
 // and run; the bars are decorative (the text carries every value). Narrowed to
 // some salespeople's customers (TASK-4277), revenue is set against every
@@ -40,7 +40,7 @@ function Split({ system, byHand, hasHand, title }: { system: string; byHand: str
       {hasHand ? (
         <>
           {" + "}
-          <span className="gp-amber">{byHand}</span>
+          <span className="gp-hand">{byHand}</span>
         </>
       ) : null}
     </p>
@@ -192,7 +192,7 @@ export function GoalCards({
         <ul className="gp-details" title={tlSource}>
           <li>
             Partial loads: <b>{count(tl.partial.total)}</b>
-            {tl.partial.byHand > 0 ? <span className="gp-amber"> ({count(tl.partial.byHand)} entered by hand)</span> : null}
+            {tl.partial.byHand > 0 ? <span className="gp-hand"> ({count(tl.partial.byHand)} entered by hand)</span> : null}
           </li>
           {range ? null : (
             <>

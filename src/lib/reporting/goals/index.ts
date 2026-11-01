@@ -111,8 +111,8 @@ export type {
 } from "./rules";
 
 export {
-  AMBER_FILL,
-  AMBER_FONT,
+  HAND_FILL,
+  HAND_FONT,
   COUNT_FORMAT,
   DOLLAR_FORMAT,
   ENTRIES_SHEET,

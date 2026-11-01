@@ -156,7 +156,7 @@ export function SalespeoplePicker({
 export function SalespeopleNote({ view }: { view: SalespeopleView }) {
   if (!view.applied) {
     return view.selected.length > 0 ? (
-      <p className="gp-notice" data-testid="goals-salespeople-note">
+      <p className="gp-notice hot" data-testid="goals-salespeople-note">
         Not filtered: Sage’s salespeople can’t be read right now, so every figure below is every customer’s.
       </p>
     ) : null;

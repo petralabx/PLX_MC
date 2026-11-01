@@ -183,7 +183,7 @@
   color: var(--p-ok-text);
 }
 .mc .cs-table .cs-t-worse {
-  color: var(--p-hot-text);
+  color: var(--p-warn-text); /* worse than last week puts it at risk; it has not failed (decision 9) */
 }
 
 .mc .cs-data,

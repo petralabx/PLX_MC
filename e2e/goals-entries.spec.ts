@@ -34,7 +34,7 @@ async function upload(page: Page, bytes: Buffer) {
 }
 
 test.describe("goals & production: entries by hand", () => {
-  test("an Editor adds a batch: it counts, in amber, and the goals follow", async ({ page }) => {
+  test("an Editor adds a batch: it counts, in violet, and the goals follow", async ({ page }) => {
     const api = await open(page);
     await page.getByTestId("goals-add-entry").click();
     const dialog = page.getByRole("dialog", { name: "Add an entry" });

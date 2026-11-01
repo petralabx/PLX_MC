@@ -1,22 +1,22 @@
 {
   "schemaVersion": "plx-brand-parity/v1",
   "portalRepo": "plx-customer-portal",
-  "portalCommit": "c68fb05b4",
-  "syncedAt": "2026-09-06T20:22:00Z",
+  "portalCommit": "2ed99222",
+  "syncedAt": "2026-11-01T13:08:16Z",
   "owner": "Vince",
   "rationale": "ADR-003 upstream authority; MC must not fork shared brand artifacts.",
   "files": [
     {
       "path": "docs/design-system/tokens.css",
-      "sha256": "19774f70b4073ffa72e813a8e06c14cea4c0b6ad18ba5dbf73a6161d0e2cfd0a"
+      "sha256": "19fe9674c17440554c98f1daeabbd8530babb5437fdc754d236a261774c6fa32"
     },
     {
       "path": "docs/design-system/tokens.ts",
-      "sha256": "ce82aeb349b5a51449d524fc7f886768adc2870a84f743fd77e4cfb700c6f7b5"
+      "sha256": "0584bafac98d3fe2e816390ecca3e75d16dd416868370e109d2b06401681dee8"
     },
     {
       "path": "src/styles/brand-tokens.css",
-      "sha256": "40f8c05342928be54b18f78d9206f0329c02b781e99eca1684b1b432c8c0555c"
+      "sha256": "d439eb57a85aa7340c0d6c41b159bd4a1d52f00433f3688729042d377130318d"
     },
     {
       "path": "src/components/brand/BrandBoundary.tsx",
@@ -36,7 +36,7 @@
     },
     {
       "path": "src/components/brand/AuthStatusBanner.tsx",
-      "sha256": "d695bca59f576996d262c7d0260faa4dcaf9a854f74835f02cc46aef301ce6e9"
+      "sha256": "30bd06e3714f85cb810b3db8111f43a98db3acd7a3207a93a58d68cb8c300e4b"
     },
     {
       "path": "src/components/brand/index.ts",
@@ -127,12 +127,12 @@
       "sha256": "6404b8d08d2caa851d720b9326038695c5312cb16879c1bbb1fab8202e5d66ce"
     },
     {
-      "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Extraitalic.woff2",
-      "sha256": "8aa5b435bb134a0e8e1c9dcad4c9e0f1476d1de3795562b0eb0457894491374e"
-    },
-    {
       "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-ExtraItalicBold.woff2",
       "sha256": "10e81027a7b32d952d24fd6d93b6e8986a0c414dfd8df8b380c0184eaae770a9"
+    },
+    {
+      "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Extraitalic.woff2",
+      "sha256": "8aa5b435bb134a0e8e1c9dcad4c9e0f1476d1de3795562b0eb0457894491374e"
     },
     {
       "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Italic.otf",
@@ -143,6 +143,6 @@
       "sha256": "2220486909addce8dadf31067c02e6f6e9b2d03f9991d71a3d5c0b3cd44e9a2b"
     }
   ],
-  "authorityVersion": "1.4.0",
-  "authorityIntegrity": "sha256-7b96dd22f77aaad5e2cab39e3ed663fb65f915785d71eafe5e00e54edd4684a0"
+  "authorityVersion": "1.7.0",
+  "authorityIntegrity": "sha256-fd05768c541a921f0ee000e70fffd24097fdae7a15ad05329aa1b20779c2eefd"
 }

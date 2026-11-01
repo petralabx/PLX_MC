@@ -618,7 +618,7 @@
   font-size: 7px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--p-info);
+  color: var(--p-info-text);
   border: 1px solid var(--p-info);
   padding: 0 4px;
   margin-left: 6px;
@@ -649,7 +649,7 @@
   padding: 10px 13px;
   font-size: var(--p-text-mono);
   line-height: 1.5;
-  color: var(--p-hot);
+  color: var(--p-info-text);
   background: color-mix(in srgb, var(--p-info) 12%, transparent);
 }
 
@@ -674,7 +674,7 @@
   font-family: var(--mono);
   font-size: var(--p-text-cap-2);
   letter-spacing: 0.06em;
-  color: var(--p-ok);
+  color: var(--p-ok-text);
   margin-top: 7px;
   line-height: 1.4;
 }

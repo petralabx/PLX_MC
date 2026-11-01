@@ -8,20 +8,29 @@
 // For some days of the month (TASK-4391) the day-by-day charts and table show
 // those days only, with no target and no last month.
 
+import type { SizeBand } from "@/lib/reporting/goals";
+
 import { RunningLines, StackedColumns, type ChartKey, type ColumnAxis } from "../charts";
 
 import { amount, compactDollars, compactKg, count, day, dollars, oneDecimal, wholeKg, type ReadyPage } from "./helpers";
 
 const C = {
   done: "var(--p-accent)",
-  hand: "var(--p-warn)",
+  hand: "var(--p-hand)",
   scheduled: "var(--p-accent-soft)",
   target: "var(--p-ink-2)",
   lastMonth: "var(--p-muted)",
 };
 
-// One colour per size band, in the model's band order; amber stays reserved for entries by hand.
-const BAND_COLORS = ["var(--p-accent)", "var(--p-info)", "var(--p-accent-soft)", "var(--p-hot)"];
+// The bands are sizes, so one forest ramp by size: the bigger the batch, the further from the paper
+// (darker in light mode, brighter in dark). The chart's segment edges keep neighbours apart. Status
+// colours mean statuses only (decision 9), and violet stays reserved for entries by hand.
+const BAND_COLORS: Record<SizeBand, string> = {
+  "Under 5,000": "color-mix(in srgb, var(--p-accent) 30%, var(--p-paper))",
+  "5,000–8,999": "color-mix(in srgb, var(--p-accent) 50%, var(--p-paper))",
+  "~10,000": "color-mix(in srgb, var(--p-accent) 75%, var(--p-paper))",
+  "Over 11,000": "var(--p-accent)",
+};
 
 function dayAxis(page: ReadyPage): ColumnAxis[] {
   return page.model.daily.map((d, i) => {
@@ -74,7 +83,7 @@ export function DailyLine1Chart({ page }: { page: ReadyPage }) {
             <b>{day(d.day)}</b>
             {d.isWorkingDay ? null : <span> · not a working day</span>}
             <span>Completed: {wholeKg(d.line1DoneKg)} kg</span>
-            {d.line1ByHandKg > 0 ? <span className="gp-amber">By hand: {wholeKg(d.line1ByHandKg)} kg</span> : null}
+            {d.line1ByHandKg > 0 ? <span className="gp-hand">By hand: {wholeKg(d.line1ByHandKg)} kg</span> : null}
             <span>Still scheduled: {wholeKg(d.line1ScheduledKg)} kg</span>
           </>
         );
@@ -119,7 +128,7 @@ export function DailyRevenueChart({ page }: { page: ReadyPage }) {
           <>
             <b>{day(d.day)}</b>
             {d.isFuture ? null : <span>Sage: {dollars(d.sageToDateCents)}</span>}
-            {d.isFuture ? null : <span className="gp-amber">With entries by hand: {dollars(d.withHandToDateCents)}</span>}
+            {d.isFuture ? null : <span className="gp-hand">With entries by hand: {dollars(d.withHandToDateCents)}</span>}
             {d.lastMonthToDateCents === null ? null : <span>Last month, same day: {dollars(d.lastMonthToDateCents)}</span>}
             {noTarget ? null : <span>Target to date: {dollars(d.targetToDateCents)}</span>}
           </>
@@ -201,9 +210,9 @@ export function SizeHistoryChart({ page }: { page: ReadyPage }) {
           .join(", ")}.`}
         axis={history.map((m) => ({ key: m.month, label: label(m) }))}
         stacks={history.map((m) =>
-          bands.map((b, i) => ({ key: b, value: m.counts[b], colorVar: BAND_COLORS[i] }))
+          bands.map((b) => ({ key: b, value: m.counts[b], colorVar: BAND_COLORS[b] }))
         )}
-        keys={bands.map((b, i) => ({ label: `${b} kg`, colorVar: BAND_COLORS[i], kind: "bar" as const }))}
+        keys={bands.map((b) => ({ label: `${b} kg`, colorVar: BAND_COLORS[b], kind: "bar" as const }))}
         faded={projected}
         readout={(i) => {
           const m = history[i];

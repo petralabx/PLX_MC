@@ -86,9 +86,9 @@ export const FONT_SIZE = 10;
 export const TITLE_SIZE = 14;
 /** Header rows: bold on light grey, frozen below. */
 export const HEADER_FILL = "FFE7E6E6";
-/** Everything entered by hand, and the "Manual entries" headers. */
-export const AMBER_FILL = "FFFFF2CC";
-export const AMBER_FONT = "FF7F6000";
+/** Everything entered by hand, and the "Manual entries" headers: --p-hand violet (tokens v1.7.0), a 12% tint on white with --p-hand-text. */
+export const HAND_FILL = "FFEBE8F9";
+export const HAND_FONT = "FF4B2FB8";
 
 export const COUNT_FORMAT = "#,##0";
 export const DOLLAR_FORMAT = '"$"#,##0;("$"#,##0);"-"';

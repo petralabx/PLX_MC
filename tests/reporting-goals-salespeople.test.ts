@@ -381,6 +381,8 @@ describe("a page narrowed to some salespeople", () => {
       expect(p.salespeople).toMatchObject({ state: lookup.state, selected: ["BB"], applied: false, options: [{ code: "BB", customers: 0 }] });
       const note = renderToStaticMarkup(createElement(SalespeopleNote, { view: p.salespeople! }));
       expect(note).toContain("Not filtered");
+      // The filter asked for failed to apply: the red notice (decision 9).
+      expect(note).toContain('class="gp-notice hot"');
     }
   });
 

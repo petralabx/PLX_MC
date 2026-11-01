@@ -63,7 +63,7 @@
 }
 
 .mc .reg .stat.ok .num {
-  color: var(--p-ok);
+  color: var(--p-ok-text);
 }
 
 .mc .reg .stat.pending .num {
@@ -71,11 +71,11 @@
 }
 
 .mc .reg .stat.conflict .num {
-  color: var(--p-warn);
+  color: var(--p-warn-text);
 }
 
 .mc .reg .stat.error .num {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 .mc .spsite {
@@ -244,7 +244,7 @@
 }
 
 .mc .spreg-head .ct.ok {
-  color: var(--p-ok);
+  color: var(--p-ok-text);
 }
 
 .mc .spreg-head .ct.pending {
@@ -252,11 +252,11 @@
 }
 
 .mc .spreg-head .ct.conflict {
-  color: var(--p-warn);
+  color: var(--p-warn-text);
 }
 
 .mc .spreg-head .ct.error {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 .mc .spreg-head .chev {
@@ -367,7 +367,7 @@
 }
 
 .mc .conflict-row .ch .t {
-  color: var(--p-warn);
+  color: var(--p-warn-text);
   font-family: var(--mono);
   font-size: var(--p-text-tick);
   letter-spacing: var(--p-track-meta);
@@ -440,7 +440,7 @@
 }
 
 .mc .conflict-row.error .ch .t {
-  color: var(--p-hot);
+  color: var(--p-hot-text);
 }
 
 .mc .auditlog {

@@ -5,13 +5,14 @@
 
 import type { Band, PriorityKey } from "@/lib/mc-data";
 
-// Status donut by band — the 9 stages collapse to 3 bands for legibility, and
-// the band tones mirror the board's own status language (todo=info, doing=warn,
-// done=ok). A band is N stages; the click maps back to those stages (no synthetic
-// "band" facet — SPEC §3.B.5).
+// Status donut by band — the 9 stages collapse to 3 bands for legibility. The
+// tones follow tokens v1.7.0 (decision 9, CoS 2026-11-01): to-do grey, doing blue
+// (information), done green; amber means at risk only, so no band uses it. A band
+// is N stages; the click maps back to those stages (no synthetic "band" facet —
+// SPEC §3.B.5).
 export const STATUS_COLOR_VAR: Record<Band, string> = {
-  todo: "var(--p-info)",
-  doing: "var(--p-warn)",
+  todo: "var(--p-muted)",
+  doing: "var(--p-info)",
   done: "var(--p-ok)",
   cancelled: "var(--p-muted)",
 };

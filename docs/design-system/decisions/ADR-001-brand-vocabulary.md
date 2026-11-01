@@ -5,6 +5,7 @@
 **Authors:** Claude Design handoff, reconciled by PLX portal implementation
 **Supersedes:** none
 **Superseded by:** none
+**Amended:** 2026-10-31 — §3 (colour rationing) is superseded by the portal's ADR-012, the vibrant status set (decision 9, tokens v1.7.0): https://github.com/petralabx/plx-customer-portal/blob/staging/docs/design-system/decisions/ADR-012-vibrant-status-set.md
 
 ---
 

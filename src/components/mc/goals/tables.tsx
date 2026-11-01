@@ -3,7 +3,7 @@
 // Goals & Production tables and tiles (brief §Screens 5–10): revenue by
 // customer class (TASK-3781), truckloads by customer, the entries made by hand,
 // batches completed and scheduled by size, the searchable batch list and the
-// rules in plain words. Amber (class "hand") marks everything entered by hand;
+// rules in plain words. Violet (class "hand") marks everything entered by hand;
 // entries that no longer count are dimmed.
 
 import { useState } from "react";
@@ -106,7 +106,7 @@ export function RevenueByClassTable({ page }: { page: ReadyPage }) {
         </p>
       ) : null}
       {!data.matchesCard ? (
-        <p className="gp-notice" data-testid="goals-classes-mismatch">
+        <p className="gp-notice hot" data-testid="goals-classes-mismatch">
           These invoices add up to {cents(total.totalCadCents)}, not the Revenue card’s {cents(data.cardTotalCents)}:
           Sage changed between two reads of this refresh. The next refresh lines them up.
         </p>

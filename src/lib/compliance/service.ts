@@ -921,7 +921,12 @@ async function checkoutTrailerCheck(
     if (recorded) {
       if (agent !== recorded.trim().toLowerCase()) await mismatch(`agent ${recorded}`);
     } else if (runtime !== DEFAULT_CHECKOUT_RUNTIME) {
-      if (agentRuntime !== runtime) await mismatch(`runtime ${d.runtime}`);
+      // TASK-4142: a checkout runtime can hold its lane too ("cursor-cloud/infra"). Then the Agent must be
+      // that runtime/lane or a lane under it; comparing only the Agent's first segment could never match.
+      const matches = runtime.includes("/")
+        ? agent === runtime || agent.startsWith(`${runtime}/`)
+        : agentRuntime === runtime;
+      if (!matches) await mismatch(`runtime ${d.runtime}`);
     } else if (agentRuntime !== DEFAULT_CHECKOUT_RUNTIME) {
       notes.push(
         `warning: commit ${t.sha}: Agent ${t.agent} not checked — the checkout records only the default runtime "${DEFAULT_CHECKOUT_RUNTIME}"; pass agent to mc_checkout_task`

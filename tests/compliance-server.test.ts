@@ -951,6 +951,19 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
     expect(r.reasons).toContain("TASK-900: commit 4444444: Agent claude/claude-uat does not match the checkout's runtime codex");
   });
 
+  // TASK-4142: dsp_…m9kh on TASK-3779 had runtime "cursor-cloud/infra"; no Agent could ever match it.
+  it("accepts an Agent equal to (or under) a multi-part checkout runtime, and blocks any other", async () => {
+    const cid = await stamped(undefined, "cursor-cloud/infra");
+    github.loadPrCommits.mockResolvedValue([commit("6666666f", trailers(cid, "cursor-cloud/infra"))]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+    github.loadPrCommits.mockResolvedValue([commit("6666667f", trailers(cid, "Cursor-Cloud/Infra/b"))]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+    github.loadPrCommits.mockResolvedValue([commit("6666668f", trailers(cid, "cursor-cloud/other"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain("TASK-900: commit 6666668: Agent cursor-cloud/other does not match the checkout's runtime cursor-cloud/infra");
+  });
+
   it("only warns on the Agent trailer for a legacy default-runtime checkout", async () => {
     const cid = await stamped(undefined, "cursor");
     github.loadPrCommits.mockResolvedValue([commit("5555555e", trailers(cid, "claude/claude-uat"))]);

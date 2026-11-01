@@ -77,7 +77,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 }));
 
 import { CreatorApprovalRefusal } from "@/lib/compliance/creator-approval";
-import { actionComplete, completionReview, shouldPromotePrlessCompletion } from "@/lib/mcp/actions";
+import { actionComplete, completionReview, prlessCodeReview, shouldPromotePrlessCompletion } from "@/lib/mcp/actions";
 import { patchTask } from "@/lib/sync";
 import type { McpIdentity } from "@/lib/mcp/auth";
 
@@ -474,5 +474,54 @@ describe("completion with an open, ready PR moves the task to In Review", () => 
     expect(completionReview(task, { prUrl: PR })).toMatchObject({ pr: { num: 1811 } });
     expect(completionReview(task, { prUrl: "agentic-swarm#1811" })).toBeNull();
     expect(completionReview(task, {})).toBeNull();
+  });
+});
+
+// TASK-4187: on Oct 30 a plain completion set TASK-4170 and TASK-4174 to merged while their PRs were
+// still open, because the PRs were not linked yet. A code task reaches merged only through its merged PR.
+describe("a code task completed before its PR is linked waits in review", () => {
+  const handIn = (over: Partial<Parameters<typeof actionComplete>[1]> = {}) =>
+    actionComplete(identity, { checkoutId: "dsp_test", summary: "done", verificationCommands: ["npm test"], rollback: "revert", ...over });
+  beforeEach(() => {
+    db.taskStage = "progress";
+    db.taskPrs = [];
+    db.taskLabels = ["kind:code", "lane:claude-cli"];
+  });
+
+  it("moves it to In Review, not merged, and says why", async () => {
+    const res = await handIn();
+    const patch = db.patched.at(-1)?.patch;
+    expect(patch?.stage).toBe("review");
+    expect(patch?.activityLine).toMatchObject({ kind: "move", what: expect.stringContaining("no linked PR yet") });
+    expect(res.review).toEqual({ moved: true });
+  });
+
+  it("still sends a non-code task with no PR to merged (TASK-4017)", async () => {
+    db.taskLabels = ["kind:admin-setup"];
+    await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBe("merged");
+  });
+
+  it("keeps the stage under a pending approval gate and says why", async () => {
+    db.taskGates = [{ id: "apg_1", status: "pending", reason: "workflow change" }];
+    const res = await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+    expect(res.review).toEqual({ moved: false, reason: expect.stringContaining("pending approval gate") });
+  });
+
+  it.each(["review", "merged", "verified"])("leaves a task already %s alone", async (stage) => {
+    db.taskStage = stage;
+    await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("never moves a blocked hand-in, a UAT ticket, a task with a PR row, or a hand-in naming a PR", () => {
+    const task = { stage: "progress" as const, prs: [], labels: ["kind:code"] };
+    expect(prlessCodeReview(task, {})).toBe(true);
+    expect(prlessCodeReview(task, { outcome: "blocked" })).toBe(false);
+    expect(prlessCodeReview({ ...task, labels: ["kind:code", "uat:feedback-1"] }, {})).toBe(false);
+    expect(prlessCodeReview({ ...task, prs: [{ repo: "PLX_MC", num: 1, status: "open", title: "t" }] }, {})).toBe(false);
+    expect(prlessCodeReview(task, { prUrl: "https://github.com/petralabx/PLX_MC/pull/1" })).toBe(false);
+    expect(shouldPromotePrlessCompletion(task, {})).toBe(false);
   });
 });

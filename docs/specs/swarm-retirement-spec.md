@@ -416,6 +416,10 @@ agentic-swarm#1629 (TASK-2039).
   - `VMC_SHAREPOINT_HOSTNAME` and `VMC_DOCUMENTS_SITE_PATH`, and credentials for the
     brain's own Microsoft Graph app (read-only, `Sites.Selected`, granted the
     `VincePersonal` site), never trading's (F22);
+    > Correction (2026-11-01, TASK-4423): stale. The VincePersonal handoff folders are
+    > retired, and durable handoffs and ops markdown now live on the PLX site
+    > (https://petrasoap.sharepoint.com/sites/PLXSite), library `Systems`. Confirm the brain
+    > app's live site grant and `VMC_DOCUMENTS_SITE_PATH` before relying on this bullet.
   - `SWARM_API_URL` (the proxy, `http://<swarm-prod private IP>:<proxy port>`) and
     `BRAIN_SWARM_SEARCH_TOKEN`. Never `SWARM_API_KEY` or `SWARM_MEMORY_ADMIN_KEY` (B27);
     `env.names` marks both `never`.

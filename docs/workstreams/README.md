@@ -15,6 +15,9 @@ page indexes the active ones. Git history is the audit trail.
    detail goes in the note, so the index rarely conflicts.
 5. SharePoint `Agent Handoffs/` stays the system of record for durable handoffs. The note is the
    agents' working copy beside the code. When the two disagree, SharePoint wins: fix the note.
+   Durable handoffs go on the PLX site (https://petrasoap.sharepoint.com/sites/PLXSite), library `Systems`, folder
+   `Agent Handoffs/{agent}/`, named `YYYY-MM-DD_COR_PLX <Title>_v01.md`. Never write to the retired
+   VincePersonal `Agent_Handoffs` folders.
 
 A one-PR change does not need a workstream. Start one when the work will span more than one
 PR, session or agent.

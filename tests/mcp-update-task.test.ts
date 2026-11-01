@@ -560,10 +560,18 @@ describe("assignee and accountable owner (TASK-3407)", () => {
       .rejects.toMatchObject({ code: "invalid_request" });
   });
 
-  it("keeps agent: assignees to a signed-in person or sp_mcp_portal", async () => {
+  it("refuses an agent: assignee that names no registered agent principal", async () => {
     h.allowPool = true;
     await expect(actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: "agent:claude-uat", reason } }))
       .rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("lets a task.assign holder name a registered agent principal (TASK-4005 c)", async () => {
+    await actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: "agent:lane_claude_uat", reason } });
+    expect(h.rows.get("TASK-1")!.data.assignee).toBe("agent:lane_claude_uat");
+    expect(h.events.find((e) => e.kind === "task.assignment.changed")!.payload).toMatchObject({
+      assignee: { before: null, after: "agent:lane_claude_uat" },
+    });
   });
 });
 

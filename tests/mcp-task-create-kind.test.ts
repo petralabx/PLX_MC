@@ -24,12 +24,14 @@ vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => true),
   ensureBucketsSeeded: vi.fn(async () => true),
+  ensureProjectsSeeded: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/sync/repo", () => ({
   stamp: () => "2026.10.11 · 00:00",
   getRepos: vi.fn(async () => []),
-  getBuckets: vi.fn(async () => [{ id: "BKT-OPS", project: null, name: "Ops" }]),
-  getProjects: vi.fn(async () => []),
+  getBuckets: vi.fn(async () => [{ id: "BKT-OPS", project: "PRJ-OPS", name: "Ops" }]),
+  // Every task sits in a bucket of a project (TASK-4005).
+  getProjects: vi.fn(async () => [{ id: "PRJ-OPS", name: "Ops" }]),
   getEntity: vi.fn(async () => null),
 }));
 vi.mock("@/lib/mcp/sync-meta", () => ({ syncMetaForTask: vi.fn(async () => ({ status: "queued" })) }));

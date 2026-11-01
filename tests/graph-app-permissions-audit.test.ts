@@ -1,5 +1,6 @@
 // TASK-621 — least-privilege Graph app registration: manifest evaluation.
-// TASK-4422 — siteGrants must cover every SharePoint site the code writes to.
+// TASK-4422 — siteGrants must cover every SharePoint site the code writes to,
+// and an accepted exception keeps a transitional role only until its reviewBy.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -11,6 +12,7 @@ import { afterAll, describe, expect, it } from "vitest";
 // @ts-ignore — plain .mjs governance script, no type declarations.
 import {
   discoverCodeSites,
+  evaluateAcceptedExceptions,
   evaluateGraphAppRoles,
   evaluateSiteGrants,
   loadManifest,
@@ -86,6 +88,80 @@ describe("evaluateGraphAppRoles", () => {
   });
 });
 
+const exception = {
+  role: "Sites.ReadWrite.All",
+  decidedBy: "vince@petrasoap.com",
+  decidedAt: "2026-11-01",
+  reason: "Keep the broad role.",
+  reviewBy: "2027-11-01",
+  source: "MC question on TASK-4422",
+};
+const withException = {
+  ...manifest,
+  transitionalRoles: [...manifest.transitionalRoles, { role: "Files.ReadWrite.All", retireBy: "2026-08-21" }],
+  acceptedExceptions: [exception],
+};
+const BEFORE_REVIEW = new Date("2027-11-01T12:00:00Z");
+const AFTER_REVIEW = new Date("2027-11-02T00:00:00Z");
+
+describe("accepted exceptions", () => {
+  it("allows the excepted transitional role past retire-by until reviewBy, as a warning", () => {
+    const { violations, warnings } = evaluateGraphAppRoles(["Sites.ReadWrite.All"], withException, BEFORE_REVIEW);
+    expect(violations).toEqual([]);
+    expect(warnings.some((w: string) => w.includes("accepted exception") && w.includes("2027-11-01"))).toBe(true);
+    expect(evaluateAcceptedExceptions(withException, BEFORE_REVIEW).violations).toEqual([]);
+  });
+
+  it("fails the role and the record again after reviewBy", () => {
+    const roles = evaluateGraphAppRoles(["Sites.ReadWrite.All"], withException, AFTER_REVIEW);
+    expect(roles.violations.some((v: string) => v.includes("past retire-by"))).toBe(true);
+    const record = evaluateAcceptedExceptions(withException, AFTER_REVIEW);
+    expect(record.violations).toEqual([expect.stringContaining("expired")]);
+  });
+
+  it("does not excuse another expired transitional role", () => {
+    const { violations } = evaluateGraphAppRoles(
+      ["Sites.ReadWrite.All", "Files.ReadWrite.All"],
+      withException,
+      BEFORE_REVIEW
+    );
+    expect(violations).toEqual([expect.stringContaining("Files.ReadWrite.All")]);
+  });
+
+  it("never allows a forbidden or unlisted role, and rejects the record", () => {
+    for (const role of ["Mail.Send", "Directory.ReadWrite.All"]) {
+      const m = { ...manifest, acceptedExceptions: [{ ...exception, role }] };
+      expect(evaluateGraphAppRoles(["Sites.Selected", role], m, BEFORE_REVIEW).violations).toHaveLength(1);
+      expect(evaluateAcceptedExceptions(m, BEFORE_REVIEW).violations).toEqual([
+        expect.stringContaining("must name a transitional role"),
+      ]);
+    }
+  });
+
+  it("rejects an incomplete or badly dated record and does not honour it", () => {
+    const cases = [{ ...exception, source: " " }, { ...exception, reviewBy: "next year" }, { ...exception, reviewBy: "2026-10-01" }];
+    for (const record of cases) {
+      const m = { ...manifest, acceptedExceptions: [record] };
+      expect(evaluateAcceptedExceptions(m, BEFORE_RETIRE).violations).toHaveLength(1);
+      expect(evaluateGraphAppRoles(["Sites.ReadWrite.All"], m, BEFORE_REVIEW).violations).toHaveLength(1);
+    }
+  });
+
+  it("the repo manifest records Vince's 2026-11-01 decision, live until 2027-11-01", () => {
+    const repo = loadManifest();
+    expect(repo.acceptedExceptions).toEqual([
+      expect.objectContaining({
+        role: "Sites.ReadWrite.All",
+        decidedBy: "vince@petrasoap.com",
+        decidedAt: "2026-11-01",
+        reviewBy: "2027-11-01",
+        source: "MC question on TASK-4422",
+      }),
+    ]);
+    expect(evaluateGraphAppRoles(["Sites.ReadWrite.All"], repo, BEFORE_REVIEW).violations).toEqual([]);
+  });
+});
+
 type CodeSite = { site: string; use: string; file: string };
 
 const CODE_SITES: CodeSite[] = [
@@ -149,14 +225,14 @@ describe("audit-graph-app-permissions exit codes (no credentials)", () => {
   const dir = mkdtempSync(join(tmpdir(), "graph-audit-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  const run = (manifest: unknown) => {
+  const run = (manifest: unknown, extra: string[] = []) => {
     const path = join(dir, `manifest-${Math.random().toString(36).slice(2)}.json`);
     writeFileSync(path, JSON.stringify(manifest));
     const env = { ...process.env };
     delete env.MICROSOFT_GRAPH_TENANT_ID;
     delete env.MICROSOFT_GRAPH_CLIENT_ID;
     delete env.MICROSOFT_GRAPH_CLIENT_SECRET;
-    return spawnSync(process.execPath, ["scripts/audit-graph-app-permissions.mjs", "--manifest", path], {
+    return spawnSync(process.execPath, ["scripts/audit-graph-app-permissions.mjs", "--manifest", path, ...extra], {
       cwd: join(__dirname, ".."),
       env,
       encoding: "utf8",
@@ -172,5 +248,27 @@ describe("audit-graph-app-permissions exit codes (no credentials)", () => {
   it("exits 2 (not configured) when the site grants are complete", () => {
     const res = run(loadManifest());
     expect(res.status).toBe(2);
+  });
+
+  it("exits 2 with the repo's accepted exception on its reviewBy date", () => {
+    const res = run(loadManifest(), ["--now", "2027-11-01"]);
+    expect(res.status).toBe(2);
+  });
+
+  it("exits 1 once the accepted exception is past reviewBy", () => {
+    const res = run(loadManifest(), ["--now", "2027-11-02"]);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain("expired (review by 2027-11-01)");
+  });
+
+  it("exits 1 when an accepted exception names a forbidden role", () => {
+    const repo = loadManifest();
+    const res = run({ ...repo, acceptedExceptions: [{ ...repo.acceptedExceptions[0], role: "Mail.Send" }] });
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain("Mail.Send");
+  });
+
+  it("exits 1 on a malformed --now", () => {
+    expect(run(loadManifest(), ["--now", "tomorrow"]).status).toBe(1);
   });
 });

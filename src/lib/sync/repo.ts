@@ -175,6 +175,25 @@ export async function getTaskSummaries(
   );
 }
 
+/** Stage and labels of every task in these buckets, read in the caller's transaction (TASK-4005). */
+export async function getTaskStagesInBuckets(
+  bucketIds: string[],
+  q: TxQuery = query
+): Promise<{ id: string; stage: StageKey; labels: string[] }[]> {
+  if (bucketIds.length === 0) return [];
+  const rows = await q<{ id: string; stage: StageKey; labels: unknown }>(
+    `SELECT id, data->>'stage' AS stage, data->'labels' AS labels
+       FROM entities
+      WHERE entity_type = 'task' AND data->>'bucket' = ANY($1::text[])`,
+    [bucketIds]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    stage: r.stage,
+    labels: Array.isArray(r.labels) ? r.labels.filter((l): l is string => typeof l === "string") : [],
+  }));
+}
+
 /** Ids of the tasks whose data.prs holds this PR (repo name matched without case). */
 export async function taskIdsWithPr(repoName: string, prNumber: number): Promise<string[]> {
   const rows = await query<{ id: string }>(

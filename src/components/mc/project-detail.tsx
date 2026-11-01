@@ -13,9 +13,9 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
-import { ACTORS, MILESTONES, PROJECTS } from "@/lib/mc-data";
+import { ACTORS, MILESTONES, PROJECTS, showProjectClosePrompt } from "@/lib/mc-data";
 import { SHAREPOINT_REGISTERS, docLinkFromPrd, docLinkKind, type SharePointRegisterKey } from "@/lib/mc-data/doc-links";
-import { useMcVersion } from "@/lib/mc-data/hooks";
+import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import { allRisks, allTasks, bucketsForProject, projectById, pushNotice, updateProject } from "@/lib/mc-data/store";
 
 import { Avatar, HealthPill, SyncTick } from "./atoms";
@@ -51,9 +51,12 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState("");
   const [lens, setLens] = useState<ProjectLens>("overview");
+  const viewer = useViewer();
 
   const rollups = rollupForProject(buckets, tasks);
   const progress = projectProgress(tasks);
+  // TASK-4005: when no task is open, ask the owner to close the project. Never auto-close.
+  const askToClose = showProjectClosePrompt(project, tasks, viewer);
   const projectSpec = docLinkFromPrd(project.prd);
   const bucketIds = new Set(buckets.map((b) => b.id));
   const milestoneCount = MILESTONES.filter((m) => bucketIds.has(m.bucket)).length;
@@ -150,6 +153,19 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
           </nav>
         </div>
       </div>
+
+      {askToClose && (
+        <div className="dr-banner good" role="status" data-testid="project-close-prompt">
+          Every task in this project is closed. Close the project to take it out of active views and stop new work in it.{" "}
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() => updateProject(project.id, { status: "closed" })}
+          >
+            Close project
+          </button>
+        </div>
+      )}
 
       <div className="bk">
         <OverviewStrip

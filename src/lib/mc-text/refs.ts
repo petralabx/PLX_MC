@@ -8,7 +8,7 @@
 // GitHub pull-request URL to its short name), and an owner/repo#N reference
 // wins over a bare word.
 
-import { BARE_URL_SOURCE } from "@/lib/governance-sops/markdown";
+import { BARE_URL_SOURCE, trailingRunStart } from "@/lib/governance-sops/markdown";
 
 export type McRef =
   | { kind: "text"; value: string }
@@ -31,9 +31,11 @@ const PR_REF = String.raw`(?<![\w./-])([A-Za-z0-9][\w.-]*\/[\w.-]+)#(\d{1,7})\b`
 const GATE = String.raw`\b(apg_[0-9a-f]{8,32})\b`;
 const PATTERN = new RegExp(`(${URL_RE})|${PR_REF}|${GATE}|${ID}|${BUCKET}`, "g");
 
+const SENTENCE_END = new Set(".,;:!?");
+
 /** Trailing punctuation that ends a sentence, not the URL. */
 function trimUrl(raw: string): string {
-  return raw.replace(/[.,;:!?]+$/, "");
+  return raw.slice(0, trailingRunStart(raw, SENTENCE_END));
 }
 
 function idRef(id: string): McRef {

@@ -79,6 +79,10 @@ carries the package and the full bundle. Nothing has been distributed yet.
   status. Why: the portal lands about 40 PRs a day through its merge queue. Decided by Vince.
 - 2026-10-26 SharePoint `Agent Handoffs/` stays the system of record. Repo notes are the agents'
   working copy, and SharePoint wins on conflict. Decided by Vince.
+- 2026-11-01 The handoff location is the PLX site (https://petrasoap.sharepoint.com/sites/PLXSite),
+  library `Systems`, folder `Agent Handoffs/{agent}/`, file `YYYY-MM-DD_COR_PLX <Title>_v01.md`.
+  The VincePersonal `Agent_Handoffs` folders are retired; the governance contract carries the rule
+  (TASK-4423).
 - 2026-10-26 Roll out to all 10 repos at once. Decided by Vince.
 - 2026-10-26 The brand repos keep `docs/sessions.md` as their per-session log; notes cover work
   that spans more than one PR or session. Why: the brand team's session rules use the log.

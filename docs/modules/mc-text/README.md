@@ -34,7 +34,8 @@ were hard to read and nothing was clickable (design review 2026-10-31, the
   intact; SOP pages get the same rule. A bare URL is masked before inline
   Markdown, so no marker opens or closes inside it. Trailing punctuation and
   delimiters stay outside the mask (GFM), so `**see https://x.com/a**` still
-  closes, and a backtick ends a URL, so a code span around one closes too.
+  closes; a marker there can close emphasis but never opens it. A backtick ends
+  a URL, so a code span around one closes too and keeps it literal.
 - `src/components/mc/mc-text.tsx` `McText`: renders the blocks. A paragraph
   that is only bold, and a markdown heading, render as a section heading
   (`.mct-h`); a checklist item says "Done:" or "To do:" to screen readers. In-app

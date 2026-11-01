@@ -84,6 +84,26 @@ describe("splitRefs", () => {
     expect(other[0].kind).toBe("url");
   });
 
+  it("keeps balanced parentheses in a bare URL, and drops a closing one that ends the sentence", () => {
+    const wiki = "https://en.wikipedia.org/wiki/Foo_(bar)";
+    expect(splitRefs(`See ${wiki} now`)[1]).toMatchObject({ kind: "url", href: wiki });
+    expect(splitRefs("(see https://example.com/a/b)")).toEqual([
+      { kind: "text", value: "(see " },
+      { kind: "url", href: "https://example.com/a/b", label: "example.com · /a/b" },
+      { kind: "text", value: ")" },
+    ]);
+  });
+
+  it("collapses a Mission Control URL only to the chip its screen names", () => {
+    const base = "https://mc.plxcustomer.io/?screen=";
+    expect(splitRefs(`${base}approvals&gate=apg_4d3a38538a1955b8&taskId=TASK-1`)).toEqual([
+      { kind: "gate", id: "apg_4d3a38538a1955b8", label: "apg_4d3a…55b8" },
+    ]);
+    expect(splitRefs(`${base}task&taskId=TASK-1`)).toEqual([{ kind: "task", id: "TASK-1" }]);
+    expect(splitRefs(`${base}board&taskId=TASK-1`)[0].kind).toBe("url");
+    expect(splitRefs("https://mc.plxcustomer.io/?taskId=TASK-1")).toEqual([{ kind: "task", id: "TASK-1" }]);
+  });
+
   it("collapses every Mission Control path alias, and keeps a draft's frozen version", () => {
     expect(splitRefs("https://mc.plxcustomer.io/projects/PRJ-PORTAL-GOLIVE")).toEqual([{ kind: "project", id: "PRJ-PORTAL-GOLIVE" }]);
     expect(splitRefs("https://mc.plxcustomer.io/buckets/BKT-WMS")).toEqual([{ kind: "bucket", id: "BKT-WMS" }]);
@@ -159,6 +179,13 @@ describe("McText", () => {
   it("shows a frozen draft version on its chip and links to that version", () => {
     const out = html("Accepted https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-12&version=3");
     expect(out).toContain('href="/?screen=drafts&amp;draftId=DRF-12&amp;version=3">DRF-12 v3</a>');
+  });
+
+  it("never parses a bare URL as Markdown", () => {
+    const out = html("Build log https://ci.example.com/_runs_/x*1*y and _this_ stays emphasis.");
+    expect(out).toContain('title="https://ci.example.com/_runs_/x*1*y"');
+    expect(out.match(/<em>/g)).toHaveLength(1);
+    expect(out).toContain("<em>this</em>");
   });
 
   it("keeps ids and words with underscores intact: an underscore inside a word is not emphasis", () => {

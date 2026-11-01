@@ -44,6 +44,15 @@ export function extractToc(nodes: MdNode[]): TocEntry[] {
 
 // ─── Block parser ─────────────────────────────────────────────────────────────
 
+/**
+ * A bare URL: no spaces, quotes or angle brackets, and parentheses only in
+ * balanced pairs ("/wiki/Foo_(bar)"), so a closing one that ends a sentence
+ * stays outside. Inline parsing passes it through as text, so an underscore or
+ * asterisk inside it never starts emphasis; Mission Control text then links it.
+ */
+export const BARE_URL_SOURCE = String.raw`https?:\/\/(?:[^\s<>()"'\]]|\([^\s<>()"'\]]*\))+`;
+const RE_BARE_URL = new RegExp(`^${BARE_URL_SOURCE}`, "i");
+
 const RE_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const RE_HR = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
 const RE_FENCE = /^(\s*)(```+|~~~+)\s*([^\s`~]*)\s*$/;
@@ -250,6 +259,15 @@ export function parseInline(src: string): MdInline[] {
       buf += src[i + 1];
       i += 2;
       continue;
+    }
+
+    if ((c === "h" || c === "H") && (i === 0 || !/[\w/]/.test(src[i - 1]))) {
+      const url = RE_BARE_URL.exec(src.slice(i));
+      if (url) {
+        buf += url[0];
+        i += url[0].length;
+        continue;
+      }
     }
 
     if (c === "`") {

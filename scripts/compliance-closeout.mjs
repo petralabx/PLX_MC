@@ -49,7 +49,6 @@ import { execFileSync } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { reportTelemetry } from "./session-telemetry.mjs";
 
 const SCHEMA_VERSION = 1;
 const SESSION_ARTIFACT_ROUTE = "/api/vmc/knowledge/session-artifact";
@@ -362,10 +361,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const payload = parseHookPayload(raw);
       const runtime = runtimeFlag >= 0 ? process.argv[runtimeFlag + 1] : "cursor";
       // The artifact and the telemetry row go out together, inside the hook timeout.
-      const results = await Promise.allSettled([
-        closeout({ payload, runtime }),
-        reportTelemetry({ payload, runtime, cwd: REPO_ROOT }),
-      ]);
+      // Loaded here, not imported at the top, so a broken telemetry module never stops the artifact.
+      const telemetry = import("./session-telemetry.mjs").then(({ reportTelemetry }) =>
+        reportTelemetry({ payload, runtime, cwd: REPO_ROOT })
+      );
+      const results = await Promise.allSettled([closeout({ payload, runtime }), telemetry]);
       for (const r of results) {
         if (r.status === "rejected") console.error(`[session-brain] unexpected error (fail-open, ignored): ${r.reason?.message}`);
       }

@@ -35,7 +35,9 @@
 //   MC_REPO                    owner/name for x-mc-repo (default: the origin remote)
 //   MC_CHECKOUT_ID             dsp_* checkout of this session (default: the
 //                              MC-Checkout trailer of the newest commit made in
-//                              this session on this branch)
+//                              this session on this branch and not on its base,
+//                              origin/HEAD, origin/staging or origin/main; none
+//                              when no base is found)
 //
 // Node stdlib only.
 
@@ -203,23 +205,30 @@ function slugFromRemote(url) {
   return match ? `${match[1]}/${match[2]}` : null;
 }
 
+/**
+ * The integration branch this checkout merges into: origin/HEAD when the clone has it,
+ * else origin/staging (the portal), else origin/main. A clone often lacks origin/HEAD.
+ */
 function defaultBaseRef(cwd, timeoutMs) {
   const originHead = git(cwd, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], timeoutMs);
   if (originHead) return originHead;
-  return git(cwd, ["rev-parse", "--verify", "--quiet", "origin/main"], timeoutMs) ? "origin/main" : null;
+  for (const ref of ["origin/staging", "origin/main"]) {
+    if (git(cwd, ["rev-parse", "--verify", "--quiet", `refs/remotes/${ref}`], timeoutMs)) return ref;
+  }
+  return null;
 }
 
 /** MC_CHECKOUT_ID, else the last MC-Checkout trailer of the newest session commit that has one. */
 function sessionCheckoutId(cwd, env, startedAt, timeoutMs) {
   const fromEnv = nonEmpty(env.MC_CHECKOUT_ID);
   if (CHECKOUT_ID.test(fromEnv)) return fromEnv;
+  // Without a base, merged-in commits from other sessions carry their own trailers,
+  // so no checkout is sent rather than someone else's.
   const base = defaultBaseRef(cwd, timeoutMs);
-  // No base and no session start: any trailer could be from another session.
-  if (!base && !startedAt) return null;
+  if (!base) return null;
   const args = ["log", `--max-count=${MAX_COMMITS}`, "--format=%(trailers:key=MC-Checkout,valueonly,separator=%x2C)"];
   if (startedAt) args.push(`--since=${startedAt}`);
-  args.push("HEAD");
-  if (base) args.push("--not", base);
+  args.push("HEAD", "--not", base);
   for (const line of git(cwd, args, timeoutMs).split("\n")) {
     const ids = line
       .split(",")

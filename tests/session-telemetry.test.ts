@@ -236,7 +236,7 @@ describe("reportTelemetry", () => {
     expect(a.calls[0].body.checkoutId).toBe("dsp_env9");
     expect(a.calls[0].headers["x-mc-repo"]).toBe("petralabx/PLX_MC");
 
-    // No base ref and no session start: every commit could be another session's.
+    // No base ref: every commit could be another session's.
     const bare = stampedRepo(false);
     const noStart = path.join(bare, "nostart.jsonl");
     writeFileSync(noStart, assistant("m9", { input_tokens: 1, output_tokens: 1 }));
@@ -250,6 +250,42 @@ describe("reportTelemetry", () => {
       payload: { session_id: "s2", transcript_path: noStart },
     });
     expect(b.calls[0].body).not.toHaveProperty("checkoutId");
+  });
+
+  it("uses origin/staging as the base, so merged-in commits from other sessions never lend their checkout", async () => {
+    const dir = tempDir();
+    const git = gitIn(dir);
+    git(["init", "-q", "-b", "staging"]);
+    git(["config", "user.email", "agent@example.com"]);
+    git(["config", "user.name", "Agent"]);
+    git(["remote", "add", "origin", "https://github.com/petralabx/plx-customer-portal.git"]);
+    writeFileSync(path.join(dir, "a.txt"), "a\n");
+    git(["add", "."]);
+    git(["commit", "-qm", "base"], "2026-09-01T00:00:00Z");
+    git(["update-ref", "refs/remotes/origin/staging", "HEAD"]);
+    git(["switch", "-q", "-c", "feat/x"]);
+    writeFileSync(path.join(dir, "b.txt"), "b\n");
+    git(["add", "."]);
+    git(["commit", "-qm", "feat: mine\n\nMC-Checkout: dsp_mine"], "2026-09-25T10:10:00Z");
+    // Another agent's newer commit lands on staging, and this branch merges it in.
+    git(["switch", "-q", "staging"]);
+    writeFileSync(path.join(dir, "c.txt"), "c\n");
+    git(["add", "."]);
+    git(["commit", "-qm", "feat: theirs\n\nMC-Checkout: dsp_other"], "2026-09-25T10:20:00Z");
+    git(["update-ref", "refs/remotes/origin/staging", "HEAD"]);
+    git(["switch", "-q", "feat/x"]);
+    git(["merge", "-q", "--no-edit", "staging"], "2026-09-25T10:30:00Z");
+    const { fetch, calls } = recorder();
+    await reportTelemetry({
+      env: MC_ENV,
+      fetch,
+      log: quiet,
+      cwd: dir,
+      runtime: "claude-code",
+      payload: { session_id: "s", transcript_path: usageTranscript(dir) },
+    });
+    expect(calls[0].body.checkoutId).toBe("dsp_mine");
+    expect(calls[0].headers["x-mc-repo"]).toBe("petralabx/plx-customer-portal");
   });
 
   it("reports a Cursor session only when its payload carries token counts", async () => {
@@ -342,7 +378,7 @@ describe("reportTelemetry", () => {
     }
     const run = spawnSync(process.execPath, [path.join(dir, "scripts", "compliance-closeout.mjs"), "--runtime", "claude-code"], {
       cwd: dir,
-      env: { ...process.env, VMC_API_KEY: "", ...MC_ENV, MC_BASE_URL: "http://127.0.0.1:9" },
+      env: { ...process.env, SESSION_TELEMETRY_ENABLED: "1", VMC_API_KEY: "", ...MC_ENV, MC_BASE_URL: "http://127.0.0.1:9" },
       encoding: "utf8",
       input: JSON.stringify({ session_id: "cli-tel", transcript_path: usageTranscript(dir) }),
     });

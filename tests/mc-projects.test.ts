@@ -119,8 +119,8 @@ describe("updateProject (P2)", () => {
     expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
   });
 
-  // Overlapping saves (TASK-4414): a save settles after a later edit was applied.
-  // Each settles by hand, in the order the test chooses.
+  // Overlapping saves (TASK-4414): saves go one at a time; the screen is the last
+  // confirmed project with the waiting saves applied. Each save settles by hand.
   const deferredMirror = () => {
     const calls: Array<{ resolve: (p: Project) => void; reject: (e: Error) => void; patch: Partial<Project> }> = [];
     __setProjectUpdateMirrorForTests(
@@ -130,43 +130,65 @@ describe("updateProject (P2)", () => {
   };
   const settle = () => new Promise((r) => setTimeout(r, 0));
 
-  it("a late failure rolls back only its own fields: a later edit survives", async () => {
+  it("sends a project's saves one at a time, oldest first", async () => {
+    const p = addProject({ name: "Queue" });
+    const calls = deferredMirror();
+    void updateProject(p.id, { health: "risk" });
+    void updateProject(p.id, { owner: "stephen" });
+    await settle();
+    expect(calls.map((c) => c.patch)).toEqual([{ health: "risk" }]);
+    calls[0].resolve({ ...projectById(p.id)!, health: "risk" });
+    await settle();
+    expect(calls.map((c) => c.patch)).toEqual([{ health: "risk" }, { owner: "stephen" }]);
+  });
+
+  it("a failed save reverts only its own fields: a later edit stays", async () => {
     const p = addProject({ name: "Overlap" });
     const before = projectById(p.id)!;
     const calls = deferredMirror();
     void updateProject(p.id, { health: "risk" });
     void updateProject(p.id, { owner: "stephen" });
-    calls[1].resolve({ ...projectById(p.id)!, owner: "stephen" });
     await settle();
     calls[0].reject(new Error("PATCH 500"));
     await settle();
     expect(projectById(p.id)?.health).toBe(before.health); // its own field rolls back
-    expect(projectById(p.id)?.owner).toBe("stephen"); // the later, saved edit stays
+    expect(projectById(p.id)?.owner).toBe("stephen"); // the later edit is still saving
     expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
+    calls[1].resolve({ ...before, owner: "stephen" });
+    await settle();
+    expect(projectById(p.id)?.owner).toBe("stephen");
+    expect(projectById(p.id)?.health).toBe(before.health);
   });
 
-  it("a success that lands after a later edit keeps that edit", async () => {
+  it("a success shows the server's project with the edits still waiting applied", async () => {
     const p = addProject({ name: "Overlap 2" });
     const calls = deferredMirror();
     void updateProject(p.id, { health: "risk" });
     void updateProject(p.id, { target: "Dec 31" });
-    calls[0].resolve({ ...projectById(p.id)!, health: "risk", target: "—" }); // the server has not seen the target yet
+    await settle();
+    calls[0].resolve({ ...projectById(p.id)!, health: "risk", target: "—", desc: "server-canonical" });
     await settle();
     expect(projectById(p.id)?.health).toBe("risk");
-    expect(projectById(p.id)?.target).toBe("Dec 31"); // the pending edit is not overwritten
+    expect(projectById(p.id)?.desc).toBe("server-canonical");
+    expect(projectById(p.id)?.target).toBe("Dec 31"); // the waiting edit is not overwritten
   });
 
-  it("two failed saves of one field roll back to the last saved value, not the first unsaved one", async () => {
+  it("two failed saves of one field return to the last saved value", async () => {
     const p = addProject({ name: "Overlap 3", target: "Jul 30" });
     const calls = deferredMirror();
     void updateProject(p.id, { target: "Nov 01" });
     void updateProject(p.id, { target: "Dec 31" });
+    await settle();
     calls[0].reject(new Error("PATCH 500"));
     await settle();
     expect(projectById(p.id)?.target).toBe("Dec 31"); // the later edit still stands
+    // Nothing reverted, so the notice says the later change is still saving.
+    expect(activeNotices().some((n) => /later change is still saving/.test(n.body))).toBe(true);
+    expect(activeNotices().some((n) => /rolled back/.test(n.body))).toBe(false);
     calls[1].reject(new Error("PATCH 500"));
     await settle();
     expect(projectById(p.id)?.target).toBe("Jul 30");
+    expect(activeNotices().some((n) => /rolled back/.test(n.body))).toBe(true);
   });
 
   it("rolls back a field the project did not have by removing it", async () => {
@@ -175,6 +197,7 @@ describe("updateProject (P2)", () => {
     const calls = deferredMirror();
     void updateProject(p.id, { status: "closed" });
     expect(projectById(p.id)?.status).toBe("closed");
+    await settle();
     calls[0].reject(new Error("PATCH 500"));
     await settle();
     expect(projectById(p.id)).not.toHaveProperty("status");

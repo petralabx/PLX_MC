@@ -202,22 +202,36 @@ export function StackedColumns({
       readout={readout}
     >
       {stacks.map((stack, i) => {
+        // The visible segments, bottom to top, in plot units (y0 is the bottom edge).
+        const segs: { key: string; colorVar: string; y0: number; y1: number }[] = [];
         let base = 0;
+        for (const seg of stack) {
+          if (seg.value <= 0) continue;
+          const top = base + seg.value;
+          segs.push({ key: seg.key, colorVar: seg.colorVar, y0: y(base, yMax), y1: y(top, yMax) });
+          base = top;
+        }
         return (
           <g key={axis[i]?.key ?? i} className={faded?.has(i) ? "faded" : undefined}>
-            {stack.map((seg) => {
-              if (seg.value <= 0) return null;
-              const top = base + seg.value;
-              const height = y(base, yMax) - y(top, yMax);
-              // A surface-coloured edge keeps stacked segments apart, whatever their colours.
-              // A sliver (under 2% of the plot) keeps its fill instead, so the edge never hides it.
-              const edge = height >= 2 ? { stroke: "var(--p-paper)", strokeWidth: 1.5, vectorEffect: "non-scaling-stroke" as const } : null;
-              const rect = (
-                <rect key={seg.key} x={i + 0.15} width={0.7} y={y(top, yMax)} height={height} fill={seg.colorVar} {...edge} />
-              );
-              base = top;
-              return rect;
-            })}
+            {segs.map((s) => (
+              <rect key={s.key} x={i + 0.15} width={0.7} y={s.y1} height={s.y0 - s.y1} fill={s.colorVar} />
+            ))}
+            {/* A surface-coloured gap keeps neighbouring segments apart, whatever their colours. It is
+                left out beside a sliver (under 2% of the plot), so it never hides a small figure. */}
+            {segs.slice(1).map((s, k) =>
+              s.y0 - s.y1 < 2 || segs[k].y0 - segs[k].y1 < 2 ? null : (
+                <line
+                  key={`gap-${s.key}`}
+                  x1={i + 0.15}
+                  x2={i + 0.85}
+                  y1={s.y0}
+                  y2={s.y0}
+                  stroke="var(--p-paper)"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                />
+              )
+            )}
           </g>
         );
       })}

@@ -359,23 +359,27 @@ describe("tables and tiles", () => {
 });
 
 describe("charts", () => {
-  it("keeps a sliver of a stacked column visible: the surface edge goes on segments tall enough to keep it", () => {
-    const out = renderToStaticMarkup(
-      createElement(StackedColumns, {
-        summary: "One day",
-        axis: [{ key: "d1", label: "1" }],
-        stacks: [[
-          { key: "fm", value: 9_000, colorVar: "var(--p-accent)" },
-          { key: "hand", value: 40, colorVar: "var(--p-hand)" },
-        ]],
-        keys: [],
-      })
-    );
-    const rects = [...out.matchAll(/<rect [^>]*fill="var\(--p-(accent|hand)\)"[^>]*>/g)].map((m) => m[0]);
-    expect(rects).toHaveLength(2);
-    expect(rects[0]).toContain('stroke="var(--p-paper)"');
-    // 40 kg on a 10,000 kg axis is 0.4% of the plot: no edge, so it never vanishes.
-    expect(rects[1]).not.toContain("stroke=");
+  it("keeps a sliver of a stacked column visible: no surface gap touches a segment under 2% of the plot", () => {
+    type Seg = { key: string; value: number; colorVar: string };
+    const chart = (stack: Seg[]) =>
+      renderToStaticMarkup(createElement(StackedColumns, { summary: "One day", axis: [{ key: "d1", label: "1" }], stacks: [stack], keys: [] }));
+    const gaps = (out: string) => out.match(/<line [^>]*stroke="var\(--p-paper\)"[^>]*>/g) ?? [];
+    // Two thick segments: one surface gap between them, and no segment outline.
+    const thick = chart([
+      { key: "a", value: 5_000, colorVar: "var(--p-accent)" },
+      { key: "b", value: 4_000, colorVar: "var(--p-ok)" },
+    ]);
+    expect(gaps(thick)).toHaveLength(1);
+    expect(thick).not.toMatch(/<rect [^>]*stroke=/);
+    // 40 kg on a 10,000 kg axis is 0.4% of the plot: no gap on either side of it, so nothing covers it.
+    const sliver = chart([
+      { key: "fm", value: 9_000, colorVar: "var(--p-accent)" },
+      { key: "hand", value: 40, colorVar: "var(--p-hand)" },
+      { key: "late", value: 900, colorVar: "var(--p-ok)" },
+    ]);
+    expect(sliver).toContain('fill="var(--p-hand)"');
+    expect(gaps(sliver)).toHaveLength(0);
+    expect(sliver).not.toMatch(/<rect [^>]*stroke=/);
   });
 
   it("picks round axes that don't waste the plot", () => {

@@ -59,6 +59,8 @@ const RE_URL_MARK = /\uE000(\d+)\uE001/g;
 // Punctuation and delimiters that end a bare URL (GFM): they stay outside the
 // mask, so "**see https://x.com/a**" still closes. An escaped one stays inside.
 const URL_TAIL = new Set(".,;:!?*_~");
+// A Markdown escape: a backslash before any ASCII punctuation (CommonMark).
+const RE_ESCAPE = /\\([!-\/:-@\[-`{-~])/g;
 
 /** Where the run of `chars` that ends `s` starts. One pass from the end, so a long run stays linear. */
 export function trailingRunStart(s: string, chars: ReadonlySet<string>): number {
@@ -259,26 +261,33 @@ function parseAligns(delim: string): TableAlign[] {
  * Inline Markdown. Bare URLs are masked first, so no emphasis, strong or code
  * marker can open or close inside one, then restored as plain text (or as a
  * link's href); a Markdown escape inside a URL ("a\\_b") reads as the
- * character itself. Trailing punctuation stays outside the mask, so a
- * delimiter right after a URL can close (never open); as text it rejoins the URL.
+ * character itself, except in a code span, which stays literal. Trailing
+ * punctuation stays outside the mask, so a delimiter right after a URL can
+ * close (never open); as text it rejoins the URL.
  */
 export function parseInline(src: string): MdInline[] {
-  const urls: string[] = [];
+  const raws: string[] = [];
   const masked = src.replace(RE_BARE_URL_G, (match) => {
     let cut = trailingRunStart(match, URL_TAIL);
-    if (cut > 0 && cut < match.length && match[cut - 1] === "\\") cut++;
-    urls.push(match.slice(0, cut).replace(/\\([\\`*_{}[\]()#+\-.!|])/g, "$1"));
-    return `\uE000${urls.length - 1}\uE001${match.slice(cut)}`;
+    // An escaped character stays in the URL: an odd run of backslashes before it.
+    let slashes = 0;
+    while (slashes < cut && match[cut - 1 - slashes] === "\\") slashes++;
+    if (cut < match.length && slashes % 2 === 1) cut++;
+    raws.push(match.slice(0, cut));
+    return `\uE000${raws.length - 1}\uE001${match.slice(cut)}`;
   });
   const nodes = parseSpans(masked);
-  return urls.length === 0 ? nodes : nodes.map((node) => restoreUrls(node, urls));
+  if (raws.length === 0) return nodes;
+  const urls = raws.map((raw) => raw.replace(RE_ESCAPE, "$1"));
+  return nodes.map((node) => restoreUrls(node, urls, raws));
 }
 
-function restoreUrls(node: MdInline, urls: readonly string[]): MdInline {
-  const put = (value: string) => value.replace(RE_URL_MARK, (_, n: string) => urls[Number(n)] ?? "");
-  if (node.type === "text" || node.type === "code") return { ...node, value: put(node.value) };
-  if (node.type === "link") return { ...node, href: put(node.href), children: node.children.map((c) => restoreUrls(c, urls)) };
-  return { ...node, children: node.children.map((c) => restoreUrls(c, urls)) };
+function restoreUrls(node: MdInline, urls: readonly string[], raws: readonly string[]): MdInline {
+  const put = (value: string, from: readonly string[]) => value.replace(RE_URL_MARK, (_, n: string) => from[Number(n)] ?? "");
+  if (node.type === "text") return { ...node, value: put(node.value, urls) };
+  if (node.type === "code") return { ...node, value: put(node.value, raws) };
+  if (node.type === "link") return { ...node, href: put(node.href, urls), children: node.children.map((c) => restoreUrls(c, urls, raws)) };
+  return { ...node, children: node.children.map((c) => restoreUrls(c, urls, raws)) };
 }
 
 /**

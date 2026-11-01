@@ -110,10 +110,13 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
   }
   // Visual evidence (TASK-3166): a diagram, annotated screenshot or web page that
   // a person can open. It blocks only after its week and while uploads are on.
+  const uploadsOff = input.evidenceStoreProblem
+    ? `Warning only: the evidence store failed its health check (${input.evidenceStoreProblem}).`
+    : "Warning only: evidence uploads are off for this task.";
   if (requiresHumanVerification(task.labels, tier) && !hasVisualArtifact(task.evidence)) {
     const line = "no visual evidence: upload a diagram, annotated screenshot or web page with mc_upload_evidence.";
     if (visualEvidenceMode(input.now, input.evidenceStoreEnabled) === "block") reasons.push(line);
-    else if (!input.evidenceStoreEnabled) notes.push(`${line} Warning only: evidence uploads are off for this task.`);
+    else if (!input.evidenceStoreEnabled) notes.push(`${line} ${uploadsOff}`);
     else notes.push(`${line} Warning only until ${VISUAL_EVIDENCE_ENFORCE_FROM.slice(0, 10)}.`);
   }
   // Explainer video (TASK-3167): complex work a person must verify needs a short
@@ -124,7 +127,7 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
       `no explainer video: complex change (${complex.join(", ")}); ` +
       "make one with the plx-knowledge-video skill and upload it with mc_upload_evidence (kind video).";
     if (videoEvidenceMode(input.now, input.evidenceStoreEnabled) === "block") reasons.push(line);
-    else if (!input.evidenceStoreEnabled) notes.push(`${line} Warning only: evidence uploads are off for this task.`);
+    else if (!input.evidenceStoreEnabled) notes.push(`${line} ${uploadsOff}`);
     else notes.push(`${line} Warning only until ${VIDEO_EVIDENCE_ENFORCE_FROM.slice(0, 10)}.`);
   }
 

@@ -32,15 +32,14 @@ import * as complianceRepo from "@/lib/compliance/repo";
 import type { EvidenceArtifact, Task } from "@/lib/mc-data";
 import { assertTaskProjectAccess, isBucketInRestrictedProject } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
+import { __resetEvidenceStoreForTests, evidenceStoreDriveId, invalidateEvidenceStore } from "@/lib/compliance/evidence-store";
 import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask } from "@/lib/sync";
 import {
   GraphError,
   createDriveUploadSession,
-  driveIdByName,
   driveItemByPath,
   driveItemContent,
-  siteIdByPath,
   uploadSmallDriveFile,
 } from "@/lib/sync/graph";
 import { getBuckets, getEntity, lockSharedEvidence } from "@/lib/sync/repo";
@@ -65,23 +64,21 @@ export const uploadEvidenceInputShape = {
 };
 type UploadEvidenceInput = z.infer<z.ZodObject<typeof uploadEvidenceInputShape>>;
 
-export const unavailable = (message: string) => new ApiError("evidence_store_unavailable", message, 503);
+export const unavailable = (message: string, retryAfterMs?: number) =>
+  new ApiError("evidence_store_unavailable", message, 503, retryAfterMs);
 
-// The library's drive id does not change: look it up once per process. A miss is never cached.
-// Draft artifact uploads (TASK-4130) use the same library, so these helpers are shared.
-let cachedDriveId: string | null = null;
+// The drive id cache and the store's health probe live in @/lib/compliance/evidence-store
+// (TASK-4421), which the gate shares. Draft artifact uploads (TASK-4130) use the same library.
 export async function evidenceDriveId(): Promise<string> {
-  if (cachedDriveId) return cachedDriveId;
-  const driveId = await driveIdByName(await siteIdByPath(PLX_EVIDENCE_STORE.site), PLX_EVIDENCE_STORE.library);
+  const driveId = await evidenceStoreDriveId();
   if (!driveId) {
     throw unavailable(`The "${PLX_EVIDENCE_STORE.library}" library does not exist on ${PLX_EVIDENCE_STORE.site}. ${PERSON_ACTION}`);
   }
-  cachedDriveId = driveId;
   return driveId;
 }
 
 export function __clearEvidenceDriveCacheForTests(): void {
-  cachedDriveId = null;
+  __resetEvidenceStoreForTests();
 }
 
 /** Upload-session chunks: a multiple of 320 KiB, as Graph requires. */
@@ -108,14 +105,25 @@ function uploadStep(input: UploadEvidenceInput): UploadStep {
 export const storedName = (uploadedAt: string, sha256: string, fileName: string, hashChars = 8) =>
   `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, hashChars)}-${sharePointSafeName(fileName)}`;
 
-/** Every SharePoint failure becomes a 503 that says what to do; other errors stay errors. */
+/**
+ * Every SharePoint failure becomes a 503 that says what to do; other errors stay errors.
+ * A 404 forgets the cached drive id, so a recreated library is found again. A 429 or 503
+ * passes Graph's Retry-After to the caller as retryAfterMs; MC itself never retries.
+ */
 export async function onSharePoint<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (err) {
     if (!(err instanceof GraphError)) throw err;
+    if (err.status === 404) invalidateEvidenceStore();
     if (err.status === 403 || err.status === 404) {
       throw unavailable(`SharePoint refused the upload (${err.status}). ${PERSON_ACTION}`);
+    }
+    if ((err.status === 429 || err.status === 503) && err.retryAfterMs !== undefined) {
+      throw unavailable(
+        `SharePoint returned ${err.status}. Try again after ${Math.ceil(err.retryAfterMs / 1000)} s (retryAfterMs). If it repeats, tell a person.`,
+        err.retryAfterMs
+      );
     }
     throw unavailable(`SharePoint returned ${err.status}. Try again later. If it repeats, tell a person.`);
   }

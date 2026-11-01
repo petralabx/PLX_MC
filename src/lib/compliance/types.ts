@@ -41,6 +41,9 @@ export interface VerifyInput {
   // Whether this task can upload evidence (TASK-3166): uploads on, not Trading Lab and
   // not a restricted project. Off: a missing visual artifact only warns.
   evidenceStoreEnabled?: boolean;
+  // Uploads are on, but the store failed its health probe (TASK-4421): why. The
+  // requirement then only warns, and the note names this problem.
+  evidenceStoreProblem?: string;
 }
 
 export interface VerifyResult {

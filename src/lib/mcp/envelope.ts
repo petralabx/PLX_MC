@@ -85,7 +85,7 @@ export function mcpJsonResult(payload: unknown) {
 }
 
 export interface McpToolErrorBody {
-  error: { code: string; message: string; hint?: string };
+  error: { code: string; message: string; hint?: string; retryAfterMs?: number };
 }
 
 // Agent-actionable next steps for codes an agent can fix on its own (W04): one
@@ -170,10 +170,11 @@ export function errorHint(code: string): string | undefined {
   return Object.prototype.hasOwnProperty.call(ERROR_HINTS, code) ? ERROR_HINTS[code] : undefined;
 }
 
-/** `{ error: { code, message, hint? } }` for an ApiError: one shape for MCP tools and cursor REST routes. */
+/** `{ error: { code, message, hint?, retryAfterMs? } }` for an ApiError: one shape for MCP tools and cursor REST routes. */
 export function apiErrorBody(err: ApiError): McpToolErrorBody {
   const hint = errorHint(err.code);
-  return { error: { code: err.code, message: err.message, ...(hint ? { hint } : {}) } };
+  const retry = err.retryAfterMs !== undefined ? { retryAfterMs: err.retryAfterMs } : {};
+  return { error: { code: err.code, message: err.message, ...(hint ? { hint } : {}), ...retry } };
 }
 
 /**

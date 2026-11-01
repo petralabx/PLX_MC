@@ -370,14 +370,8 @@ export function DetailView({
   onBack: () => void;
 }) {
   const hc = result.ok ? result.validationResult.healthCode : result.reason;
-  const tone =
-    !result.ok
-      ? "hot"
-      : hc === "valid"
-      ? "valid"
-      : hc === "partial" || hc === "no_ledgers"
-      ? "warn"
-      : "hot";
+  // The list's tone for the same health code: a disabled or empty ledger is grey, not red.
+  const tone = result.ok ? healthTone(hc) : "hot";
 
   const ghUrl =
     result.ok && result.ref

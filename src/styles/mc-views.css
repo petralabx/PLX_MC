@@ -690,7 +690,7 @@
 }
 
 .mc .filterbar .fb-chip:hover {
-  border-color: var(--p-hot);
+  border-color: var(--p-ink);
 }
 
 .mc .filterbar .fb-chip .rm {
@@ -737,7 +737,7 @@
 }
 
 .mc .filterbar .fb-dirty {
-  color: var(--p-hot-text);
+  color: var(--p-info-text); /* modified since saved: information, not an error */
   font-weight: 700;
 }
 
@@ -837,7 +837,7 @@
 }
 
 .mc .filterbar .fb-due-pop .fb-due-clear:hover:not(:disabled) {
-  color: var(--p-hot-text);
+  color: var(--p-ink);
 }
 
 /* Disabled = no range to clear (kept in the layout + tab order, never hidden). */

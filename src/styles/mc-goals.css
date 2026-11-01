@@ -72,12 +72,19 @@
   color: var(--p-ink-2);
 }
 
+/* A note about the data or the page: information (blue). A problem the reader
+   must act on (a failed load or refresh, rows that will be deleted, figures
+   that don't add up) adds .hot (decision 9: red means failed or behind). */
 .mc .goals .gp-notice {
   margin: 0;
   padding: 8px 12px;
-  border-left: 3px solid var(--p-hot);
+  border-left: 3px solid var(--p-info);
   background: var(--p-paper-2);
   color: var(--p-ink);
+}
+
+.mc .goals .gp-notice.hot {
+  border-left-color: var(--p-hot);
 }
 
 .mc .goals .gp-banner {

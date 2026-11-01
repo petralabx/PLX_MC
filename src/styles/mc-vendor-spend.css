@@ -91,6 +91,11 @@
 .vs-banner-body { flex: 1; color: var(--p-ink-2); }
 .vs-banner-ct { font-weight: 700; color: var(--p-hot-text); }
 
+/* Only vendors at their warn threshold: at risk, so amber (decision 9). Red stays for over budget or critical. */
+.vs-banner.warn { border-left-color: var(--p-warn); }
+.vs-banner.warn .dot { background: var(--p-warn); }
+.vs-banner-ct.warn { color: var(--p-warn-text); }
+
 /* ─── Stat cards ──────────────────────────────────────────────────────────── */
 
 .vs-stats {

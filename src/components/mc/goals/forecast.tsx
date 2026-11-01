@@ -221,7 +221,7 @@ export function ForecastNotes({ f, k, words }: { f: ForecastReady; k: ForecastKp
               }`}
       </p>
       {f.aoQtyUnreadable ? (
-        <p className="gp-notice" data-testid="goals-forecast-qty-unreadable">
+        <p className="gp-notice hot" data-testid="goals-forecast-qty-unreadable">
           {plural(f.aoQtyUnreadable, "assembly order has", "assembly orders have")} a quantity in FileMaker that isn’t a number,
           so {f.aoQtyUnreadable === 1 ? "it covers" : "they cover"} no order line and those lines count as Not planned. Fix the
           quantity in FileMaker and the next refresh picks it up.

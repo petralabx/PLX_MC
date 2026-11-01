@@ -23,7 +23,8 @@
 }
 
 .ll-pill.source { color: var(--p-ink-2); }
-.ll-pill.ro { color: var(--p-hot-text); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
+/* Read-only is a property of the screen, not an error: neutral, like the sibling pill (ADR-012: red means behind, failed or destructive). */
+.ll-pill.ro { color: var(--p-ink-2); border-color: var(--p-grid); }
 
 /* ─── Attention banner ────────────────────────────────────────────────────── */
 
@@ -573,7 +574,7 @@
   letter-spacing: var(--p-track-tick);
   text-transform: uppercase;
   font-weight: 700;
-  color: var(--p-hot-text);
+  color: var(--p-ink-2);
   margin-bottom: 6px;
   display: flex;
   align-items: center;
@@ -584,8 +585,17 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--p-hot);
+  background: var(--p-muted);
   flex-shrink: 0;
+}
+
+/* Only a failure mode seen now is red; the rest of the gallery is reference. */
+.ll-gcard.live .ll-gcard-code {
+  color: var(--p-hot-text);
+}
+
+.ll-gcard.live .ll-gcard-code .dot {
+  background: var(--p-hot);
 }
 
 .ll-gcard.live .ll-gcard-code .dot {

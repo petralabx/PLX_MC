@@ -649,7 +649,7 @@
   padding: 10px 13px;
   font-size: var(--p-text-mono);
   line-height: 1.5;
-  color: var(--p-hot-text);
+  color: var(--p-info-text);
   background: color-mix(in srgb, var(--p-info) 12%, transparent);
 }
 

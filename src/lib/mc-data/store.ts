@@ -1038,7 +1038,7 @@ export function patchTaskFields(
   // Cancelling needs a reason (and replacedBy for duplicate/superseded), which a
   // drag or stage click cannot supply: it goes through mc_update_task cancel (TASK-2529).
   if (patch.stage === "cancelled") {
-    pushNotice(`${t.id}: open the task and click Cancelled in its lifecycle rail — a reason is required.`);
+    pushNotice(`${t.id}: open the task and click Cancelled in its lifecycle rail — a reason is required.`, "info");
     return;
   }
   if (patch.stage !== undefined) {

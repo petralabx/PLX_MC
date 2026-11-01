@@ -80,13 +80,14 @@ export function OverviewView({
   onSelect: (vendorId: string) => void;
 }) {
   const alerting = index.totals.warn + index.totals.critical + index.totals.over;
+  const breached = index.totals.critical + index.totals.over > 0;
   const degradedRows = index.rows.filter((r) => r.sourceStatus === "degraded");
 
   return (
     <div>
       {/* Alert banner — only when a budget threshold is crossed */}
       {alerting > 0 && (
-        <div className="vs-banner" role="status">
+        <div className={breached ? "vs-banner" : "vs-banner warn"} role="status">
           <span className="dot" aria-hidden />
           <span className="vs-banner-body">
             {index.totals.over > 0 && (
@@ -101,7 +102,7 @@ export function OverviewView({
                 {index.totals.warn > 0 && " · "}
               </>
             )}
-            {index.totals.warn > 0 && <span className="vs-banner-ct">{index.totals.warn} at warn</span>}
+            {index.totals.warn > 0 && <span className="vs-banner-ct warn">{index.totals.warn} at warn</span>}
             {" "}— review budgets before month close
           </span>
         </div>
@@ -118,7 +119,7 @@ export function OverviewView({
               : "no budgets set"
           }
         />
-        <StatCard label="Alerting" value={String(alerting)} tone={alerting > 0 ? "hot" : ""} />
+        <StatCard label="Alerting" value={String(alerting)} tone={breached ? "hot" : alerting > 0 ? "warn" : ""} />
         <StatCard
           label="Degraded sources"
           value={String(degradedRows.length)}

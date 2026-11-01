@@ -570,7 +570,7 @@ function Preview({ preview }: { preview: ImportPreview }) {
   return (
     <div className="gp-preview" data-testid="goals-import-preview">
       {preview.remove.length > 0 ? (
-        <p className="gp-notice">
+        <p className="gp-notice hot">
           {plural(preview.remove.length, "entry", "entries")} {preview.remove.length === 1 ? "isn’t" : "aren’t"} in the file and{" "}
           {preview.remove.length === 1 ? "will be" : "will all be"} deleted.
         </p>

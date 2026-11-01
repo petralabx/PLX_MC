@@ -27,7 +27,8 @@
 }
 
 .gs-pill.doctrine { color: var(--p-ink-2); }
-.gs-pill.ro { color: var(--p-hot-text); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
+/* Read-only is a property of the screen, not an error: neutral, like the sibling pill (ADR-012: red means behind, failed or destructive). */
+.gs-pill.ro { color: var(--p-ink-2); border-color: var(--p-grid); }
 
 /* ─── Degraded banner ─────────────────────────────────────────────────────── */
 

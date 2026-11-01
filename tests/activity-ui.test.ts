@@ -151,7 +151,7 @@ describe("activity helpers", () => {
   it("maps freshness to existing pill tones", () => {
     expect(freshnessTone("fresh")).toBe("ok");
     expect(freshnessTone("stale")).toBe("warn");
-    expect(freshnessTone("dormant")).toBe("hot");
+    expect(freshnessTone("dormant")).toBe("muted"); // inactive for 30+ days, not a failure (decision 9)
     expect(freshnessTone("none")).toBe("muted");
   });
 

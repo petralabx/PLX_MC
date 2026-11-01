@@ -31,9 +31,10 @@
   color: var(--p-ink-2);
 }
 
+/* Read-only is a property of the screen, not an error: neutral, like the sibling pill (ADR-012: red means behind, failed or destructive). */
 .arch-pill.ro {
-  color: var(--p-hot-text);
-  border-color: color-mix(in srgb, var(--p-hot) 30%, transparent);
+  color: var(--p-ink-2);
+  border-color: var(--p-grid);
 }
 
 .arch-disclosure {

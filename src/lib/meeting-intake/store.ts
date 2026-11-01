@@ -187,7 +187,7 @@ export function promoteProposedTask(proposedId: string, opts: PromoteOptions = {
 
   const bucket = opts.bucket ?? p.candidateBucket;
   if (!bucket) {
-    pushNotice("Pick an initiative before promoting this meeting item.");
+    pushNotice("Pick an initiative before promoting this meeting item.", "info");
     return null;
   }
 

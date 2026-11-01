@@ -29,7 +29,7 @@ export function fmtDuration(ms: number | null): string {
 export function freshnessTone(freshness: ActivityFreshness): "ok" | "warn" | "hot" | "muted" {
   if (freshness === "fresh") return "ok";
   if (freshness === "stale") return "warn";
-  if (freshness === "dormant") return "hot";
+  if (freshness === "dormant") return "muted"; // inactive, not an error (decision 9: red means failed or behind)
   return "muted";
 }
 

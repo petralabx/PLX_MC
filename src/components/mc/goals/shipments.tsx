@@ -390,7 +390,7 @@ function LinesNote({ page, fetched, byRow, onRetry }: { page: ReadyPage; fetched
   if (!byRow) return null;
   const off = [...byRow.values()].filter((v) => !v.agrees).length;
   return (
-    <p className={off > 0 ? "gp-notice" : "gp-line"} data-testid="goals-lines-note">
+    <p className={off > 0 ? "gp-notice hot" : "gp-line"} data-testid="goals-lines-note">
       {off > 0
         ? `${plural(off, "invoice’s", "invoices’")} lines don’t add up to the invoice. They’re marked “Lines don’t add up”; open one to see both figures.`
         : "Open an invoice to see what shipped. Every invoice’s lines add up to it, to the cent."}

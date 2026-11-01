@@ -1,8 +1,9 @@
 /* Goals & Production screen (TASK-2896) — imported into the mc.screens layer
    (ADR-005): phone-first, wider tiers by @container main, hover under
    (hover: hover), --p-* tokens only. Violet (tokens v1.7.0, decision 9) marks
-   only what was entered by hand: fills --p-hand with a diagonal hatch on marks,
-   text --p-hand-text. Amber means at risk and nothing else.
+   only what was entered by hand: text --p-hand-text, chart segments --p-hand,
+   and a diagonal hatch (--gp-hand-fill) on the card bar and the legend swatch.
+   Amber means at risk and nothing else.
    The KPI/chart-card look comes from the Insights lane through the .insights
    wrapper; this file adds the goal cards, the column charts
    (charts/column-chart.tsx, first used here), tables, tiles, skeletons and the
@@ -44,12 +45,17 @@
   color: var(--p-ink-2);
 }
 
+/* The by-hand hatch: violet stripes at 135°, used on the legend swatch and the card bar. */
+.mc .goals {
+  --gp-hand-fill: repeating-linear-gradient(135deg, var(--p-hand) 0 2px, color-mix(in srgb, var(--p-hand) 40%, transparent) 2px 4px);
+}
+
 .mc .goals .gp-legend .sw {
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
   border-radius: 2px;
-  background: repeating-linear-gradient(135deg, var(--p-hand) 0 2px, color-mix(in srgb, var(--p-hand) 40%, transparent) 2px 4px);
+  background: var(--gp-hand-fill);
 }
 
 .mc .goals .gp-status {
@@ -410,7 +416,7 @@
   background: var(--p-accent);
 }
 .mc .goals .gp-bar .hand {
-  background: repeating-linear-gradient(135deg, var(--p-hand) 0 2px, color-mix(in srgb, var(--p-hand) 40%, transparent) 2px 4px);
+  background: var(--gp-hand-fill);
 }
 .mc .goals .gp-bar .sched {
   background: var(--p-accent-soft);

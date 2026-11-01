@@ -216,6 +216,10 @@ export function StackedColumns({
                   y={y(top, yMax)}
                   height={y(base, yMax) - y(top, yMax)}
                   fill={seg.colorVar}
+                  // A surface-coloured edge keeps stacked segments apart, whatever their colours.
+                  stroke="var(--p-card)"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
                 />
               );
               base = top;

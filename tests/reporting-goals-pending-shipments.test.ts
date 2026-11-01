@@ -256,6 +256,14 @@ describe("shipped, not yet invoiced in How it adds up (TASK-4373)", () => {
     expect(out).toContain(`= Revenue the card’s headline ${cents(m.goalCadCents)}`);
   });
 
+  it("flags an unreadable estimate as a note on the data, in the information blue", () => {
+    const p = page({ access: "missing", missing: ["sage.oe_shipment_header.shidate"], shipments: [] });
+    if (!isReady(p)) throw new Error("ready");
+    const markup = renderToStaticMarkup(createElement(RevenueBreakdown, { page: p, scope: "all" }));
+    expect(markup).toMatch(/<li class="gp-note-flag" data-testid="goals-revenue-pending">Shipped, not invoiced: not included \(needs access\)<\/li>/);
+    expect(markup).not.toContain("gp-amber"); // decision 9: amber means at risk only
+  });
+
   it("shows no estimate row without the estimate", () => {
     const p = page();
     if (!isReady(p)) throw new Error("ready");

@@ -644,18 +644,17 @@ function shipmentSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   // reference (an invoice, shipment, order or PO number) sits under Invoice.
   const entries = input.model.entries.filter((e) => e.type === "Shipment").sort(byDateThenEntry);
   for (const e of entries) {
-    const hand = true;
-    put(ws, r, 1, excelDate(e.date), { hand, numFmt: DATE_FORMAT });
-    put(ws, r, 2, e.reference, { hand });
-    for (const col of [3, 4, 5]) put(ws, r, col, null, { hand });
-    put(ws, r, 6, e.customer, { hand });
-    put(ws, r, 7, e.currency, { hand });
-    put(ws, r, 8, decimal(e.productValue), { hand, numFmt: DOLLAR_FORMAT });
-    put(ws, r, 9, decimal(e.freight), { hand, numFmt: DOLLAR_FORMAT });
-    put(ws, r, 10, { formula: `H${r}+I${r}` }, { hand, numFmt: DOLLAR_FORMAT });
-    put(ws, r, 11, e.truckload ? LOAD_LABELS[e.truckload.kind] : null, { hand });
-    put(ws, r, 12, `By hand (${e.entryId})`, { hand });
-    put(ws, r, 13, e.statusLabel, { hand });
+    put(ws, r, 1, excelDate(e.date), { hand: true, numFmt: DATE_FORMAT });
+    put(ws, r, 2, e.reference, { hand: true });
+    for (const col of [3, 4, 5]) put(ws, r, col, null, { hand: true });
+    put(ws, r, 6, e.customer, { hand: true });
+    put(ws, r, 7, e.currency, { hand: true });
+    put(ws, r, 8, decimal(e.productValue), { hand: true, numFmt: DOLLAR_FORMAT });
+    put(ws, r, 9, decimal(e.freight), { hand: true, numFmt: DOLLAR_FORMAT });
+    put(ws, r, 10, { formula: `H${r}+I${r}` }, { hand: true, numFmt: DOLLAR_FORMAT });
+    put(ws, r, 11, e.truckload ? LOAD_LABELS[e.truckload.kind] : null, { hand: true });
+    put(ws, r, 12, `By hand (${e.entryId})`, { hand: true });
+    put(ws, r, 13, e.statusLabel, { hand: true });
     r += 1;
   }
 }

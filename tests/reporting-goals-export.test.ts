@@ -640,7 +640,11 @@ describe("at the Sage rate", () => {
       ]);
       expect(formulaOf(ws.getCell(`G${r}`))).toBe(`C${r}+E${r}+F${r}`);
       expect(isHand(ws.getCell(`F${r}`))).toBe(true);
+      // Shipped-not-invoiced is an estimate from Sage, not an entry by hand.
+      expect(isHand(ws.getCell(`N${r}`)) || isHand(ws.getCell(`O${r}`))).toBe(false);
     });
+    expect(isHand(ws.getCell("F4"))).toBe(true);
+    expect(isHand(ws.getCell("N4")) || isHand(ws.getCell("O4"))).toBe(false);
     expect(ws.getCell("A9").value).toBe("All classes");
     expect(formulaOf(ws.getCell("G9"))).toBe("SUM(G5:G8)");
     expect(ws.getCell("A11").value).toBe("Revenue card (on the page)");

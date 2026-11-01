@@ -21,12 +21,13 @@ const C = {
 };
 
 // One colour per size band, in the model's band order (~10,000 · 5,000–8,999 · Under 5,000 · Over 11,000).
-// The bands are sizes, so one forest ramp, darker for bigger batches: status colours mean statuses
+// The bands are sizes, so one forest ramp by size, darker for bigger batches (Under 5,000 lightest,
+// Over 11,000 darkest); the chart's segment edges keep neighbours apart. Status colours mean statuses
 // only (decision 9), and violet stays reserved for entries by hand.
 const BAND_COLORS = [
-  "color-mix(in srgb, var(--p-accent) 72%, var(--p-paper))",
-  "color-mix(in srgb, var(--p-accent) 45%, var(--p-paper))",
-  "var(--p-accent-soft)",
+  "color-mix(in srgb, var(--p-accent) 75%, var(--p-paper))",
+  "color-mix(in srgb, var(--p-accent) 50%, var(--p-paper))",
+  "color-mix(in srgb, var(--p-accent) 30%, var(--p-paper))",
   "var(--p-accent)",
 ];
 

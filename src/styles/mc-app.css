@@ -103,11 +103,8 @@
 .mc .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border:1px solid currentColor;
   font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:var(--p-track-meta); text-transform:uppercase; }
 .mc .pill .dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
-/* .pill.ok text is nudged toward ink for WCAG AA at the pill's 8.5px mono size:
-   --p-ok #5C7A55 is 4.32:1 on --p-canvas (needs 4.5:1). The mix stays token-only
-   (ADR-004 pattern) — the parity-locked portal token itself is untouched. In
-   dark mode --p-ink is light, so the same mix brightens and still passes. */
-.mc .pill.ok { color:color-mix(in srgb, var(--p-ok) 82%, var(--p-ink)); } .mc .pill.warn { color:var(--p-warn-text); }
+/* Status pills use the -text shades, which hold WCAG AA (tokens v1.7.0). */
+.mc .pill.ok { color:var(--p-ok-text); } .mc .pill.warn { color:var(--p-warn-text); }
 .mc .pill.info { color:var(--p-info-text); } .mc .pill.hot { color:var(--p-hot-text); }
 .mc .pill.acc { color:var(--p-accent); } .mc .pill.muted { color:var(--p-muted); }
 

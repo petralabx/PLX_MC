@@ -376,6 +376,7 @@ describe("revenue by business line", () => {
     const markup = html(RevenueBreakdown, { page });
     const out = text(markup);
     expect(markup).toContain('data-testid="goals-revenue-lines"');
+    expect(markup).not.toContain("gp-amber"); // decision 9: amber means at risk only
     expect(out).toMatch(lineRow("Manufacturing", amounts.manufacturingCadCents));
     expect(out).toMatch(lineRow("Distribution", amounts.distributionCadCents));
     expect(out).toMatch(lineRow("Services (3PL)", amounts.servicesCadCents));

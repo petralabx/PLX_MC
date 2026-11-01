@@ -113,6 +113,7 @@ vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => true),
   ensureBucketsSeeded: vi.fn(async () => true),
+  ensureProjectsSeeded: vi.fn(async () => {}),
   checkRoutingFreshness: vi.fn(async () => ({
     ok: true,
     code: "ok",
@@ -128,6 +129,8 @@ vi.mock("@/lib/sync/repo", () => ({
   openConflicts: vi.fn(async () => []),
   openErrors: vi.fn(async () => []),
   getBuckets: vi.fn(async () => [{ id: "BKT-OPS", project: "PRJ-1", name: "Ops" }]),
+  // Every task sits in a bucket of a project (TASK-4005).
+  getProjects: vi.fn(async () => [{ id: "PRJ-1", name: "Project 1" }]),
   getRepos: vi.fn(async () => [
     { id: "petralabx/PLX_MC", name: "PLX_MC", lang: "TS", def: "main", owner: "v", visibility: "private", scope: "" },
   ]),
@@ -218,6 +221,22 @@ describe("createConfirmedTask", () => {
     expect(txState.entities.has("TASK-101")).toBe(true);
     expect(txState.proposals.get("prop-create")!.state).toBe("resolved");
     expect(txState.proposals.get("prop-create")!.selected_task_id).toBe("TASK-101");
+  });
+
+  it("refuses a bucket that belongs to no project before any write (TASK-4005)", async () => {
+    const syncRepo = await import("@/lib/sync/repo");
+    vi.mocked(syncRepo.getBuckets).mockResolvedValueOnce([{ id: "BKT-OPS", project: null, name: "Ops" }] as never);
+    await expect(
+      createConfirmedTask(human, {
+        proposalId: "prop-create",
+        bucketId: "BKT-OPS",
+        title: "Ship routing",
+        repos: ["petralabx/PLX_MC"],
+        accountableOwnerId: "oid-1",
+      })
+    ).rejects.toMatchObject({ code: "bucket_without_project", status: 422 });
+    expect(txState.entities.size).toBe(0);
+    expect(txState.proposals.get("prop-create")!.state).not.toBe("resolved");
   });
 
   it("replays the same Task for matching creation intent", async () => {

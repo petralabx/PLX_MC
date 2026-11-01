@@ -10,6 +10,7 @@ vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => {}),
   ensureBucketsSeeded: vi.fn(async () => {}),
+  ensureProjectsSeeded: vi.fn(async () => {}),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -31,7 +32,11 @@ vi.mock("@/lib/sync/repo", () => ({
     return [];
   },
   async getBuckets() {
-    return [{ id: "BKT-WMS", name: "WMS", owner: "vince" }];
+    return [{ id: "BKT-WMS", name: "WMS", owner: "vince", project: "PRJ-WMS" }];
+  },
+  // Every task sits in a bucket of a project (TASK-4005).
+  async getProjects() {
+    return [{ id: "PRJ-WMS", name: "WMS" }];
   },
   async appendAudit() {},
 }));

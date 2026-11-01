@@ -64,6 +64,28 @@ export function isOpenInRollup(task: RollupTask): boolean {
   return !isClosedStage(task.stage) || awaitsRetest(task);
 }
 
+/**
+ * TASK-4005: a project is ready to close when it is active (not closed, not archived),
+ * has at least one task, and none of its tasks is still open. Its owner is asked to
+ * close it; nothing ever closes a project on its own.
+ */
+export function projectReadyToClose(
+  project: { status?: "active" | "closed"; archivedAt?: string | null } | null | undefined,
+  tasks: readonly RollupTask[]
+): boolean {
+  if (!project || project.status === "closed" || project.archivedAt) return false;
+  return tasks.length > 0 && !tasks.some(isOpenInRollup);
+}
+
+/** The project screen's close prompt: shown only to the project's owner (TASK-4005). */
+export function showProjectClosePrompt(
+  project: { owner?: string | null; status?: "active" | "closed"; archivedAt?: string | null } | null | undefined,
+  tasks: readonly RollupTask[],
+  viewerId: string | null | undefined
+): boolean {
+  return !!viewerId && !!project?.owner && viewerId === project.owner && projectReadyToClose(project, tasks);
+}
+
 export function countTaskProgress(tasks: readonly RollupTask[]): TaskProgressCounts {
   let done = 0;
   let cancelled = 0;

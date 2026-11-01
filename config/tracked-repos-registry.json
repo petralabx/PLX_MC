@@ -225,6 +225,27 @@
       "notes": "Agent fleet runner (fleet P6/P6a, D24). MC principal sp_mcp_agent_runner. Enrolled TASK-2068 as pending_adoption. An org admin creates the repo; the adoption PR uses scaffold --workflows-only plus hand-written docs/GOVERNANCE.md and CONTRIBUTING.md (plx_secondbrain#2 precedent). A later PLX_MC PR flips status to active. No routing pilot."
     },
     {
+      "repo": "petralabx/internal-seller-api",
+      "display_name": "Internal Seller API",
+      "org": "petralabx",
+      "tier": "tooling",
+      "integration_branch": "main",
+      "release_branch": null,
+      "compliance_mode": "soft",
+      "routing_manifest": {
+        "path": ".github/plx-mc-routing-manifest.json",
+        "schema_version": "plx-mc-routing-manifest/v1",
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
+      },
+      "default_bucket": "BKT-INFRA",
+      "quality_ledger": {
+        "enabled": false
+      },
+      "status": "pending_adoption",
+      "contributing_path": "CONTRIBUTING.md",
+      "notes": "Amazon Seller API service with confirmed writes, off by default (TASK-4175). Engineering roots: seller_api/, tests/, deploy/. Enrolled TASK-4398 as pending_adoption (Vince, 2026-10-31, q_c567d65b5f3ddaff). Next: an adoption PR with the compliance workflow and AGENTS.md and CLAUDE.md carrying the generated handshake, then a PLX_MC PR that sets status active and compliance_mode hard. No routing pilot."
+    },
+    {
       "repo": "petralabx/test-perms-check",
       "display_name": "Test Perms Check",
       "org": "petralabx",

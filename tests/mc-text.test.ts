@@ -188,13 +188,27 @@ describe("McText", () => {
     expect(out.match(/<em>/g)).toHaveLength(1);
     expect(out).toContain("<em>this</em>");
     // Emphasis opened before a URL cannot close inside it.
-    const before = html("_note https://ci.example.com/_runs_/x_ end");
+    const before = html("_note https://ci.example.com/_runs_/x end");
     expect(before).not.toContain("<em>");
-    expect(before).toContain('title="https://ci.example.com/_runs_/x_"');
+    expect(before).toContain('title="https://ci.example.com/_runs_/x"');
     // An escaped underscore in a URL reads as the underscore itself.
     expect(html("See https://x.com/a\\_b now")).toContain('href="https://x.com/a_b"');
     // A URL in a Markdown link still links.
     expect(html("[the log](https://ci.example.com/_runs_/1)")).toContain('href="https://ci.example.com/_runs_/1"');
+  });
+
+  it("lets a delimiter or code span right after a bare URL close", () => {
+    const strong = html("**see https://example.com/a**, then go");
+    expect(strong).toContain("<strong>see <a");
+    expect(strong).toContain('title="https://example.com/a"');
+    expect(strong).not.toContain("**");
+    expect(html("_see https://example.com/a_.")).toContain("<em>see <a");
+    expect(html("*see https://example.com/a*")).toContain("<em>see <a");
+    expect(html("Run `curl https://example.com/api` now")).toContain("<code>curl https://example.com/api</code>");
+    // A trailing underscore that closes nothing stays part of the URL.
+    expect(html("see https://ci.example.com/_runs_/x_ end")).toContain('title="https://ci.example.com/_runs_/x_"');
+    // An escaped trailing underscore stays in the URL as the underscore.
+    expect(html("_see https://x.com/a\\_ now_")).toContain('href="https://x.com/a_"');
   });
 
   it("keeps ids and words with underscores intact: an underscore inside a word is not emphasis", () => {

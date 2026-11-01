@@ -566,6 +566,13 @@ describe("assignee and accountable owner (TASK-3407)", () => {
       .rejects.toMatchObject({ code: "forbidden" });
   });
 
+  it("never puts an agent: executor on a human-only task (EN-003)", async () => {
+    seed("TASK-1", { humanOnly: true });
+    await expect(actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: "agent:lane_claude_uat", reason } }))
+      .rejects.toMatchObject({ message: expect.stringContaining("human-only") });
+    expect(h.rows.get("TASK-1")!.data.assignee).toBeUndefined();
+  });
+
   it("lets a task.assign holder name a registered agent principal (TASK-4005 c)", async () => {
     await actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: "agent:lane_claude_uat", reason } });
     expect(h.rows.get("TASK-1")!.data.assignee).toBe("agent:lane_claude_uat");

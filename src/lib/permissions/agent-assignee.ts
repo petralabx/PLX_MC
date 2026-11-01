@@ -40,12 +40,13 @@ export function isAgentAssignee(assignee: string | null | undefined): boolean {
 }
 
 /**
- * True when the assignee is exactly `agent:<slug>` and sp_mcp_<slug> is a
- * registered agent principal. Only the lower-case form counts, so each agent
- * has one spelling and an exact assignee search finds all of its tasks.
+ * True when the assignee is exactly `agent:<slug>`, in lower case with no outer
+ * spaces, and sp_mcp_<slug> is a registered agent principal. Task creation
+ * stores the assignee as sent, so only this one spelling is accepted: every
+ * task assigned to an agent then stores the same value.
  */
 export function isRegisteredAgentAssignee(assignee: string | null | undefined): boolean {
-  return typeof assignee === "string" && REGISTERED_AGENT_ASSIGNEES.has(assignee.trim());
+  return typeof assignee === "string" && REGISTERED_AGENT_ASSIGNEES.has(assignee);
 }
 
 /** True when the actor may set any agent assignee: an active person or sp_mcp_portal. */

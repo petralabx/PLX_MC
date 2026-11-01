@@ -108,6 +108,10 @@ describe("policy predicates", () => {
     expect(assignmentViolation(taskish({ humanOnly: true }), "vibes")).toMatch(/human-only/);
     expect(assignmentViolation(taskish({ humanOnly: true }), "greg")).toBeNull();
     expect(assignmentViolation(taskish({}), "vibes")).toBeNull();
+    // TASK-4005 (c): an agent:<slug> assignee is an agent executor too.
+    expect(assignmentViolation(taskish({ humanOnly: true }), "agent:cip")).toMatch(/human-only/);
+    expect(assignmentViolation(taskish({ humanOnly: true }), "Agent:hasitha-fernando")).toMatch(/human-only/);
+    expect(assignmentViolation(taskish({}), "agent:cip")).toBeNull();
   });
 
   it("stageAdvanceViolation enforces the accountable-owner gate past planned", () => {

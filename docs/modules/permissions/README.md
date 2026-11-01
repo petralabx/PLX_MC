@@ -92,11 +92,14 @@ task reopens it through `task.reopen`.
 reads included. Fleet P8b adds one read: `agent_report.read`, with the
 allowlist name `mc_list_agent_reports` for `GET /api/cursor/agent-reports`.
 Only `sp_mcp_portal` holds `agent_report.read`; no other principal and no human
-role does. It is the only MCP principal that may set an
-`agent:` assignee; a signed-in person may too. The pure predicates
-`isAgentAssignee` and `mayAssignAgent` live in `agent-assignee.ts`; the
-server-only guard `assertAgentAssigneeAllowed` (`agent-assignee-guard.ts`)
-throws 403 in `actionCreateTask` and `PATCH /api/tasks/[id]`.
+role does. It may set any `agent:` assignee, and so may a signed-in person.
+Since TASK-4005 (c), another MCP principal that holds `task.assign` (today
+`sp_mcp_ledger` and `sp_mcp_cos`) may set exactly `agent:<slug>` when
+`sp_mcp_<slug>` is a registered agent principal; person principals do not
+count. The pure predicates `isAgentAssignee`, `isRegisteredAgentAssignee` and
+`mayAssignAgent` live in `agent-assignee.ts`; the server-only guard
+`assertAgentAssigneeAllowed` (`agent-assignee-guard.ts`) throws 403 in
+`actionCreateTask`, `actionUpdateTask` and `PATCH /api/tasks/[id]`.
 TASK-3697 adds `task.uat_sync` and the allowlist name `mc_update_task`. The
 portal uses them to mirror a ticket onto its UAT ticket task (`kind:code` plus
 `uat:<feedbackId>`). It may verify the task (merged to verified), cancel it,

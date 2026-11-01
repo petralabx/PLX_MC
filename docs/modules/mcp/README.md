@@ -184,8 +184,9 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   `task.assign` capability, held by human admins and owners and the steward
   principals `sp_mcp_ledger` and `sp_mcp_cos`, plus a `reason` of 10 or more
   characters. Each change writes a `task.assignment.changed` event with the
-  reason; `agent:` assignees still need a signed-in person or `sp_mcp_portal`
-  (TASK-3407). An assignment-only patch needs no lane.
+  reason (TASK-3407). An `agent:<slug>` assignee set here must name a
+  registered agent principal `sp_mcp_<slug>` (TASK-4005 c; see Agent
+  assignees below). An assignment-only patch needs no lane.
 - Patch fields: `labels` replaces the entire set; `addLabels` / `removeLabels`
   are incremental and cannot accompany `labels`. Removals happen before adds.
   Labels are trimmed, non-empty and deduplicated; max 128 characters per label,
@@ -329,7 +330,9 @@ example `agent:cip`); person principals (`sp_mcp_person_*`) do not count
 other MCP principal, `sp_mcp_grok` included, gets `forbidden` (403), so outside
 doors cannot delegate through MC. The rule lives in
 `src/lib/permissions/agent-assignee.ts` and covers `actionCreateTask`,
-`mc_update_task` and the session route `PATCH /api/tasks/[id]`. A person or non-agent assignee
+`actionUpdateTask` (`mc_update_task`, `mc_update_tasks` and their REST twins)
+and the session route `PATCH /api/tasks/[id]`. A human-only task never takes
+an `agent:` executor (EN-003). A person or non-agent assignee
 stays open to every principal. `mc_search_tasks` (`GET /api/cursor/tasks?assignee=`)
 filters by exact assignee, so a runner finds the tasks assigned to its agents.
 

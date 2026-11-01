@@ -6,6 +6,7 @@
 //   3. a task cannot reach a done stage (merged/verified) with an incomplete
 //      evidence bundle (the completion contract — reuses evidenceComplete).
 
+import { isAgentAssignee } from "@/lib/permissions/agent-assignee";
 import { isStaleClosed, isUatTicketTask } from "@/lib/tasks/uat-labels";
 import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
 import { bandOf, evidenceComplete } from "./helpers";
@@ -110,6 +111,12 @@ export function isAgentId(id: string | null | undefined): boolean {
   return !!id && id in AGENTS;
 }
 
+// An executor that is an agent: a roster agent or an `agent:<slug>` assignee
+// (TASK-4005 c lets task.assign holders set those). Used by the human-only rule.
+export function isAgentExecutor(id: string | null | undefined): boolean {
+  return isAgentId(id) || isAgentAssignee(id);
+}
+
 // A human accountable owner is any non-empty id that is not an agent (invited
 // people live outside AGENTS, so "not an agent" is the human test here).
 export function hasHumanAccountableOwner(task: Pick<Task, "accountableOwner">): boolean {
@@ -149,7 +156,7 @@ export function assignmentViolation(
   task: Pick<Task, "id" | "humanOnly">,
   actorId: string | null
 ): string | null {
-  if (task.humanOnly && isAgentId(actorId)) {
+  if (task.humanOnly && isAgentExecutor(actorId)) {
     return `${task.id} is human-only — an agent can't be its executor.`;
   }
   return null;

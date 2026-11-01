@@ -28,7 +28,7 @@ export function assertAgentAssigneeAllowed(
   if (mayAssignRegisteredAgent(actor)) {
     throw new ApiError(
       "forbidden",
-      "An agent: assignee must name a registered agent principal: agent:<slug>, in lower case, where sp_mcp_<slug> exists.",
+      "An agent: assignee must name a registered agent principal: exactly agent:<slug>, in lower case, where sp_mcp_<slug> exists.",
       403
     );
   }

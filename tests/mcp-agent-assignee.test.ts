@@ -84,7 +84,7 @@ import { PATCH as sessionTaskPatch } from "@/app/api/tasks/[id]/route";
 import { ApiError } from "@/lib/api/route";
 import type { McpIdentity } from "@/lib/mcp/auth";
 import { actionCreateTask } from "@/lib/mcp/actions";
-import { isRegisteredAgentAssignee, MCP_AGENT_SERVICE_PRINCIPAL_IDS } from "@/lib/permissions";
+import { isRegisteredAgentAssignee, MCP_AGENT_SERVICE_PRINCIPAL_IDS, mayAssignAgent } from "@/lib/permissions";
 
 const PORTAL = "sp_mcp_portal";
 const AGENT = "agent:hasitha-fernando";
@@ -397,6 +397,8 @@ describe("agent assignees from task.assign holders (TASK-4005 c)", () => {
       "Agent:cip",
       "agent:lane-claude-cos",
       "agent:",
+      " agent:cip",
+      "agent:cip\n",
     ]) {
       await expect(create("sp_mcp_cos", assignee)).rejects.toMatchObject({
         code: "forbidden",
@@ -418,13 +420,11 @@ describe("agent assignees from task.assign holders (TASK-4005 c)", () => {
     expect(h.created).toHaveLength(0);
   });
 
-  it("refuses a revoked task.assign holder", async () => {
-    const identity = identityFor("sp_mcp_cos");
-    identity.actor = { kind: "service", id: "sp_mcp_cos", status: "revoked" };
-    await expect(
-      actionCreateTask(identity, { title: "Delegate", bucket: "BKT-INFRA", reporter: "ignored", assignee: "agent:cip" })
-    ).rejects.toMatchObject({ status: 403 });
-    expect(h.created).toHaveLength(0);
+  it("refuses a revoked task.assign holder", () => {
+    // Unit-level: the MCP doors refuse a revoked actor before this guard runs.
+    expect(mayAssignAgent({ kind: "service", id: "sp_mcp_cos", status: "active" }, "agent:cip")).toBe(true);
+    expect(mayAssignAgent({ kind: "service", id: "sp_mcp_cos", status: "revoked" }, "agent:cip")).toBe(false);
+    expect(mayAssignAgent(null, "agent:cip")).toBe(false);
   });
 
   it("counts every registered principal except the person principals", () => {
@@ -432,7 +432,7 @@ describe("agent assignees from task.assign holders (TASK-4005 c)", () => {
       const assignee = `agent:${id.slice("sp_mcp_".length)}`;
       expect(isRegisteredAgentAssignee(assignee), assignee).toBe(!id.startsWith("sp_mcp_person_"));
     }
-    expect(isRegisteredAgentAssignee("  agent:cip  ")).toBe(true);
+    expect(isRegisteredAgentAssignee("  agent:cip  ")).toBe(false);
     expect(isRegisteredAgentAssignee(null)).toBe(false);
   });
 });

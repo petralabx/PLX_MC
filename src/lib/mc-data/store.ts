@@ -1714,6 +1714,23 @@ export function __projectUpdateSettled(): Promise<void> {
   return projectUpdateInFlight;
 }
 
+// Saves still in flight, per project, oldest first (TASK-4414). A save that
+// settles late must not undo an edit made after it: it settles only its own
+// fields, and only where no later pending save has changed them since.
+interface PendingProjectSave {
+  keys: string[];
+  /** Each field's value before this save: what a failure restores. */
+  prior: Record<string, unknown>;
+}
+const pendingProjectSaves = new Map<string, PendingProjectSave[]>();
+/** A field's value, copied; a field the project did not have stays undefined. */
+const cloneField = (value: unknown): unknown => (value === undefined ? undefined : clone(value));
+/** Sets a field, or removes it when the value is undefined (the field did not exist). */
+const putField = (record: Record<string, unknown>, key: string, value: unknown) => {
+  if (value === undefined) delete record[key];
+  else record[key] = value;
+};
+
 export function updateProject(id: string, patch: ProjectPatch): Promise<void> | void {
   const existing = state.projects[id];
   if (!existing) return;
@@ -1726,17 +1743,54 @@ export function updateProject(id: string, patch: ProjectPatch): Promise<void> | 
   }
   const entries = Object.entries(clamped).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return;
-  const prior = clone(existing);
+  const keys = entries.map(([key]) => key);
+  const before = existing as unknown as Record<string, unknown>;
+  const save: PendingProjectSave = { keys, prior: Object.fromEntries(keys.map((key) => [key, cloneField(before[key])])) };
   state.projects = { ...state.projects, [id]: { ...existing, ...Object.fromEntries(entries) } };
   emit();
   if (typeof window === "undefined" && !projectUpdateMirrorInjected) return;
+  const queue = pendingProjectSaves.get(id) ?? [];
+  queue.push(save);
+  pendingProjectSaves.set(id, queue);
+  /** Takes this save off the queue and returns the saves started after it. */
+  const settle = (): PendingProjectSave[] => {
+    const at = queue.indexOf(save);
+    const later = queue.slice(at + 1);
+    queue.splice(at, 1);
+    if (queue.length === 0) pendingProjectSaves.delete(id);
+    return later;
+  };
+  const laterFor = (later: PendingProjectSave[], key: string) => later.find((s) => s.keys.includes(key));
   projectUpdateInFlight = projectUpdateMirror(id, clamped).then(
     (saved) => {
-      state.projects = { ...state.projects, [id]: saved };
+      const later = settle();
+      const current = state.projects[id] as unknown as Record<string, unknown> | undefined;
+      const next = { ...saved } as unknown as Record<string, unknown>;
+      // A field a later save is still writing keeps its local value; that save's
+      // rollback now returns to what the server just confirmed.
+      for (const pending of later) {
+        for (const key of pending.keys) {
+          if (current && key in current) next[key] = current[key];
+          if (laterFor(later, key) === pending) pending.prior[key] = cloneField((saved as unknown as Record<string, unknown>)[key]);
+        }
+      }
+      state.projects = { ...state.projects, [id]: next as unknown as Project };
       emit();
     },
     (err) => {
-      state.projects = { ...state.projects, [id]: prior };
+      const later = settle();
+      const current = state.projects[id];
+      if (current) {
+        const next = { ...current } as unknown as Record<string, unknown>;
+        for (const key of keys) {
+          // A later save of the same field keeps its value; if it fails too, it
+          // rolls back to this save's prior, the last value the server had.
+          const successor = laterFor(later, key);
+          if (successor) successor.prior[key] = save.prior[key];
+          else putField(next, key, save.prior[key]);
+        }
+        state.projects = { ...state.projects, [id]: next as unknown as Project };
+      }
       pushNotice(
         `Couldn't save the change to ${id} — it was rolled back. ${
           err instanceof Error ? err.message : "The server rejected the update."
@@ -2113,6 +2167,7 @@ export function __setOpenConflictsForTests(conflicts: SpConflict[]) {
 // Test-only: reset the store to the seed fixture.
 export function resetStore() {
   state = initialState();
+  pendingProjectSaves.clear();
   notices = [];
   noticeSeq = 0;
   notifSeq = 0;

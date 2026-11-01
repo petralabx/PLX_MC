@@ -119,6 +119,67 @@ describe("updateProject (P2)", () => {
     expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
   });
 
+  // Overlapping saves (TASK-4414): a save settles after a later edit was applied.
+  // Each settles by hand, in the order the test chooses.
+  const deferredMirror = () => {
+    const calls: Array<{ resolve: (p: Project) => void; reject: (e: Error) => void; patch: Partial<Project> }> = [];
+    __setProjectUpdateMirrorForTests(
+      (_id, patch) => new Promise<Project>((resolve, reject) => calls.push({ resolve, reject, patch }))
+    );
+    return calls;
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it("a late failure rolls back only its own fields: a later edit survives", async () => {
+    const p = addProject({ name: "Overlap" });
+    const before = projectById(p.id)!;
+    const calls = deferredMirror();
+    void updateProject(p.id, { health: "risk" });
+    void updateProject(p.id, { owner: "stephen" });
+    calls[1].resolve({ ...projectById(p.id)!, owner: "stephen" });
+    await settle();
+    calls[0].reject(new Error("PATCH 500"));
+    await settle();
+    expect(projectById(p.id)?.health).toBe(before.health); // its own field rolls back
+    expect(projectById(p.id)?.owner).toBe("stephen"); // the later, saved edit stays
+    expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
+  });
+
+  it("a success that lands after a later edit keeps that edit", async () => {
+    const p = addProject({ name: "Overlap 2" });
+    const calls = deferredMirror();
+    void updateProject(p.id, { health: "risk" });
+    void updateProject(p.id, { target: "Dec 31" });
+    calls[0].resolve({ ...projectById(p.id)!, health: "risk", target: "—" }); // the server has not seen the target yet
+    await settle();
+    expect(projectById(p.id)?.health).toBe("risk");
+    expect(projectById(p.id)?.target).toBe("Dec 31"); // the pending edit is not overwritten
+  });
+
+  it("two failed saves of one field roll back to the last saved value, not the first unsaved one", async () => {
+    const p = addProject({ name: "Overlap 3", target: "Jul 30" });
+    const calls = deferredMirror();
+    void updateProject(p.id, { target: "Nov 01" });
+    void updateProject(p.id, { target: "Dec 31" });
+    calls[0].reject(new Error("PATCH 500"));
+    await settle();
+    expect(projectById(p.id)?.target).toBe("Dec 31"); // the later edit still stands
+    calls[1].reject(new Error("PATCH 500"));
+    await settle();
+    expect(projectById(p.id)?.target).toBe("Jul 30");
+  });
+
+  it("rolls back a field the project did not have by removing it", async () => {
+    const p = addProject({ name: "No status" });
+    expect(projectById(p.id)?.status).toBeUndefined();
+    const calls = deferredMirror();
+    void updateProject(p.id, { status: "closed" });
+    expect(projectById(p.id)?.status).toBe("closed");
+    calls[0].reject(new Error("PATCH 500"));
+    await settle();
+    expect(projectById(p.id)).not.toHaveProperty("status");
+  });
+
   it("drops archived records from navProjects while keeping the record", async () => {
     const visible = addProject({ name: "Live Ops" });
     const archived = addProject({ name: "Credential Smoke" });

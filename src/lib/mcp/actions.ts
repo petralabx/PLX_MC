@@ -798,7 +798,30 @@ export function shouldPromotePrlessCompletion(
   if (input.prUrl?.trim()) return false;
   if ((task.prs ?? []).length > 0) return false;
   if (isUatTicketTask(task)) return false;
+  // TASK-4187: a code task reaches merged only when its merged PR is linked. A completion that runs
+  // before the PR is linked must not mark it merged; it goes to In Review instead (prlessCodeReview).
+  if (isCodeTask(task)) return false;
   return typeof task.stage === "string" && PRLESS_PROMOTABLE_STAGES.has(task.stage);
+}
+
+function isCodeTask(task: Pick<Task, "labels">): boolean {
+  return (task.labels ?? []).includes("kind:code");
+}
+
+/**
+ * TASK-4187: whether a completed hand-in on a code task with no PR moves it to In Review. On Oct 30
+ * a plain completion set TASK-4170 and TASK-4174 to merged while their PRs were still open, because
+ * the PR was not linked yet. A code task now waits in review, and the merged-PR projection moves it
+ * to merged.
+ */
+export function prlessCodeReview(
+  task: Pick<Task, "stage" | "prs" | "labels"> | undefined,
+  input: { prUrl?: string; outcome?: "completed" | "blocked" | "failed" }
+): boolean {
+  if (!task || !isCodeTask(task) || isUatTicketTask(task)) return false;
+  if ((input.outcome ?? "completed") !== "completed") return false;
+  if (input.prUrl?.trim() || (task.prs ?? []).length > 0) return false;
+  return typeof task.stage === "string" && REVIEW_PROMOTABLE_STAGES.has(task.stage);
 }
 
 // TASK-4378: the stages a completed hand-in moves up to In Review.
@@ -946,8 +969,11 @@ export async function actionComplete(
       // A stage gate keeps the stage, and the hand-in still lands.
       const reviewCheck = promote ? null : completionReview(locked, input);
       const reviewPr = reviewCheck?.pr ?? null;
-      const reviewBlock = reviewPr && locked ? stageAdvanceViolation(locked, "review") : reviewCheck?.reason ?? null;
-      if (reviewCheck) review = reviewBlock ? { moved: false, reason: reviewBlock } : { moved: true };
+      // TASK-4187: a code task completed before its PR is linked waits in review, never merged.
+      const codeWait = !promote && !reviewCheck && prlessCodeReview(locked, input);
+      const reviewBlock =
+        (reviewPr || codeWait) && locked ? stageAdvanceViolation(locked, "review") : reviewCheck?.reason ?? null;
+      if (reviewCheck || codeWait) review = reviewBlock ? { moved: false, reason: reviewBlock } : { moved: true };
       const who = dispatch?.accountableHuman ?? identity.operatorEmail;
       const move = promote
         ? { stage: PRLESS_COMPLETION_STAGE, what: "Completed with no linked PR (mc_complete_task); moved to merged" }
@@ -956,7 +982,12 @@ export async function actionComplete(
               stage: "review" as const,
               what: `Completed with ${reviewPr.repo}#${reviewPr.num} open and ready (mc_complete_task); moved to In Review`,
             }
-          : null;
+          : codeWait && !reviewBlock
+            ? {
+                stage: "review" as const,
+                what: "Completed a code task with no linked PR yet (mc_complete_task); moved to In Review. Its merged PR moves it to Merged",
+              }
+            : null;
       await patchTask(
         taskId,
         {

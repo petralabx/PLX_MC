@@ -1,5 +1,5 @@
 {
-  "$comment": "Least-privilege contract for the app-only Microsoft Graph app registration (TASK-621). scripts/audit-graph-app-permissions.mjs decodes the app token's roles claim and fails on drift. Owner: Vince. Enforcement: preflight-invocable audit script + runbook docs/runbooks/graph-least-privilege.md.",
+  "$comment": "Least-privilege contract for the app-only Microsoft Graph app registration (TASK-621). scripts/audit-graph-app-permissions.mjs decodes the app token's roles claim and fails on drift, and fails when a site the code writes to (sync default site, evidence store) has no siteGrants entry (TASK-4422). Owner: Vince. Enforcement: preflight-invocable audit script + runbook docs/runbooks/graph-least-privilege.md.",
   "appRegistration": "PLX Mission Control Sync (7c73cbc9; app-only; MICROSOFT_GRAPH_CLIENT_ID)",
   "requiredRoles": [
     "Sites.Selected"
@@ -19,7 +19,7 @@
   "transitionalRoles": [
     {
       "role": "Sites.ReadWrite.All",
-      "$comment": "Broad legacy role the sync engine runs on today. Retire after Sites.Selected + the site grant above are verified in production.",
+      "$comment": "Broad legacy role the sync engine and the evidence store run on today. Retire after Sites.Selected + both site grants above are verified in production. retireBy has passed and is deliberately not extended: removing this role is a Graph app permission change that needs a flags approval from Vince (via CoS), tracked in TASK-4422; until then a credentialed audit run fails on it by design. Removal plan: docs/runbooks/graph-least-privilege.md (PLXSite section).",
       "retireBy": "2026-08-21"
     }
   ],

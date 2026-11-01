@@ -8,6 +8,8 @@
 // GitHub pull-request URL to its short name), and an owner/repo#N reference
 // wins over a bare word.
 
+import { BARE_URL_SOURCE } from "@/lib/governance-sops/markdown";
+
 export type McRef =
   | { kind: "text"; value: string }
   | { kind: "task"; id: string }
@@ -24,7 +26,7 @@ export const MC_HOST = "mc.plxcustomer.io";
 const ID = String.raw`\b(TASK-\d{1,6}|DRF-\d{1,6})\b`;
 // Project and bucket ids are cut at a fixed length, so a real one can end in a hyphen ("BKT-SESSION-NUDGE-DOOR-GROK-"): no \b at the end.
 const BUCKET = String.raw`\b((?:BKT|PRJ)-[A-Z0-9][A-Z0-9-]{0,40})(?![A-Za-z0-9])`;
-const URL_RE = String.raw`https?:\/\/[^\s<>()"'\]]+`;
+const URL_RE = BARE_URL_SOURCE;
 const PR_REF = String.raw`(?<![\w./-])([A-Za-z0-9][\w.-]*\/[\w.-]+)#(\d{1,7})\b`;
 const GATE = String.raw`\b(apg_[0-9a-f]{8,32})\b`;
 const PATTERN = new RegExp(`(${URL_RE})|${PR_REF}|${GATE}|${ID}|${BUCKET}`, "g");
@@ -92,20 +94,24 @@ function urlRef(href: string): McRef {
     const alias = pathRef(url.pathname);
     if (alias) return alias;
     const q = url.searchParams;
+    // A link that names a screen collapses only to that screen's chip: a board link
+    // that also carries a taskId stays a link, and approvals with a gate is the gate.
+    const screen = q.get("screen") || null; // an empty screen= is no screen
+    const on = (name: string) => screen === null || screen === name;
     const taskId = q.get("taskId");
-    if (taskId && /^TASK-\d{1,6}$/.test(taskId)) return { kind: "task", id: taskId };
+    if (on("task") && taskId && /^TASK-\d{1,6}$/.test(taskId)) return { kind: "task", id: taskId };
     const bucketId = q.get("bucketId");
-    if (bucketId && /^BKT-[A-Z0-9-]+$/.test(bucketId)) return { kind: "bucket", id: bucketId };
+    if (on("bucket") && bucketId && /^BKT-[A-Z0-9-]+$/.test(bucketId)) return { kind: "bucket", id: bucketId };
     const projectId = q.get("projectId");
-    if (projectId && /^PRJ-[A-Z0-9-]+$/.test(projectId)) return { kind: "project", id: projectId };
+    if (on("project") && projectId && /^PRJ-[A-Z0-9-]+$/.test(projectId)) return { kind: "project", id: projectId };
     const draftId = q.get("draftId");
-    if (draftId && /^DRF-\d{1,6}$/.test(draftId)) {
+    if (on("drafts") && draftId && /^DRF-\d{1,6}$/.test(draftId)) {
       // A frozen version (the link Accept writes as the PRD) keeps its version.
       const version = q.get("version");
       return version && /^\d{1,6}$/.test(version) ? { kind: "draft", id: draftId, version } : { kind: "draft", id: draftId };
     }
     const gate = q.get("gate");
-    if (gate && /^apg_[0-9a-f]{8,32}$/.test(gate)) return { kind: "gate", id: gate, label: gateLabel(gate) };
+    if (on("approvals") && gate && /^apg_[0-9a-f]{8,32}$/.test(gate)) return { kind: "gate", id: gate, label: gateLabel(gate) };
   }
   const pr = /^\/([\w.-]+\/[\w.-]+)\/pull\/(\d{1,7})(?:\/.*)?$/.exec(url.pathname);
   if (url.host === "github.com" && pr) return prRef(pr[1], pr[2]);

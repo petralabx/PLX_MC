@@ -3,7 +3,7 @@
 - Slug: `goals-design-refresh` (this file is `docs/workstreams/goals-design-refresh.md`)
 - Owner: Vince · operator: CoS (cos@petrasoap.com) · agents: claude/friendly-gates-2br59z
 - Branches: `claude/friendly-gates-2br59z`
-- MC tasks: TASK-4373, TASK-4385, TASK-4391; decision TASK-4387; project page TASK-4390, TASK-4392, TASK-4393
+- MC tasks: TASK-4373, TASK-4385, TASK-4391; decision TASK-4387; project page TASK-4390, TASK-4392, TASK-4393; follow-ups TASK-4414, TASK-4426; slice 4 TASK-4395 (portal), TASK-4415, TASK-4416 (portal)
 - SharePoint handoff: n/a
 
 ## Goal
@@ -12,19 +12,22 @@ Build the 2026-10-31 design canvas for Goals & production and the project page, 
 
 ## Status
 
-active, as of 2026-10-31. Slices 1 to 3 landed in PLX_MC #543 (merge `bd0ea88`). The project-page work (TASK-4390 rich text, TASK-4392 Due filter, TASK-4393 the wiring e2e fix) is the open PR from `claude/friendly-gates-2br59z`. Vince approved decision 9 (TASK-4387), so slice 4 comes next.
+active, as of 2026-11-01. Slices 1 to 3 landed in PLX_MC #543 and the project page in #546. The open PLX_MC PR carries the project-page follow-ups (TASK-4414 save rollback, TASK-4426 rich-text review fixes). Slice 4's portal half (tokens v1.7.0, TASK-4395) is plx-customer-portal #3256, in the merge queue. Slice 4's Mission Control half (TASK-4415) and the portal email colours (TASK-4416) are committed on local worktree branches and go up when their repo's branch is free.
 
 ## Done
 
-- Slice 1, TASK-4373: Revenue → How it adds up. The card keeps its headline, split, bar, due so far and needed per day. The equation lines, returns, shipped-not-invoiced, product lines, currencies and data notes moved to the tab, to the cent. It follows `scope=mfg`, the salespeople and the rate. No query, API, schema or colour change.
+- Slice 1, TASK-4373: Revenue → How it adds up. The card keeps its headline, split, bar, due so far and needed per day. The equation lines, returns, shipped-not-invoiced, product lines, currencies and data notes moved to the tab, to the cent. It follows `scope=mfg`, the salespeople and the rate.
 - Slice 2, TASK-4385: the salesperson list view (search, Clear, picked first, Done, Escape; "Pick all shown" only on a search).
-- Slice 3, TASK-4391: a date range for the whole report (`dates=mtd|week|7d|from..to`), narrowed like the salesperson filter. Partial pages show figures without the goal; the forecast and potential revenue stay the whole month's; days that split the month add up to it. The workbook follows the days.
+- Slice 3, TASK-4391: a date range for the whole report (`dates=mtd|week|7d|from..to`), narrowed like the salesperson filter. Partial pages show figures without the goal; the forecast and potential revenue stay the whole month's. The workbook follows the days.
 - Slices 1 to 3 landed in PLX_MC #543.
+- Project page, TASK-4390, TASK-4392, TASK-4393: rich text for descriptions and approval summaries, the Due filter, and a deterministic wiring e2e. Landed in PLX_MC #546.
 
 ## Next steps
 
-1. Land the project-page PR: TASK-4390, TASK-4392, TASK-4393.
-2. Slice 4: tokens v1.7.0 (the vibrant status set and `--p-hand` violet) in the portal's `design-system/tokens.css`, with a validated dark pass. Then mirror it in PLX_MC `src/styles/brand-tokens.css`, turn Goals by-hand figures violet, and move data notes off amber.
+1. Land the project-page follow-ups PR (TASK-4414, TASK-4426).
+2. When plx-customer-portal #3256 merges: re-run `PLX_PORTAL_ROOT=… bash scripts/plx-ds-sync.sh` so the parity file names the merged portal commit, then open the Mission Control slice-4 PR from `local/tokens-v170` (TASK-4415). It pins 1.7.0, moves text to the `-text` shades, and turns Goals' by-hand figures violet with status shapes.
+3. Then the portal email PR from `local/email-tokens` (TASK-4416): emails and the pipeline aging colours on v1.7.0, with a test that holds the email theme to the runtime tokens.
+4. Ask CoS (for Vince) how the remaining amber meanings move: Medium severity (portal ADR-003), Open tickets (portal ADR-004), and "doing" in Mission Control's charts.
 
 ## Decisions and why
 
@@ -35,11 +38,14 @@ active, as of 2026-10-31. Slices 1 to 3 landed in PLX_MC #543 (merge `bd0ea88`).
 - 2026-10-31 Date presets resolve on the server against the run's date, so a shared `dates=week` link stays "this week" after the next refresh. The goals stay the whole month's: no pro-rating to a range. Decided by: claude/friendly-gates-2br59z (slice 3 spec).
 - 2026-10-31 The project status sections come from the project description, which TASK-4390 renders as structured text; the Status and Dates filters are the existing task filter plus a Due filter (TASK-4392). No new status store or migration. Decided by: claude/friendly-gates-2br59z.
 - 2026-10-31 Project resources already sit under the strip in production. Nothing to build. Why: `project-detail.tsx` renders the strip, then `pv-res`. Decided by: claude/friendly-gates-2br59z (code read).
-- 2026-10-31 Decision 9: adopt the vibrant status set (each with a shape and a word) and violet for figures entered by hand, as tokens v1.7.0. It replaces the ADR-001 "no saturated alarm hues" rule and the ADR-004 "`--p-hot` is destructive only" rule. Decided by: Vince (TASK-4387).
+- 2026-10-31 Decision 9: adopt the vibrant status set (each with a shape and a word) and violet for figures entered by hand, as tokens v1.7.0. It replaces ADR-001 §3: "no saturated alarm hues" and "`--p-hot` is destructive only" (portal ADR-012). Decided by: Vince (TASK-4387).
+- 2026-11-01 Text takes the `-text` shade; the base status token is for fills, borders and marks. A solid labelled fill uses the `-text` shade with `--p-paper` text. The portal's `audit:tokens` enforces the first rule. Why: the v1.7.0 green fill reads 2.68:1 as text. Decided by: claude/friendly-gates-2br59z, sweep authorised by CoS as one batch with the tokens.
+- 2026-11-01 Dark `--p-hot` is `#FE828D` and `--p-ok-text` is `#16723C` (one step darker than proposed), so every value holds WCAG AA on every surface. Decided by: claude/friendly-gates-2br59z (contrast checks in ADR-012).
+- 2026-11-01 A failed project save rolls back only its own fields (TASK-4414). Decided by: claude/friendly-gates-2br59z (review of TASK-4393).
 
 ## Open questions
 
-- None.
+- Which colours replace amber for Medium severity (portal ADR-003), Open tickets (portal ADR-004) and "doing" in Mission Control's charts, now that amber means at risk only: CoS for Vince.
 
 ## Files / areas touched
 
@@ -67,4 +73,4 @@ node scripts/run-playwright.mjs --project=chromium e2e/mc-text.spec.ts e2e/proje
 
 ## Last updated
 
-2026-10-31 by claude/friendly-gates-2br59z (CoS session).
+2026-11-01 by claude/friendly-gates-2br59z (CoS session).

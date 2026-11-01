@@ -44,6 +44,22 @@ export function extractToc(nodes: MdNode[]): TocEntry[] {
 
 // ─── Block parser ─────────────────────────────────────────────────────────────
 
+/**
+ * A bare URL: no spaces, quotes, backticks or angle brackets, and parentheses
+ * only in balanced pairs ("/wiki/Foo_(bar)"), so a closing one that ends a
+ * sentence or a code span stays outside. Inline parsing passes it through as
+ * text, so an underscore or asterisk inside it never starts emphasis; Mission
+ * Control text then links it.
+ */
+export const BARE_URL_SOURCE = String.raw`https?:\/\/(?:[^\s<>()"'\`\]]|\([^\s<>()"'\`\]]*\))+`;
+// A bare URL starts a word: not inside one, and not after a slash.
+const RE_BARE_URL_G = new RegExp(`(?<![\\w/])${BARE_URL_SOURCE}`, "g");
+// Placeholder for a masked URL: private-use characters, never Markdown markers.
+const RE_URL_MARK = /\uE000(\d+)\uE001/g;
+// Punctuation and delimiters that end a bare URL (GFM): they stay outside the
+// mask, so "**see https://x.com/a**" still closes. An escaped one stays inside.
+const RE_URL_TAIL = /(?<!\\)[.,;:!?*_~]+$/;
+
 const RE_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const RE_HR = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
 const RE_FENCE = /^(\s*)(```+|~~~+)\s*([^\s`~]*)\s*$/;
@@ -232,7 +248,33 @@ function parseAligns(delim: string): TableAlign[] {
 
 // ─── Inline parser ────────────────────────────────────────────────────────────
 
+/**
+ * Inline Markdown. Bare URLs are masked first, so no emphasis, strong or code
+ * marker can open or close inside one, then restored as plain text (or as a
+ * link's href); a Markdown escape inside a URL ("a\\_b") reads as the
+ * character itself. Trailing punctuation stays outside the mask, so a
+ * delimiter right after a URL can close; as text it rejoins the URL.
+ */
 export function parseInline(src: string): MdInline[] {
+  const urls: string[] = [];
+  const masked = src.replace(RE_BARE_URL_G, (match) => {
+    const tail = RE_URL_TAIL.exec(match)?.[0] ?? "";
+    const url = match.slice(0, match.length - tail.length);
+    urls.push(url.replace(/\\([\\`*_{}[\]()#+\-.!|])/g, "$1"));
+    return `\uE000${urls.length - 1}\uE001${tail}`;
+  });
+  const nodes = parseSpans(masked);
+  return urls.length === 0 ? nodes : nodes.map((node) => restoreUrls(node, urls));
+}
+
+function restoreUrls(node: MdInline, urls: readonly string[]): MdInline {
+  const put = (value: string) => value.replace(RE_URL_MARK, (_, n: string) => urls[Number(n)] ?? "");
+  if (node.type === "text" || node.type === "code") return { ...node, value: put(node.value) };
+  if (node.type === "link") return { ...node, href: put(node.href), children: node.children.map((c) => restoreUrls(c, urls)) };
+  return { ...node, children: node.children.map((c) => restoreUrls(c, urls)) };
+}
+
+function parseSpans(src: string): MdInline[] {
   const out: MdInline[] = [];
   let buf = "";
   let i = 0;
@@ -266,7 +308,7 @@ export function parseInline(src: string): MdInline[] {
       const m = src.slice(i).match(/^\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/);
       if (m) {
         flush();
-        out.push({ type: "link", href: m[2], children: parseInline(m[1]) });
+        out.push({ type: "link", href: m[2], children: parseSpans(m[1]) });
         i += m[0].length;
         continue;
       }
@@ -278,7 +320,7 @@ export function parseInline(src: string): MdInline[] {
       const m = src.slice(i).match(re);
       if (m) {
         flush();
-        out.push({ type: "strong", children: parseInline(m[1]) });
+        out.push({ type: "strong", children: parseSpans(m[1]) });
         i += m[0].length;
         continue;
       }
@@ -292,7 +334,7 @@ export function parseInline(src: string): MdInline[] {
       const m = src.slice(i).match(re);
       if (m) {
         flush();
-        out.push({ type: "em", children: parseInline(m[1]) });
+        out.push({ type: "em", children: parseSpans(m[1]) });
         i += m[0].length;
         continue;
       }

@@ -106,7 +106,7 @@ export function RevenueByClassTable({ page }: { page: ReadyPage }) {
         </p>
       ) : null}
       {!data.matchesCard ? (
-        <p className="gp-notice" data-testid="goals-classes-mismatch">
+        <p className="gp-notice hot" data-testid="goals-classes-mismatch">
           These invoices add up to {cents(total.totalCadCents)}, not the Revenue card’s {cents(data.cardTotalCents)}:
           Sage changed between two reads of this refresh. The next refresh lines them up.
         </p>

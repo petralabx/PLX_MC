@@ -8,6 +8,8 @@
 // For some days of the month (TASK-4391) the day-by-day charts and table show
 // those days only, with no target and no last month.
 
+import type { SizeBand } from "@/lib/reporting/goals";
+
 import { RunningLines, StackedColumns, type ChartKey, type ColumnAxis } from "../charts";
 
 import { amount, compactDollars, compactKg, count, day, dollars, oneDecimal, wholeKg, type ReadyPage } from "./helpers";
@@ -20,16 +22,15 @@ const C = {
   lastMonth: "var(--p-muted)",
 };
 
-// One colour per size band, in the model's band order (~10,000 · 5,000–8,999 · Under 5,000 · Over 11,000).
-// The bands are sizes, so one forest ramp by size, darker for bigger batches (Under 5,000 lightest,
-// Over 11,000 darkest); the chart's segment edges keep neighbours apart. Status colours mean statuses
-// only (decision 9), and violet stays reserved for entries by hand.
-const BAND_COLORS = [
-  "color-mix(in srgb, var(--p-accent) 75%, var(--p-paper))",
-  "color-mix(in srgb, var(--p-accent) 50%, var(--p-paper))",
-  "color-mix(in srgb, var(--p-accent) 30%, var(--p-paper))",
-  "var(--p-accent)",
-];
+// The bands are sizes, so one forest ramp by size: the bigger the batch, the further from the paper
+// (darker in light mode, brighter in dark). The chart's segment edges keep neighbours apart. Status
+// colours mean statuses only (decision 9), and violet stays reserved for entries by hand.
+const BAND_COLORS: Record<SizeBand, string> = {
+  "Under 5,000": "color-mix(in srgb, var(--p-accent) 30%, var(--p-paper))",
+  "5,000–8,999": "color-mix(in srgb, var(--p-accent) 50%, var(--p-paper))",
+  "~10,000": "color-mix(in srgb, var(--p-accent) 75%, var(--p-paper))",
+  "Over 11,000": "var(--p-accent)",
+};
 
 function dayAxis(page: ReadyPage): ColumnAxis[] {
   return page.model.daily.map((d, i) => {
@@ -209,9 +210,9 @@ export function SizeHistoryChart({ page }: { page: ReadyPage }) {
           .join(", ")}.`}
         axis={history.map((m) => ({ key: m.month, label: label(m) }))}
         stacks={history.map((m) =>
-          bands.map((b, i) => ({ key: b, value: m.counts[b], colorVar: BAND_COLORS[i] }))
+          bands.map((b) => ({ key: b, value: m.counts[b], colorVar: BAND_COLORS[b] }))
         )}
-        keys={bands.map((b, i) => ({ label: `${b} kg`, colorVar: BAND_COLORS[i], kind: "bar" as const }))}
+        keys={bands.map((b) => ({ label: `${b} kg`, colorVar: BAND_COLORS[b], kind: "bar" as const }))}
         faded={projected}
         readout={(i) => {
           const m = history[i];

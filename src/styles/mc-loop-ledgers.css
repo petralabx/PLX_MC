@@ -452,6 +452,7 @@
 .ll-health-panel.valid { border-left-color: var(--p-ok); }
 .ll-health-panel.warn  { border-left-color: var(--p-warn); }
 .ll-health-panel.hot   { border-left-color: var(--p-hot); }
+.ll-health-panel.muted { border-left-color: var(--p-muted); }
 
 .ll-health-panel-hd {
   display: flex;
@@ -596,9 +597,6 @@
 
 .ll-gcard.live .ll-gcard-code .dot {
   background: var(--p-hot);
-}
-
-.ll-gcard.live .ll-gcard-code .dot {
   animation: ll-pulse 2s ease-in-out infinite;
 }
 

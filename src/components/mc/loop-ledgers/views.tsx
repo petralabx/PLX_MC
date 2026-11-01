@@ -370,8 +370,8 @@ export function DetailView({
   onBack: () => void;
 }) {
   const hc = result.ok ? result.validationResult.healthCode : result.reason;
-  // The list's tone for the same health code: a disabled or empty ledger is grey, not red.
-  const tone = result.ok ? healthTone(hc) : "hot";
+  // The list's tone for the same code: a disabled or empty source is grey; a failed read is red.
+  const tone = healthTone(hc);
 
   const ghUrl =
     result.ok && result.ref
@@ -458,7 +458,7 @@ export function DetailView({
       {/* Loud health panel */}
       <div className={`ll-health-panel ${tone}`} data-testid="ll-health-panel">
         <div className="ll-health-panel-hd">
-          <span className={`ll-row-dot ${tone === "valid" ? "valid" : tone === "warn" ? "warn" : "degraded"}`} aria-hidden />
+          <span className={`ll-row-dot ${tone === "hot" ? "degraded" : tone}`} aria-hidden />
           <span className={`ll-health-panel-code ${tone}`}>{healthLabel(hc)}</span>
           {result.ok && ledger && (
             <span style={{ fontFamily: "var(--mono)", fontSize: "var(--p-text-small)", color: "var(--p-muted)" }}>
@@ -468,7 +468,7 @@ export function DetailView({
         </div>
 
         {!result.ok && (
-          <p style={{ fontFamily: "var(--mono)", fontSize: "var(--p-text-small)", color: "var(--p-hot-text)", marginTop: "var(--p-space-2)" }}>
+          <p style={{ fontFamily: "var(--mono)", fontSize: "var(--p-text-small)", color: tone === "hot" ? "var(--p-hot-text)" : "var(--p-ink-2)", marginTop: "var(--p-space-2)" }}>
             {result.note}
           </p>
         )}

@@ -8,7 +8,7 @@ import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { niceMax, ticksFor } from "@/components/mc/charts";
+import { StackedColumns, niceMax, ticksFor } from "@/components/mc/charts";
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "@/components/mc/goals/charts";
 import { GoalCards } from "@/components/mc/goals/goal-cards";
 import { RevenueBreakdown } from "@/components/mc/goals/revenue-breakdown";
@@ -359,6 +359,25 @@ describe("tables and tiles", () => {
 });
 
 describe("charts", () => {
+  it("keeps a sliver of a stacked column visible: the surface edge goes on segments tall enough to keep it", () => {
+    const out = renderToStaticMarkup(
+      createElement(StackedColumns, {
+        summary: "One day",
+        axis: [{ key: "d1", label: "1" }],
+        stacks: [[
+          { key: "fm", value: 9_000, colorVar: "var(--p-accent)" },
+          { key: "hand", value: 40, colorVar: "var(--p-hand)" },
+        ]],
+        keys: [],
+      })
+    );
+    const rects = [...out.matchAll(/<rect [^>]*fill="var\(--p-(accent|hand)\)"[^>]*>/g)].map((m) => m[0]);
+    expect(rects).toHaveLength(2);
+    expect(rects[0]).toContain('stroke="var(--p-paper)"');
+    // 40 kg on a 10,000 kg axis is 0.4% of the plot: no edge, so it never vanishes.
+    expect(rects[1]).not.toContain("stroke=");
+  });
+
   it("picks round axes that don't waste the plot", () => {
     expect([niceMax(6, true), niceMax(7, true), niceMax(42, true), niceMax(1.0074e8), niceMax(0)]).toEqual([6, 8, 50, 1.2e8, 1]);
     expect(ticksFor(8, true)).toEqual([0, 2, 4, 6, 8]);

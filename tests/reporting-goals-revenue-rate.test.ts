@@ -346,7 +346,10 @@ describe("revenue by customer class (TASK-3781)", () => {
     expect(data.matchesCard).toBe(false);
     expect(data.cardTotalCents).toBe(103_656);
     const page = { ...BOC, revenueByClass: data };
-    expect(text(html(RevenueByClassTable, { page }))).toContain("These invoices add up to $1,036.60, not the Revenue card’s $1,036.56: Sage changed between two reads");
+    const mismatch = html(RevenueByClassTable, { page });
+    expect(text(mismatch)).toContain("These invoices add up to $1,036.60, not the Revenue card’s $1,036.56: Sage changed between two reads");
+    // Figures that don't add up are a problem to act on: the red notice (decision 9).
+    expect(mismatch).toContain('class="gp-notice hot"');
   });
 
   it("shows no share while the month has no revenue", () => {

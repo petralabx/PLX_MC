@@ -208,19 +208,12 @@ export function StackedColumns({
             {stack.map((seg) => {
               if (seg.value <= 0) return null;
               const top = base + seg.value;
+              const height = y(base, yMax) - y(top, yMax);
+              // A surface-coloured edge keeps stacked segments apart, whatever their colours.
+              // A sliver (under 2% of the plot) keeps its fill instead, so the edge never hides it.
+              const edge = height >= 2 ? { stroke: "var(--p-paper)", strokeWidth: 1.5, vectorEffect: "non-scaling-stroke" as const } : null;
               const rect = (
-                <rect
-                  key={seg.key}
-                  x={i + 0.15}
-                  width={0.7}
-                  y={y(top, yMax)}
-                  height={y(base, yMax) - y(top, yMax)}
-                  fill={seg.colorVar}
-                  // A surface-coloured edge keeps stacked segments apart, whatever their colours.
-                  stroke="var(--p-card)"
-                  strokeWidth={1.5}
-                  vectorEffect="non-scaling-stroke"
-                />
+                <rect key={seg.key} x={i + 0.15} width={0.7} y={y(top, yMax)} height={height} fill={seg.colorVar} {...edge} />
               );
               base = top;
               return rect;

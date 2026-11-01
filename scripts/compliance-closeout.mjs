@@ -57,6 +57,8 @@ const DEFAULT_VMC_BASE_URL = "https://missioncontrol.tayloralton.com";
 const DEFAULT_DEADLINE_MS = 5000;
 const GIT_TIMEOUT_MS = 1500;
 const STDIN_TIMEOUT_MS = 1000;
+// The whole hook, stdin included, ends inside the 8 s Cursor sessionEnd timeout (TASK-4273).
+const HOOK_BUDGET_MS = 7500;
 const TRANSCRIPT_HEAD_BYTES = 64 * 1024;
 const MAX_COMMITS = 50;
 const OFFLINE_QUEUE_DIR = "artifacts/session-brain";
@@ -363,7 +365,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       // The artifact and the telemetry row go out together, inside the hook timeout.
       // Loaded here, not imported at the top, so a broken telemetry module never stops the artifact.
       const telemetry = import("./session-telemetry.mjs").then(({ reportTelemetry }) =>
-        reportTelemetry({ payload, runtime, cwd: REPO_ROOT })
+        // The budget runs from process start, so reading stdin counts against it too, and the
+        // whole hook ends inside the shorter (8 s, Cursor) hook timeout.
+        reportTelemetry({ payload, runtime, cwd: REPO_ROOT, budgetMs: HOOK_BUDGET_MS - process.uptime() * 1000 })
       );
       const results = await Promise.allSettled([closeout({ payload, runtime }), telemetry]);
       for (const r of results) {
